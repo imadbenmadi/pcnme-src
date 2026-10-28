@@ -109,10 +109,8 @@ def test_a_hard_head_is_skipped_when_it_can_no_longer_finish() -> None:
 
 def test_a_hard_head_that_can_still_just_finish_is_not_skipped() -> None:
     # Binary-exact times: "long" (mean 250 ms) really runs 312.5 ms; H (mean 125 ms, low 62.5 ms, d_k = 375
-    # ms)
-    # is accepted with F = 250 + 125 = 375 ms. At 312.5 ms, t + Ê^low = 375 ms = d_k, not later: it runs. The
-    # skip
-    # rule uses Ê^low, not the mean (t + Ê = 437.5 ms would be later).
+    # ms) is accepted with F = 250 + 125 = 375 ms. At 312.5 ms, t + Ê^low = 375 ms = d_k, not later: it runs.
+    # The skip rule uses Ê^low, not the mean (t + Ê = 437.5 ms would be later).
     n = tiny([row("long", "cpu", 0.25, run=0.3125), row("H", "cpu", 0.125, low=0.0625)])
     n.submit("long", "hard", 10.0)
     h = n.submit("H", "hard", 0.375)
@@ -150,8 +148,7 @@ def test_skipping_continues_until_a_head_can_run() -> None:
 @pytest.mark.parametrize("promotion", ["mean", "high"])
 def test_a_soft_task_that_waited_a_max_runs_before_hard_tasks_that_can_spare_it(promotion: str) -> None:
     # One slot busy until 250 ms. S (soft) waits from 0; H (hard, mean 10 ms, deadline 10 s) arrives at 240
-    # ms.
-    # At 250 ms S has waited >= A_max = 200 ms, and H still meets 10 s with S on the slot (high 13 ms): S
+    # ms. At 250 ms S has waited >= A_max = 200 ms, and H still meets 10 s with S on the slot (high 13 ms): S
     # first.
     n = tiny([row("long", "cpu", 0.250), row("S", "cpu", 0.010), row("H", "cpu", 0.010)], promotion=promotion)
     n.submit("long", "hard", 10.0)
@@ -175,8 +172,7 @@ def test_no_promotion_before_a_max(promotion: str) -> None:
 @pytest.mark.parametrize("promotion", ["mean", "high"])
 def test_no_promotion_when_a_queued_hard_task_would_miss(promotion: str) -> None:
     # At 250 ms: S would hold the slot for its high, 130 ms; H (mean 10 ms) must finish by 300 ms. With S
-    # first
-    # H ends at 250 + 130 + 10 (or 13) > 300 ms: no promotion, H first.
+    # first H ends at 250 + 130 + 10 (or 13) > 300 ms: no promotion, H first.
     n = tiny([row("long", "cpu", 0.250), row("S", "cpu", 0.100), row("H", "cpu", 0.010)], promotion=promotion)
     n.submit("long", "hard", 10.0)
     s = n.submit("S", "soft", 10.0, l_max=10.0)
@@ -213,10 +209,8 @@ def test_promotion_needs_an_explicit_estimate_choice() -> None:
 
 # --- S5: work stealing (8.4 step 5) -------------------------------------------------------------------------
 # One GPU and one CPU slot. "g" holds the GPU with a mean of 200 ms but really ends at 20 ms; "c" holds the
-# CPU
-# for 100 ms. X (GPU 50 ms, CPU 60 ms) arrives at 0: GPU F = 200 + 50 = 250 ms, CPU F = 100 + 60 = 160 ms, so
-# it
-# joins the CPU queue. At 20 ms the GPU frees with an empty queue.
+# CPU for 100 ms. X (GPU 50 ms, CPU 60 ms) arrives at 0: GPU F = 200 + 50 = 250 ms, CPU F = 100 + 60 = 160
+# ms, so it joins the CPU queue. At 20 ms the GPU frees with an empty queue.
 
 
 def stealing_node(x_gpu: float, x_gpu_low: float | None = None, g_run: float = 0.020) -> Tiny:
@@ -240,8 +234,7 @@ def slot_of(n: Tiny, r: TaskRequest) -> str:
 
 def test_an_empty_queue_steals_a_task_that_finishes_earlier_here() -> None:
     # At 20 ms: X's current estimated CPU finish = 20 + (100 - 20) remaining + 60 = 160 ms (Q11); on the GPU
-    # it
-    # would finish at 20 + 50 = 70 ms < 160: stolen, runs 20-70 ms on the GPU.
+    # it would finish at 20 + 50 = 70 ms < 160: stolen, runs 20-70 ms on the GPU.
     n = stealing_node(x_gpu=0.050)
     x = n.submit("X", "hard", 10.0)
     n.clock.run_until(5.0)
@@ -251,8 +244,7 @@ def test_an_empty_queue_steals_a_task_that_finishes_earlier_here() -> None:
 
 def test_the_first_task_in_the_other_queues_order_is_stolen() -> None:
     # At 20 ms the GPU steals `first` (earlier deadline, first in the CPU queue's order), not `later`. At 70
-    # ms
-    # it frees again: `later` is then stolen too (70 + 50 = 120 ms < its CPU finish 70 + 30 + 60 = 160 ms).
+    # ms it frees again: `later` is then stolen too (70 + 50 = 120 ms < its CPU finish 70 + 30 + 60 = 160 ms).
     n = stealing_node(x_gpu=0.050)
     later = n.submit("X", "hard", 10.0)
     first = n.submit("X", "hard", 5.0)
