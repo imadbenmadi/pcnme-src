@@ -37,7 +37,7 @@ pip install -e ".[ml]"
 ```
 pytest -q                 # fast tests
 pytest -m slow -n auto    # statistical tests (M/M/1, Erlang C)
-ruff check src tests      # lint
+ruff check src tests tools   # lint
 mypy                      # types
 python tools/calc_defaults.py
 pcnme --help              # experiment commands (filled in milestone by milestone)
