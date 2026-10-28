@@ -15,6 +15,7 @@ This is the one complete design of PCNME. It merges the PCNME Architecture doc, 
 | Date | Section | Change | Note |
 | --- | --- | --- | --- |
 | 28 Oct | 16.2 | ρ_fog uses every task of the whole mix, boulders included (not pebbles only), so S4–S6 keep S2's arrival rate | CHANGES C2 (QUESTIONS Q1) |
+| 28 Oct | 13.2 | Random draws keyed by task, not by event order: a run time is a uniform keyed by (seed, task id, attempt) through the inverse CDF of the row it runs on; a delay is keyed by (seed, task id, attempt, hop); arrivals and mobility stay sequential per car | CHANGES C3 (QUESTIONS Q6) |
 
 ## 1. What PCNME is
 
@@ -688,7 +689,7 @@ Offline, in fast mode: NSGA-II plans windows of tasks → the knee plan and the 
 
 1. **Window:** all pebbles arriving in the whole city during T_win of one scenario, with its seed (arrivals, run times, delays, mobility fixed).
 2. **Chromosome:** one gene per task = the agent's action index (here, N1–N4, cloud) relative to the task's anchor. A gene pointing at an empty position is repaired to "here".
-3. **Evaluation = one fast-mode run of the window** with the genes as decisions and the same seed for every plan (common random numbers). Queues, refusals, skips, aborts and retries happen as in a real run, so a node's load grows with what is put on it. Tasks arriving just after the window are placed by the greedy expert, so the last window tasks see realistic load. Before the window, T_warmup of greedy decisions fills the queues and pipes, so the first window tasks see realistic load too.
+3. **Evaluation = one fast-mode run of the window** with the genes as decisions and the same seed for every plan (common random numbers). Draws are keyed by task, not by event order, so a task keeps the same luck in every plan wherever it runs: its run time is a uniform u keyed by (seed, task id, attempt), mapped through the inverse CDF of the time-table row it actually runs on; each delay is keyed by (seed, task id, attempt, hop). Arrivals and mobility do not depend on decisions and stay sequential per car (CHANGES C3). Queues, refusals, skips, aborts and retries happen as in a real run, so a node's load grows with what is put on it. Tasks arriving just after the window are placed by the greedy expert, so the last window tasks see realistic load. Before the window, T_warmup of greedy decisions fills the queues and pipes, so the first window tasks see realistic load too.
 4. **Objectives**, both minimised and averaged per task:
 
 ```latex
