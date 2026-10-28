@@ -9,7 +9,7 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 ## M0 — Project setup
 
 - [x] **M0.1 Packaging and tooling** (done in the starter kit, 28 Oct): `pyproject.toml` with extras `dev`, `ml`, `analysis`, `testbed`, `maps`; pytest markers; ruff, mypy, pre-commit; CI on Linux and Windows. First task of the first session: install, run `pytest -q`, `ruff check src tests` and `mypy`, and fix anything that fails on the real machine.
-- [~] **M0.2 Config loader** (`config.py`). Load `config/default.yaml` into typed, frozen dataclasses. Compute the derived values exactly as `tools/calc_defaults.py` does: mean GPU run of the mix, zone capacity, λ_car per scenario, B_WAN, E_ref per type, ē, T2's tight deadline (1.1 × Ê_strong).
+- [x] **M0.2 Config loader** (`config.py`). Load `config/default.yaml` into typed, frozen dataclasses. Compute the derived values exactly as `tools/calc_defaults.py` does: mean GPU run of the mix, zone capacity, λ_car per scenario, B_WAN, E_ref per type, ē, T2's tight deadline (1.1 × Ê_strong).
   - Test: derived values equal the numbers printed by `tools/calc_defaults.py` (zone capacity 82.5 tasks/s, B_WAN ≈ 515 Mbps, T2 tight D ≈ 0.792 s, …).
   - Test: a missing or misspelled key raises an error naming the key.
 - [ ] **M0.3 Seeded random streams** (`sim/rng.py`). One `numpy.random.Generator` per purpose (arrivals, run times, link delays, mobility, radio, nsga), all derived from one run seed. Seed ranges from config (`fast_mode.seed_split`) are enforced.
