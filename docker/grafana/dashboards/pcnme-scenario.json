@@ -1,0 +1,284 @@
+{
+  "uid": "pcnme-scenario",
+  "title": "PCNME — scenario view",
+  "tags": [
+    "pcnme"
+  ],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "time": {
+    "from": "2026-01-01T00:00:00Z",
+    "to": "2026-01-01T00:01:00Z"
+  },
+  "refresh": "",
+  "templating": {
+    "list": [
+      {
+        "name": "bucket",
+        "type": "constant",
+        "query": "pcnme",
+        "hide": 2
+      },
+      {
+        "name": "scenario",
+        "type": "query",
+        "datasource": {
+          "type": "influxdb",
+          "uid": "pcnme-influx"
+        },
+        "multi": true,
+        "includeAll": true,
+        "refresh": 2,
+        "query": "import \"influxdata/influxdb/schema\"\nschema.tagValues(bucket: \"${bucket}\", tag: \"scenario\")",
+        "current": {}
+      },
+      {
+        "name": "method",
+        "type": "query",
+        "datasource": {
+          "type": "influxdb",
+          "uid": "pcnme-influx"
+        },
+        "multi": true,
+        "includeAll": true,
+        "refresh": 2,
+        "query": "import \"influxdata/influxdb/schema\"\nschema.tagValues(bucket: \"${bucket}\", tag: \"method\")",
+        "current": {}
+      },
+      {
+        "name": "run_id",
+        "type": "query",
+        "datasource": {
+          "type": "influxdb",
+          "uid": "pcnme-influx"
+        },
+        "multi": true,
+        "includeAll": true,
+        "refresh": 2,
+        "query": "import \"influxdata/influxdb/schema\"\nschema.tagValues(bucket: \"${bucket}\", tag: \"run_id\")",
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "barchart",
+      "title": "Task outcomes (share)",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pcnme-influx"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "pcnme-influx"
+          },
+          "query": "from(bucket: \"${bucket}\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"task\" and r._field == \"latency_s\") |> filter(fn: (r) => r.scenario =~ /^${scenario:regex}$/ and r.method =~ /^${method:regex}$/ and r.run_id =~ /^${run_id:regex}$/)\n  |> group(columns: [\"method\", \"outcome\"]) |> count()\n  |> group(columns: [\"method\"]) |> map(fn: (r) => ({r with _value: float(v: r._value)}))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Latency p50 / p99 (1 s windows)",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pcnme-influx"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "pcnme-influx"
+          },
+          "query": "data = from(bucket: \"${bucket}\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"task\" and r._field == \"latency_s\") |> filter(fn: (r) => r.scenario =~ /^${scenario:regex}$/ and r.method =~ /^${method:regex}$/ and r.run_id =~ /^${run_id:regex}$/) |> group(columns: [\"method\"])\np50 = data |> aggregateWindow(every: 1s, fn: (column, tables=<-) => tables |> quantile(q: 0.5, column: column)) |> set(key: \"stat\", value: \"p50\")\np99 = data |> aggregateWindow(every: 1s, fn: (column, tables=<-) => tables |> quantile(q: 0.99, column: column)) |> set(key: \"stat\", value: \"p99\")\nunion(tables: [p50, p99])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Dynamic energy per task (mean)",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pcnme-influx"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "pcnme-influx"
+          },
+          "query": "from(bucket: \"${bucket}\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"task\" and r._field == \"energy_j\") |> filter(fn: (r) => r.scenario =~ /^${scenario:regex}$/ and r.method =~ /^${method:regex}$/ and r.run_id =~ /^${run_id:regex}$/)\n  |> group(columns: [\"method\"]) |> aggregateWindow(every: 5s, fn: mean)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "joule"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Zone load ρ (GPU slots)",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pcnme-influx"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "pcnme-influx"
+          },
+          "query": "from(bucket: \"${bucket}\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"zone\" and r._field == \"rho\" and r.slot_type == \"gpu\") |> filter(fn: (r) => r.scenario =~ /^${scenario:regex}$/ and r.method =~ /^${method:regex}$/ and r.run_id =~ /^${run_id:regex}$/)\n  |> group(columns: [\"method\", \"zone\"]) |> aggregateWindow(every: 1s, fn: mean)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Pipe waits (WAN, backhaul, radio)",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pcnme-influx"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "pcnme-influx"
+          },
+          "query": "from(bucket: \"${bucket}\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"pipe\" and r._field == \"wait_s\") |> filter(fn: (r) => r.scenario =~ /^${scenario:regex}$/ and r.method =~ /^${method:regex}$/ and r.run_id =~ /^${run_id:regex}$/)\n  |> group(columns: [\"method\", \"pipe\"]) |> aggregateWindow(every: 1s, fn: max)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Refusals per second",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pcnme-influx"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "pcnme-influx"
+          },
+          "query": "from(bucket: \"${bucket}\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"zone\" and r._field == \"refusals\") |> filter(fn: (r) => r.scenario =~ /^${scenario:regex}$/ and r.method =~ /^${method:regex}$/ and r.run_id =~ /^${run_id:regex}$/)\n  |> group(columns: [\"method\"]) |> aggregateWindow(every: 1s, fn: sum)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Learning: TD loss and demo up-sample ratio",
+      "datasource": {
+        "type": "influxdb",
+        "uid": "pcnme-influx"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "pcnme-influx"
+          },
+          "query": "from(bucket: \"${bucket}\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"learning\" and (r._field == \"td_loss\" or r._field == \"demo_upsample_ratio\")) |> filter(fn: (r) => r.scenario =~ /^${scenario:regex}$/ and r.method =~ /^${method:regex}$/ and r.run_id =~ /^${run_id:regex}$/)\n  |> group(columns: [\"zone\", \"_field\"])"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    }
+  ],
+  "description": "One scenario, compared across methods and runs. Schema: docs/METRICS.md. Fast-mode runs start at 2026-01-01T00:00:00Z."
+}
