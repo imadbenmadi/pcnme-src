@@ -14,7 +14,7 @@ This is the one complete design of PCNME. It merges the PCNME Architecture doc, 
 
 | Date | Section | Change | Note |
 | --- | --- | --- | --- |
-| — | — | None yet | — |
+| 28 Oct | 16.2 | ρ_fog uses every task of the whole mix, boulders included (not pebbles only), so S4–S6 keep S2's arrival rate | CHANGES C2 (QUESTIONS Q1) |
 
 ## 1. What PCNME is
 
@@ -883,7 +883,7 @@ Fairness: the same scenarios, seeds and online budget on the testbed for every m
 
 ### 16.2 Scenarios
 
-Designed by load, not by number of cars. Two exact definitions: ρ_fog = the city-mean arrival rate per zone × the mix's mean GPU run on F-GPU ÷ c_GPU (the load if every pebble ran on its anchor's GPU), and TI_WAN = the cloud-eligible bits per second (soft tasks and boulders) ÷ B_WAN (the WAN load if all of them went to the cloud). One B_WAN, set so that TI_WAN = 0.9 at ρ_fog = 0.9, gives TI_WAN = ρ_fog in S1–S3, because both scale with the arrival rate. The hotspot (40 % of cars through z1) puts z1 at 1.6 × the mean load in every scenario. With these deadlines a hard task cannot reach the cloud in time (T1: about 140 ms mean round trip against D = 100 ms), so the cloud serves soft tasks and boulders only, which is the reason fog exists (N9).
+Designed by load, not by number of cars. Two exact definitions: ρ_fog = the city-mean arrival rate per zone × the mix's mean GPU run on F-GPU ÷ c_GPU (the load if every task of the whole mix, boulders included, ran on its anchor's GPU; so S2 and S4–S6 have the same arrival rate and differ only in deadlines, mobility or fog hardware, and in S4–S6 the real fog load is lower because T2 goes to the cloud), and TI_WAN = the cloud-eligible bits per second (soft tasks and boulders) ÷ B_WAN (the WAN load if all of them went to the cloud). One B_WAN, set so that TI_WAN = 0.9 at ρ_fog = 0.9, gives TI_WAN = ρ_fog in S1–S3, because both scale with the arrival rate. The hotspot (40 % of cars through z1) puts z1 at 1.6 × the mean load in every scenario. With these deadlines a hard task cannot reach the cloud in time (T1: about 140 ms mean round trip against D = 100 ms), so the cloud serves soft tasks and boulders only, which is the reason fog exists (N9).
 
 | Scenario | Traffic intensity | Deadlines | Mobility | Shows |
 | --- | --- | --- | --- | --- |
