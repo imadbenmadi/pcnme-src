@@ -1,0 +1,7 @@
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.pdf binary
+*.png binary
+*.gif binary
+*.zip binary
+*.excalidraw text

@@ -8,7 +8,7 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 
 ## M0 — Project setup
 
-- [ ] **M0.1 Packaging.** `pyproject.toml` (Python ≥ 3.11, < 3.14; deps numpy, pyyaml; extras `dev` = pytest, ruff; `ml` = torch, pymoo added in M5). `src/` layout, `pytest` configured.
+- [x] **M0.1 Packaging and tooling** (done in the starter kit, 28 Oct): `pyproject.toml` with extras `dev`, `ml`, `analysis`, `testbed`, `maps`; pytest markers; ruff, mypy, pre-commit; CI on Linux and Windows. First task of the first session: install, run `pytest -q`, `ruff check src tests` and `mypy`, and fix anything that fails on the real machine.
 - [ ] **M0.2 Config loader** (`config.py`). Load `config/default.yaml` into typed, frozen dataclasses. Compute the derived values exactly as `tools/calc_defaults.py` does: mean GPU run of the mix, zone capacity, λ_car per scenario, B_WAN, E_ref per type, ē, T2's tight deadline (1.1 × Ê_strong).
   - Test: derived values equal the numbers printed by `tools/calc_defaults.py` (zone capacity 82.5 tasks/s, B_WAN ≈ 515 Mbps, T2 tight D ≈ 0.792 s, …).
   - Test: a missing or misspelled key raises an error naming the key.
@@ -63,7 +63,7 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 - [ ] **M3.7 Duplicates, subscriptions, cleanup** (9.5, 9.6).
 - [ ] **M3.8 Mobility** (`mobility/`), section 10: VFC grid with lights and stops, speeds, hotspot, attach with hysteresis, GPS every 100 ms, coverage gaps, cut uploads (9.7), result follows the car (10.3).
 - [ ] **M3.9 Predictor** (10.2): exit time (ray–circle formula), next zone at intersections.
-- [ ] **M3.10 Logging** (16.3): one row per task and per attempt, with run_id.
+- [ ] **M3.10 Logging** (16.3): Parquet files and InfluxDB points as in `docs/METRICS.md` (confirm or change that schema here); fix the Grafana dashboard queries in `docker/grafana/dashboards/` against real data.
 - **M3 acceptance tests:**
   - One scenario test per row of the failure table (9.1) and per case C1–C14 (7.4).
   - S1–S3 with Greedy, 3 seeds: ρ_fog and TI_WAN measured from the run match the config targets within 5 %; z1 load ≈ 1.6 × the mean; the WAN congests in S3. If not, stop and debug the queueing before anything else.
@@ -110,7 +110,11 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 
 ## M9 — Docker testbed
 
-- [ ] Containers and networks of 15.4; MQTT (EMQX) and HTTP behind the same interfaces as fast mode; netem shaping; the runner. Needs the home desktop (Docker, WSL2 backend).
+Skeleton already in `docker/` (Dockerfile, compose with every container and network of 15.4, `net-setup.sh` shaping, Grafana provisioning). Needs the home desktop (Docker Desktop, WSL2 backend).
+- [ ] **M9.1** Entry points `pcnme.testbed.{zone,car,cloud,runner}` on the same zone/car/cloud code as fast mode, with MQTT and HTTP adapters behind the bus and call interfaces (15.2).
+- [ ] **M9.2** Verify the network (15.4 "to verify"): routing through wan-gw, netem jitter distribution and reordering, `tcp_slow_start_after_idle=0`, one shaped crossing per hop. Pin the MinIO image.
+- [ ] **M9.3** Runner: per-scenario shaping, zone join / kill / broker restart (15.7), result upload to MinIO.
+- [ ] **M9.4** Same scenario and seed in fast mode and on the testbed: report the gap (16.3).
 
 ## C — Calibration (any time after M0, on the home desktop)
 
