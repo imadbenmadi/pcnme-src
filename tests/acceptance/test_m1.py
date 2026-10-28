@@ -22,7 +22,7 @@ import pytest
 
 from pcnme.config import Config, load_config
 from pcnme.node.executor import AttemptKey, Executor, Report, TaskRequest, TraceEntry
-from pcnme.node.timetable import RunTimeTable, exponential
+from pcnme.node.timetable import RunTimeTable
 from pcnme.sim.clock import EventClock
 from pcnme.sim.rng import RandomStreams
 from tests.acceptance.queueing import MEAN_RUN, erlang_c_wait, mmc_waits
@@ -116,7 +116,7 @@ def test_every_rule_of_8_4_and_8_6_has_a_test(rule: str, repo_root: Path) -> Non
 
 def event_log_hash(cfg: Config, seed: int, seconds: float = 5.0) -> str:
     """A realistic run on the config's F-GPU node: the task mix at S2's per-zone rate (74 tasks/s), loose
-    deadlines, exponential run times (a test shape; Q7 is open). The hash covers every trace entry and every
+    deadlines, lognormal run times (CHANGES C5). The hash covers every trace entry and every
     report, floats by their exact repr."""
     clock = EventClock()
     streams = RandomStreams.from_config(cfg, seed, "training")
@@ -127,7 +127,7 @@ def event_log_hash(cfg: Config, seed: int, seconds: float = 5.0) -> str:
         streams,
         cfg,
         "F-GPU",
-        RunTimeTable.from_config(cfg, exponential),
+        RunTimeTable.from_config(cfg),  # lognormal (CHANGES C5)
         on_report=reports.append,
         trace=trace.append,
     )
@@ -175,5 +175,5 @@ def test_the_event_log_hash_is_pinned(cfg: Config) -> None:
     assert event_log_hash(cfg, 2000) == GOLDEN_HASH
 
 
-# 28 Oct, Windows; re-pinned when Q10 made "high" the promotion default and when C4 changed Ŵ.
-GOLDEN_HASH = "ded9351348bef47a6d2c4acf24c6fe3623044a5c1814c687f4f5c69461691ded"
+# 28 Oct, Windows; re-pinned on purpose by Q10 (promotion default), C4 (Ŵ) and C5 (lognormal, p5).
+GOLDEN_HASH = "78d038b0d4a968b3296fec05ed9bbdc35b7f5e232f5b44898d429ea5aa79dd62"
