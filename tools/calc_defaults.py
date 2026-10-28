@@ -1,13 +1,15 @@
 """Check that the PCNME default numbers fit together (final-design 18).
 
 Reads config/default.yaml, so it can never drift from the config. Placeholders (tag M) must be replaced by
-measured values in the calibration run; then rerun this script.
+measured values in the calibration run; then rerun this script. Kept independent of the pcnme package on
+purpose: tests/test_config.py checks that pcnme.config derives the same numbers.
 
 Run from the repo root: python tools/calc_defaults.py [path/to/config.yaml]
 """
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -15,40 +17,67 @@ import yaml
 
 KB_TO_BITS = 1e3 * 8
 NJ = 1e-9
-P95_FACTOR = 1.3  # placeholder p95 = 1.3 x mean (config time_table_placeholder comment)
 TYPICAL_RADIO_BPS = 600e6  # Friis + Shannon at about 150-200 m (final-design 18)
+
+# YAML 1.2 floats: PyYAML follows YAML 1.1, which reads 40.0e6 or 1e9 (no exponent sign) as strings.
+# Needs a dot or an exponent, so integers stay integers.
+_FLOAT_12 = re.compile(r"^[-+]?(?:(?:\d[\d_]*\.[\d_]*|\.\d[\d_]*)(?:[eE][-+]?\d+)?|\d[\d_]*[eE][-+]?\d+)$")
+
+
+class _Loader(yaml.SafeLoader):
+    pass
+
+
+_Loader.add_implicit_resolver("tag:yaml.org,2002:float", _FLOAT_12, list("-+0123456789."))
 
 
 def load(path: Path) -> dict:
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
+    return yaml.load(path.read_text(encoding="utf-8"), Loader=_Loader)
+
+
+def mean_of(row: float | dict) -> float:
+    return row["mean"] if isinstance(row, dict) else row
+
+
+def p95_of(row: float | dict, factors: dict) -> float:
+    """A measured p95 wins; the placeholder factor fills it only when the row has none (QUESTIONS Q2)."""
+    if isinstance(row, dict) and "p95" in row:
+        return row["p95"]
+    return factors["p95"] * mean_of(row)
 
 
 def main(path: Path) -> None:
     cfg = load(path)
     types = cfg["task_types"]
-    tt = cfg["time_table_placeholder"]
+    tt = {k: v for k, v in cfg["time_table_placeholder"].items() if k != "factors"}
+    factors = cfg["time_table_placeholder"]["factors"]
     hw = cfg["hardware"]
     energy = cfg["energy"]
     alpha = cfg["tof"]["alpha"]
-    zones = sum(1 for z in cfg["layout"]["zone_positions_m"] if z != "z5")
-    c_gpu = hw["F-GPU"]["c_gpu"]
+    strong = cfg["tof"]["strongest_class"]
+    ref = energy["reference_class"]
+    zones = len(set(cfg["layout"]["zone_positions_m"]) - set(cfg["layout"]["joining_zones"]))
+    c_gpu = hw[ref]["c_gpu"]
 
     active = {name: t for name, t in types.items() if "share" in t}
     shares = sum(t["share"] for t in active.values())
     assert abs(shares - 1.0) < 1e-9, f"task shares sum to {shares}, not 1"
 
-    gpu_run = {name: tt[name]["F-GPU"]["gpu"] for name in active}
+    # rho_fog uses the reference class's GPU slot over the whole mix, boulders included (final-design 16.2).
+    gpu_run = {name: mean_of(tt[name][ref]["gpu"]) for name in active}
     mean_gpu = sum(t["share"] * gpu_run[n] for n, t in active.items())
     capacity = c_gpu / mean_gpu
     print(f"mean GPU run of the mix {mean_gpu * 1e3:.1f} ms; zone GPU capacity {capacity:.1f} tasks/s")
 
-    # Deadlines and the TOF-Broker (final-design 7.1).
+    # Deadlines and the TOF-Broker (final-design 7.1): E_strong = mean run on the strongest class,
+    # fastest slot type.
+    e_strong = {name: min(mean_of(r) for r in tt[name][strong].values()) for name in active}
     for name, t in active.items():
         for kind in ("loose", "tight"):
             d = t["deadline"][kind]
             if isinstance(d, str):  # "1.1x_E_strong": calibrated rule for T2's tight deadline
-                d = float(d.split("x")[0]) * gpu_run[name]
-            boulder = gpu_run[name] >= alpha * d
+                d = float(d.split("x")[0]) * e_strong[name]
+            boulder = e_strong[name] >= alpha * d
             print(f"  {name} {kind} D = {d:.3f} s -> {'boulder' if boulder else 'pebble'}")
 
     # Scenario loads and the one WAN bandwidth (final-design 16.2).
@@ -74,19 +103,21 @@ def main(path: Path) -> None:
     e_bh = energy["e_bh_nj_per_bit"] * NJ * pue_net
     e_wan = energy["e_wan_nj_per_bit"] * NJ * pue_net
     e_down = energy["e_down_nj_per_bit"] * NJ
-    p_fog, p_cl = hw["F-GPU"]["p_dyn_w"], hw["cloud"]["p_dyn_w"]
+    p_fog, p_cl = hw[ref]["p_dyn_w"], hw["cloud"]["p_dyn_w"]
     e_bar = 0.0
     for name, t in active.items():
         s_in, s_out = bits[name], t["result_kb"] * KB_TO_BITS
+        rows = tt[name][ref]
+        q_ref = min(rows, key=lambda q: mean_of(rows[q]))  # fastest slot type on the reference class (12.3)
         e_ret_here = (2 * e_bh + e_down) * s_out
-        e_ref = energy["pue_fog"] * p_fog["gpu_slot"] * gpu_run[name] + e_ret_here
-        opts = {"fog GPU": energy["pue_fog"] * p_fog["gpu_slot"] * P95_FACTOR * gpu_run[name]}
-        if "cpu" in tt[name]["F-GPU"]:
-            opts["fog CPU"] = energy["pue_fog"] * p_fog["cpu_slot"] * P95_FACTOR * tt[name]["F-GPU"]["cpu"]
+        e_ref = energy["pue_fog"] * p_fog[f"{q_ref}_slot"] * mean_of(rows[q_ref]) + e_ret_here
+        opts = {"fog GPU": energy["pue_fog"] * p_fog["gpu_slot"] * p95_of(rows["gpu"], factors)}
+        if "cpu" in rows:
+            opts["fog CPU"] = energy["pue_fog"] * p_fog["cpu_slot"] * p95_of(rows["cpu"], factors)
         for k in opts:
             opts[k] += e_bh * s_in + e_ret_here
         opts["cloud"] = (
-            energy["pue_cloud"] * p_cl["gpu_slot"] * P95_FACTOR * tt[name]["cloud"]["gpu"]
+            energy["pue_cloud"] * p_cl["gpu_slot"] * p95_of(tt[name]["cloud"]["gpu"], factors)
             + (e_bh + e_wan) * s_in
             + (e_wan + e_bh + e_down) * s_out
         )

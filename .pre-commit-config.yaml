@@ -1,3 +1,5 @@
+# Never touch the read-only reference code or the old illustrations (CLAUDE.md: not specifications).
+exclude: ^(reference|visual|excalidraw)/
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
