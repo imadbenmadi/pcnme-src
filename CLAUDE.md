@@ -31,7 +31,7 @@ Use the `implement-step` skill. In short: read the PLAN item → read every fina
 - Python 3.12 (3.11–3.13 supported, not 3.14). Dev machine: Windows 10, repo on drive F:. Also used from Claude Code cloud sessions (Linux, no GPU, no Docker).
 - Install: `pip install -e ".[dev]"`; add extras as milestones need them: `ml` (PyTorch, pymoo; M5–M6), `analysis` (pandas, Parquet, plots; M3.10+), `testbed` (MQTT, HTTP, InfluxDB, MinIO clients; M9), `maps` (SUMO tools; LuST). Never add a dependency outside `pyproject.toml`.
 - Tests: `pytest -q` (fast suite). Long statistical tests carry `@pytest.mark.slow` and run with `pytest -m slow`; Docker tests `@pytest.mark.testbed`; GPU tests `@pytest.mark.gpu`. Parallel: `pytest -n auto`.
-- Lint and types: `ruff check src tests`, `ruff format src tests`, `mypy` (strict on new code).
+- Lint and types: `ruff check src tests tools`, `ruff format src tests tools`, `mypy` (strict on new code).
 - CI (GitHub Actions, `.github/workflows/ci.yml`) runs lint + tests on Linux and Windows for every PR; keep it green.
 - Config arithmetic: `python tools/calc_defaults.py`.
 - Results: every run writes Parquet under `$PCNME_DATA_DIR/results/<run_id>/` (default `./results`, git-ignored), schema in `docs/METRICS.md`. Grafana is only for viewing; reported numbers always come from Parquet.
