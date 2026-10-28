@@ -38,15 +38,16 @@ def _positive(value: float, what: str) -> float:
 
 
 class FifoPipe:
-    """A FIFO pipe of fixed bandwidth (bit/s) shared by everything sent through it."""
+    """A FIFO pipe shared by everything sent through it. Its bandwidth (bit/s) is fixed, or None when every
+    transfer brings its own rate (the radio uplink: each car pushes at its own Shannon rate, 4.2)."""
 
-    def __init__(self, bandwidth: float) -> None:
-        self._bandwidth = _positive(bandwidth, "the bandwidth")
+    def __init__(self, bandwidth: float | None) -> None:
+        self._bandwidth = None if bandwidth is None else _positive(bandwidth, "the bandwidth")
         self._t_free = 0.0  # when the pipe is next free (4.1)
         self._last_now = -math.inf
 
     @property
-    def bandwidth(self) -> float:
+    def bandwidth(self) -> float | None:
         return self._bandwidth
 
     @property
@@ -58,13 +59,18 @@ class FifoPipe:
         self._check_now(now)
         return max(0.0, self._t_free - now)
 
-    def send(self, now: float, size_bits: float, delay: float) -> Transfer:
-        """Push `size_bits` into the pipe at `now`; `delay` is added after the push and does not hold it."""
+    def send(self, now: float, size_bits: float, delay: float, rate: float | None = None) -> Transfer:
+        """Push `size_bits` into the pipe at `now`; `delay` is added after the push and does not hold
+        it. `rate` (bit/s) is this transfer's push rate, by default the pipe's bandwidth."""
         _positive(size_bits, "the size in bits")
+        push_rate = rate if rate is not None else self._bandwidth
+        if push_rate is None:
+            raise ValueError("this pipe has no fixed bandwidth: give each transfer its rate")
+        _positive(push_rate, "the rate")
         if not (math.isfinite(delay) and delay >= 0):
             raise ValueError(f"the delay must be a finite number >= 0, got {delay!r}")
         wait = self.wait_at(now)
-        push = size_bits / self._bandwidth
+        push = size_bits / push_rate
         push_end = max(now, self._t_free) + push  # t_free <- max(t_now, t_free) + S / B (4.1)
         self._t_free = push_end
         self._last_now = now

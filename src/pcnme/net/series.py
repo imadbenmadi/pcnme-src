@@ -43,6 +43,8 @@ class CloudPath:
     """One zone's path to the cloud: its backhaul pipe, then the shared WAN pipe."""
 
     def __init__(self, clock: EventClock, backhaul: FifoPipe, wan: FifoPipe) -> None:
+        if wan.bandwidth is None or backhaul.bandwidth is None:
+            raise ValueError("both pipes of a cloud path need a fixed bandwidth")
         if wan.bandwidth > backhaul.bandwidth:
             # final-design 4.1 and 4.2: the WAN is the narrowest pipe and sets the push time.
             raise ValueError(
