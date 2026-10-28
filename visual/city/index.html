@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/three@0.149.0/build/three.min.js"></script>
+<script src="./pcnme-v1.js"></script>
+<style>html,body{margin:0;height:100%;background:#0b0e13;color:#dfe6ee;font-family:'IBM Plex Sans',sans-serif;overflow:hidden}a{color:#7fb8ff}a:hover{color:#b3d4ff}button{font-family:inherit}</style>
+</helmet>
+<div style="position:relative;width:100%;height:100vh;overflow:hidden;background:#0b0e13;">
+  <div ref="{{ stageRef }}" style="position:absolute;inset:0;"></div>
+
+  <sc-if value="{{ loading }}" hint-placeholder-val="{{ true }}">
+    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:500 14px 'IBM Plex Mono',monospace;color:#6f7c8b;pointer-events:none;">{{ loadText }}</div>
+  </sc-if>
+
+  <div style="position:absolute;top:16px;left:16px;display:flex;flex-direction:column;gap:2px;pointer-events:none;">
+    <div style="font:700 22px 'IBM Plex Sans',sans-serif;letter-spacing:.04em;color:#eef3f8;">PCNME</div>
+    <div style="font:400 12px 'IBM Plex Mono',monospace;color:#8b97a5;white-space:nowrap;">Predictive Cloud-Native Mobile Edge</div>
+  </div>
+
+  <div style="position:absolute;top:16px;left:50%;transform:translateX(-50%);display:flex;gap:4px;padding:4px;background:rgba(14,18,24,.92);border:1px solid #222a35;border-radius:10px;">
+    <button onClick="{{ show3d }}" style="border:0;border-radius:7px;padding:8px 16px;white-space:nowrap;font:500 14px 'IBM Plex Sans',sans-serif;cursor:pointer;background:{{ v3bg }};color:{{ v3fg }};">3D city</button>
+    <button onClick="{{ showPoster }}" style="border:0;border-radius:7px;padding:8px 16px;white-space:nowrap;font:500 14px 'IBM Plex Sans',sans-serif;cursor:pointer;background:{{ vpbg }};color:{{ vpfg }};">System poster</button>
+    <button onClick="{{ showTestbed }}" style="border:0;border-radius:7px;padding:8px 16px;white-space:nowrap;font:500 14px 'IBM Plex Sans',sans-serif;cursor:pointer;background:{{ vtbg }};color:{{ vtfg }};">Testbed</button>
+  </div>
+
+  <div style="position:absolute;top:16px;right:16px;display:flex;gap:8px;">
+    <sc-if value="{{ isPoster }}" hint-placeholder-val="{{ false }}">
+      <button onClick="{{ printPoster }}" style="padding:8px 12px;border-radius:8px;border:1px solid #2a3440;background:rgba(14,18,24,.92);color:#c9d3de;font:500 13px 'IBM Plex Sans',sans-serif;cursor:pointer;white-space:nowrap;">Print poster</button>
+    </sc-if>
+    <button onClick="{{ toggleOpen }}" style="padding:8px 12px;border-radius:8px;border:1px dashed #4a5563;background:rgba(14,18,24,.92);color:#c9d3de;font:500 13px 'IBM Plex Sans',sans-serif;cursor:pointer;white-space:nowrap;">Open design items</button>
+  </div>
+
+  <sc-if value="{{ showSide }}" hint-placeholder-val="{{ true }}">
+    <div style="position:absolute;left:16px;top:72px;bottom:56px;width:{{ leftW }};display:flex;flex-direction:column;gap:10px;overflow-y:auto;overflow-x:hidden;">
+      <div style="display:flex;flex-direction:column;gap:8px;padding:12px;background:rgba(14,18,24,.9);border:1px solid #222a35;border-radius:12px;backdrop-filter:blur(8px);">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:0 2px;">
+          <span style="font:600 12px 'IBM Plex Mono',monospace;color:#8b97a5;letter-spacing:.1em;text-transform:uppercase;">Flows</span>
+          <span style="font:400 11px 'IBM Plex Mono',monospace;color:#56616f;">car 7 · 10–20 s each</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;">
+          <button onClick="{{ p1 }}" style="display:flex;gap:7px;align-items:baseline;text-align:left;padding:8px 9px;min-width:0;overflow:hidden;border-radius:8px;border:1px solid {{ b1 }};background:{{ g1 }};color:#dfe6ee;cursor:pointer;"><span style="font:600 12px 'IBM Plex Mono',monospace;color:#4da3ff;">1</span><span style="display:flex;flex-direction:column;gap:1px;min-width:0;"><span style="font:500 13px 'IBM Plex Sans',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Normal task</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#6f7c8b;">C2·C4</span></span></button>
+          <button onClick="{{ p2 }}" style="display:flex;gap:7px;align-items:baseline;text-align:left;padding:8px 9px;min-width:0;overflow:hidden;border-radius:8px;border:1px solid {{ b2 }};background:{{ g2 }};color:#dfe6ee;cursor:pointer;"><span style="font:600 12px 'IBM Plex Mono',monospace;color:#4da3ff;">2</span><span style="display:flex;flex-direction:column;gap:1px;min-width:0;"><span style="font:500 13px 'IBM Plex Sans',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Boulder</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#6f7c8b;">C1</span></span></button>
+          <button onClick="{{ p3 }}" style="display:flex;gap:7px;align-items:baseline;text-align:left;padding:8px 9px;min-width:0;overflow:hidden;border-radius:8px;border:1px solid {{ b3 }};background:{{ g3 }};color:#dfe6ee;cursor:pointer;"><span style="font:600 12px 'IBM Plex Mono',monospace;color:#4da3ff;">3</span><span style="display:flex;flex-direction:column;gap:1px;min-width:0;"><span style="font:500 13px 'IBM Plex Sans',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Zone change</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#6f7c8b;">C7·C3</span></span></button>
+          <button onClick="{{ p4 }}" style="display:flex;gap:7px;align-items:baseline;text-align:left;padding:8px 9px;min-width:0;overflow:hidden;border-radius:8px;border:1px solid {{ b4 }};background:{{ g4 }};color:#dfe6ee;cursor:pointer;"><span style="font:600 12px 'IBM Plex Mono',monospace;color:#4da3ff;">4</span><span style="display:flex;flex-direction:column;gap:1px;min-width:0;"><span style="font:500 13px 'IBM Plex Sans',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Overlap</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#6f7c8b;">C13</span></span></button>
+          <button onClick="{{ p5 }}" style="display:flex;gap:7px;align-items:baseline;text-align:left;padding:8px 9px;min-width:0;overflow:hidden;border-radius:8px;border:1px solid {{ b5 }};background:{{ g5 }};color:#dfe6ee;cursor:pointer;"><span style="font:600 12px 'IBM Plex Mono',monospace;color:#4da3ff;">5</span><span style="display:flex;flex-direction:column;gap:1px;min-width:0;"><span style="font:500 13px 'IBM Plex Sans',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Car stopped</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#6f7c8b;">C8</span></span></button>
+          <button onClick="{{ p6 }}" style="display:flex;gap:7px;align-items:baseline;text-align:left;padding:8px 9px;min-width:0;overflow:hidden;border-radius:8px;border:1px solid {{ b6 }};background:{{ g6 }};color:#dfe6ee;cursor:pointer;"><span style="font:600 12px 'IBM Plex Mono',monospace;color:#4da3ff;">6</span><span style="display:flex;flex-direction:column;gap:1px;min-width:0;"><span style="font:500 13px 'IBM Plex Sans',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Coverage gap</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#6f7c8b;">C12</span></span></button>
+          <button onClick="{{ p7 }}" style="display:flex;gap:7px;align-items:baseline;text-align:left;padding:8px 9px;min-width:0;overflow:hidden;border-radius:8px;border:1px solid {{ b7 }};background:{{ g7 }};color:#dfe6ee;cursor:pointer;"><span style="font:600 12px 'IBM Plex Mono',monospace;color:#4da3ff;">7</span><span style="display:flex;flex-direction:column;gap:1px;min-width:0;"><span style="font:500 13px 'IBM Plex Sans',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Exec failure</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#6f7c8b;">C14</span></span></button>
+          <button onClick="{{ p8 }}" style="display:flex;gap:7px;align-items:baseline;text-align:left;padding:8px 9px;min-width:0;overflow:hidden;border-radius:8px;border:1px solid {{ b8 }};background:{{ g8 }};color:#dfe6ee;cursor:pointer;"><span style="font:600 12px 'IBM Plex Mono',monospace;color:#4da3ff;">8</span><span style="display:flex;flex-direction:column;gap:1px;min-width:0;"><span style="font:500 13px 'IBM Plex Sans',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Deadline</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#6f7c8b;">C9</span></span></button>
+          <button onClick="{{ p9 }}" style="display:flex;gap:7px;align-items:baseline;text-align:left;padding:8px 9px;min-width:0;overflow:hidden;border-radius:8px;border:1px solid {{ b9 }};background:{{ g9 }};color:#dfe6ee;cursor:pointer;"><span style="font:600 12px 'IBM Plex Mono',monospace;color:#4da3ff;">9</span><span style="display:flex;flex-direction:column;gap:1px;min-width:0;"><span style="font:500 13px 'IBM Plex Sans',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Zone dies / joins</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#6f7c8b;">join · last will</span></span></button>
+          <button onClick="{{ p10 }}" style="display:flex;gap:7px;align-items:baseline;text-align:left;padding:8px 9px;min-width:0;overflow:hidden;border-radius:8px;border:1px solid {{ b10 }};background:{{ g10 }};color:#dfe6ee;cursor:pointer;"><span style="font:600 12px 'IBM Plex Mono',monospace;color:#4da3ff;">10</span><span style="display:flex;flex-direction:column;gap:1px;min-width:0;"><span style="font:500 13px 'IBM Plex Sans',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Cloud congestion</span><span style="font:400 10.5px 'IBM Plex Mono',monospace;color:#6f7c8b;">S3</span></span></button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;padding-top:4px;border-top:1px solid #1d2530;">
+          <button onClick="{{ togglePause }}" style="padding:8px 10px;border-radius:8px;border:1px solid #2a3440;background:{{ pauseBg }};color:#eef3f8;font:500 13px 'IBM Plex Sans',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ pauseLabel }}</button>
+          <button onClick="{{ next }}" style="padding:8px 10px;border-radius:8px;border:1px solid {{ nextBorder }};background:{{ nextBg }};color:{{ nextFg }};font:500 13px 'IBM Plex Sans',sans-serif;cursor:pointer;white-space:nowrap;">Next step ▸</button>
+          <button onClick="{{ toggleStep }}" style="padding:8px 10px;border-radius:8px;border:1px solid #2a3440;background:{{ stepBg }};color:{{ stepFg }};font:500 13px 'IBM Plex Sans',sans-serif;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ stepLabel }}</button>
+          <button onClick="{{ doReset }}" style="padding:8px 10px;border-radius:8px;border:1px solid #2a3440;background:transparent;color:#8b97a5;font:500 13px 'IBM Plex Sans',sans-serif;cursor:pointer;white-space:nowrap;">Reset</button>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px;padding:12px;background:rgba(14,18,24,.9);border:1px solid #222a35;border-radius:12px;backdrop-filter:blur(8px);">
+        <button onClick="{{ toggleTopics }}" style="display:flex;justify-content:space-between;align-items:baseline;border:0;background:transparent;padding:0 2px;cursor:pointer;color:#8b97a5;">
+          <span style="font:600 12px 'IBM Plex Mono',monospace;letter-spacing:.1em;text-transform:uppercase;">MQTT topics</span>
+          <span style="font:400 12px 'IBM Plex Mono',monospace;">{{ topicsCaret }}</span>
+        </button>
+        <sc-if value="{{ topicsOpen }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:3px;">
+            <div style="display:flex;flex-direction:column;gap:2px;padding:6px 8px;border-radius:7px;background:{{ tAttach }};">
+              <div style="display:flex;justify-content:space-between;gap:6px;"><span style="font:500 13px 'IBM Plex Mono',monospace;color:#ffffff;">car/{id}/attach</span><span style="font:400 11px 'IBM Plex Mono',monospace;color:#8b97a5;white-space:nowrap;">QoS 1 · —</span></div>
+              <span style="font:400 11.5px 'IBM Plex Sans',sans-serif;color:#8b97a5;">new serving zone → anchors of the car’s tasks</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:2px;padding:6px 8px;border-radius:7px;background:{{ tGps }};">
+              <div style="display:flex;justify-content:space-between;gap:6px;"><span style="font:500 13px 'IBM Plex Mono',monospace;color:#ffffff;">car/{id}/gps</span><span style="font:400 11px 'IBM Plex Mono',monospace;color:#8b97a5;white-space:nowrap;">QoS 0 · retained</span></div>
+              <span style="font:400 11.5px 'IBM Plex Sans',sans-serif;color:#8b97a5;">serving zone, every 100 ms → anchors with tasks in flight</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:2px;padding:6px 8px;border-radius:7px;background:{{ tResult }};">
+              <div style="display:flex;justify-content:space-between;gap:6px;"><span style="font:500 13px 'IBM Plex Mono',monospace;color:#3ddc84;">car/{id}/result</span><span style="font:400 11px 'IBM Plex Mono',monospace;color:#8b97a5;white-space:nowrap;">QoS 1 · —</span></div>
+              <span style="font:400 11.5px 'IBM Plex Sans',sans-serif;color:#8b97a5;">executor, once → serving zone + anchor</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:2px;padding:6px 8px;border-radius:7px;background:{{ tAck }};">
+              <div style="display:flex;justify-content:space-between;gap:6px;"><span style="font:500 13px 'IBM Plex Mono',monospace;color:#ffd23f;">car/{id}/ack</span><span style="font:400 11px 'IBM Plex Mono',monospace;color:#8b97a5;white-space:nowrap;">QoS 1 · —</span></div>
+              <span style="font:400 11.5px 'IBM Plex Sans',sans-serif;color:#8b97a5;">serving zone → anchor</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:2px;padding:6px 8px;border-radius:7px;background:{{ tState }};">
+              <div style="display:flex;justify-content:space-between;gap:6px;"><span style="font:500 13px 'IBM Plex Mono',monospace;color:#b4bdc8;">zone/{id}/state</span><span style="font:400 11px 'IBM Plex Mono',monospace;color:#8b97a5;white-space:nowrap;">QoS 0 · retained</span></div>
+              <span style="font:400 11.5px 'IBM Plex Sans',sans-serif;color:#8b97a5;">every zone + cloud, every 100 ms → neighbours</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:2px;padding:6px 8px;border-radius:7px;background:{{ tStatus }};">
+              <div style="display:flex;justify-content:space-between;gap:6px;"><span style="font:500 13px 'IBM Plex Mono',monospace;color:#b4bdc8;">zone/{id}/status</span><span style="font:400 11px 'IBM Plex Mono',monospace;color:#8b97a5;white-space:nowrap;">QoS 1 · retained</span></div>
+              <span style="font:400 11.5px 'IBM Plex Sans',sans-serif;color:#8b97a5;">every zone + cloud → neighbours · last will = “offline”</span>
+            </div>
+            <div style="font:400 11.5px/1.45 'IBM Plex Sans',sans-serif;color:#6f7c8b;padding:4px 2px 0;text-wrap:pretty;">Task input never goes through MQTT — it is sent by <span style="font-family:'IBM Plex Mono',monospace;color:#9aa6b4;">HTTP POST /tasks</span>.</div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+
+    <div style="position:absolute;right:16px;top:72px;bottom:56px;width:{{ rightW }};display:flex;flex-direction:column;gap:10px;">
+      <div style="display:flex;flex-direction:column;gap:9px;padding:12px 14px;background:rgba(14,18,24,.92);border:1px solid #222a35;border-radius:12px;backdrop-filter:blur(8px);flex:none;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+          <span style="font:600 12px 'IBM Plex Mono',monospace;color:#8b97a5;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap;">Placement · {{ dZone }}</span>
+          <span style="font:500 10.5px 'IBM Plex Mono',monospace;color:#8b97a5;border:1px dashed #4a5563;border-radius:4px;padding:1px 5px;white-space:nowrap;">example values</span>
+        </div>
+        <sc-if value="{{ noDecision }}" hint-placeholder-val="{{ true }}">
+          <div style="font:400 13px/1.5 'IBM Plex Sans',sans-serif;color:#8b97a5;text-wrap:pretty;">Fills in during a flow: TOF-Broker → masks → D3QN.</div>
+        </sc-if>
+        <sc-if value="{{ hasDecision }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div style="display:flex;flex-direction:column;gap:3px;opacity:{{ s1op }};">
+              <div style="display:flex;gap:8px;align-items:center;"><span style="font:600 11px 'IBM Plex Mono',monospace;color:#56616f;">1</span><span style="font:600 13px 'IBM Plex Sans',sans-serif;color:#dfe6ee;">TOF-Broker</span><span style="font:600 12px 'IBM Plex Mono',monospace;color:{{ tofColor }};border:1px solid {{ tofColor }};border-radius:4px;padding:0 6px;">{{ tofKind }}</span></div>
+              <span style="font:400 12px 'IBM Plex Mono',monospace;color:#8b97a5;padding-left:19px;">{{ tofText }}</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;opacity:{{ s2op }};">
+              <div style="display:flex;gap:8px;align-items:center;"><span style="font:600 11px 'IBM Plex Mono',monospace;color:#56616f;">2–3</span><span style="font:600 13px 'IBM Plex Sans',sans-serif;color:#dfe6ee;">Masks → D3QN Q-values</span></div>
+              <sc-if value="{{ skipped }}" hint-placeholder-val="{{ false }}">
+                <span style="font:400 12px 'IBM Plex Sans',sans-serif;color:#8b97a5;padding-left:19px;">skipped — boulder goes straight to the cloud</span>
+              </sc-if>
+              <sc-for list="{{ options }}" as="o" hint-placeholder-count="6">
+                <div style="display:grid;grid-template-columns:96px minmax(0,1fr) 82px;gap:8px;align-items:center;padding-left:19px;opacity:{{ o.op }};">
+                  <span style="font:500 12.5px 'IBM Plex Mono',monospace;color:{{ o.fg }};white-space:nowrap;text-decoration:{{ o.strike }};">{{ o.label }}</span>
+                  <div style="height:8px;background:#1b222c;border-radius:4px;overflow:hidden;"><div style="height:100%;width:{{ o.w }};background:{{ o.bar }};border-radius:4px;"></div></div>
+                  <span style="font:400 11.5px 'IBM Plex Mono',monospace;color:{{ o.vfg }};text-align:right;white-space:nowrap;">{{ o.v }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ hasNote }}" hint-placeholder-val="{{ false }}">
+              <div style="font:400 13px/1.45 'IBM Plex Sans',sans-serif;color:#b4bdc8;text-wrap:pretty;">{{ dNote }}</div>
+            </sc-if>
+            <sc-if value="{{ hasReward }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;gap:8px;align-items:baseline;padding:6px 8px;border-radius:7px;background:rgba(255,210,63,.07);"><span style="font:600 12px 'IBM Plex Mono',monospace;color:#ffd23f;">reward</span><span style="font:400 12.5px 'IBM Plex Mono',monospace;color:#dfe6ee;">{{ dReward }}</span></div>
+            </sc-if>
+          </div>
+        </sc-if>
+        <div style="display:flex;gap:6px;align-items:baseline;flex-wrap:wrap;border-top:1px solid #1d2530;padding-top:7px;">
+          <span style="font:400 11.5px 'IBM Plex Sans',sans-serif;color:#6f7c8b;">Agent input: 48 values — task 5 + 6 options × 6 + mobility 6 + w 1</span>
+          <span style="font:500 10.5px 'IBM Plex Mono',monospace;color:#c9a6ff;border:1px solid #6b5a8a;border-radius:4px;padding:0 5px;">proposed</span>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px;padding:12px 14px;background:rgba(14,18,24,.9);border:1px solid #222a35;border-radius:12px;backdrop-filter:blur(8px);overflow:auto;min-height:0;flex:1 1 auto;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+          <span style="font:600 12px 'IBM Plex Mono',monospace;color:#8b97a5;letter-spacing:.1em;text-transform:uppercase;">Trace</span>
+          <span style="font:500 12px 'IBM Plex Mono',monospace;color:#4da3ff;white-space:nowrap;">{{ flowTitle }}</span>
+        </div>
+        <sc-if value="{{ gate }}" hint-placeholder-val="{{ false }}">
+          <div style="font:500 12.5px 'IBM Plex Sans',sans-serif;color:#0b0e13;background:#4da3ff;border-radius:7px;padding:6px 9px;">Step mode — press Next step to continue</div>
+        </sc-if>
+        <sc-if value="{{ noLog }}" hint-placeholder-val="{{ true }}">
+          <div style="font:400 13px/1.55 'IBM Plex Sans',sans-serif;color:#8b97a5;text-wrap:pretty;">Pick a flow to follow car 7. Faint grey dots are zone/{id}/state updates through the broker. Hover a car for its T_exit; click a server cabinet to open the fog node.</div>
+        </sc-if>
+        <sc-for list="{{ log }}" as="e" hint-placeholder-count="0">
+          <div style="display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;align-items:start;padding:4px 6px;border-radius:7px;background:{{ e.bg }};">
+            <span style="font:600 11px 'IBM Plex Mono',monospace;color:{{ e.dot }};padding-top:2px;text-align:right;">{{ e.n }}</span>
+            <span style="font:400 13.5px/1.5 'IBM Plex Sans',sans-serif;color:{{ e.fg }};text-wrap:pretty;">{{ e.text }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;top:80px;left:50%;transform:translateX(-50%);width:min(500px, calc(100% - 32px));display:flex;flex-direction:column;gap:12px;padding:16px;background:rgba(14,18,24,.96);border:1px solid #34506a;border-radius:14px;backdrop-filter:blur(10px);">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+        <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;"><span style="font:600 19px 'IBM Plex Sans',sans-serif;color:#eef3f8;">Fog node {{ insp.id }}</span><span style="font:500 12px 'IBM Plex Mono',monospace;color:{{ insp.statusColor }};">{{ insp.status }}</span><span style="font:500 12px 'IBM Plex Mono',monospace;color:#8b97a5;">{{ insp.roles }}</span></div>
+        <button onClick="{{ closeSel }}" style="border:0;background:transparent;color:#8b97a5;font:500 18px 'IBM Plex Mono',monospace;cursor:pointer;padding:0 2px;">×</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;">
+        <span style="padding:6px 10px;border-radius:7px;background:#19212c;border:1px solid #2a3440;font:500 13px 'IBM Plex Sans',sans-serif;color:#dfe6ee;">TOF-Broker</span>
+        <span style="color:#56616f;font:400 13px 'IBM Plex Mono',monospace;">→</span>
+        <span style="padding:6px 10px;border-radius:7px;background:#19212c;border:1px solid #2a3440;font:500 13px 'IBM Plex Sans',sans-serif;color:#dfe6ee;">Mask</span>
+        <span style="color:#56616f;font:400 13px 'IBM Plex Mono',monospace;">→</span>
+        <span style="padding:6px 10px;border-radius:7px;background:#19212c;border:1px solid #2a3440;font:500 13px 'IBM Plex Sans',sans-serif;color:#dfe6ee;">D3QN agent</span>
+        <span style="color:#56616f;font:400 13px 'IBM Plex Mono',monospace;">→</span>
+        <span style="padding:6px 10px;border-radius:7px;background:#19212c;border:1px solid #2a3440;font:500 13px 'IBM Plex Sans',sans-serif;color:#dfe6ee;">Priority queue · {{ insp.queue }}</span>
+        <span style="color:#56616f;font:400 13px 'IBM Plex Mono',monospace;">→</span>
+        <span style="display:flex;gap:4px;align-items:center;padding:6px 10px;border-radius:7px;background:#19212c;border:1px solid #2a3440;">
+          <sc-for list="{{ insp.slots }}" as="s" hint-placeholder-count="4"><span style="width:16px;height:13px;border-radius:3px;background:{{ s.bg }};"></span></sc-for>
+        </span>
+      </div>
+      <div style="font:400 12.5px 'IBM Plex Sans',sans-serif;color:#8b97a5;">Queue order: hard first → earliest deadline → aging for soft. Slots: one task each (example: 4).</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;">
+        <div style="padding:8px 10px;border-radius:8px;border:1px solid #222a35;display:flex;flex-direction:column;gap:2px;"><span style="font:600 12.5px 'IBM Plex Sans',sans-serif;color:#dfe6ee;">Mobility predictor</span><span style="font:400 11.5px 'IBM Plex Mono',monospace;color:#8b97a5;">GPS / 100 ms → T_exit, next zone</span></div>
+        <div style="padding:8px 10px;border-radius:8px;border:1px solid #222a35;display:flex;flex-direction:column;gap:2px;"><span style="font:600 12.5px 'IBM Plex Sans',sans-serif;color:#dfe6ee;">State store</span><span style="font:400 11.5px 'IBM Plex Mono',monospace;color:#8b97a5;">neighbours’ zone/{id}/state</span></div>
+        <div style="padding:8px 10px;border-radius:8px;border:1px solid #222a35;display:flex;flex-direction:column;gap:2px;"><span style="font:600 12.5px 'IBM Plex Sans',sans-serif;color:#dfe6ee;">Replay buffer</span><span style="font:400 11.5px 'IBM Plex Mono',monospace;color:#8b97a5;">{{ insp.replay }} experiences</span></div>
+        <div style="padding:8px 10px;border-radius:8px;border:1px solid #222a35;display:flex;flex-direction:column;gap:3px;">
+          <span style="font:600 12.5px 'IBM Plex Sans',sans-serif;color:#dfe6ee;">Neighbour table</span>
+          <sc-for list="{{ insp.neigh }}" as="n" hint-placeholder-count="4"><span style="display:flex;justify-content:space-between;gap:4px;font:400 11.5px 'IBM Plex Mono',monospace;color:#8b97a5;"><span>{{ n.slot }} {{ n.id }}</span><span style="color:{{ n.color }};">{{ n.state }}</span></span></sc-for>
+        </div>
+        <div style="padding:8px 10px;border-radius:8px;border:1px solid #222a35;display:flex;flex-direction:column;gap:2px;"><span style="font:600 12.5px 'IBM Plex Sans',sans-serif;color:#dfe6ee;">Car registry</span><span style="font:400 11.5px 'IBM Plex Mono',monospace;color:#8b97a5;text-wrap:pretty;">{{ insp.cars }}</span></div>
+        <div style="padding:8px 10px;border-radius:8px;border:1px solid #222a35;display:flex;flex-direction:column;gap:2px;"><span style="font:600 12.5px 'IBM Plex Sans',sans-serif;color:#dfe6ee;">Anchor table</span><span style="font:400 11.5px 'IBM Plex Mono',monospace;color:#8b97a5;">{{ insp.anchored }}</span></div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isTestbed }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;top:72px;left:16px;right:16px;bottom:56px;display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,300px);gap:16px;overflow:auto;">
+      <div style="display:flex;flex-direction:column;gap:12px;min-width:0;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
+          <span style="font:600 20px 'IBM Plex Sans',sans-serif;color:#eef3f8;">Testbed — every box is a Docker container</span>
+          <span style="font:400 13px 'IBM Plex Mono',monospace;color:#8b97a5;">links shaped with tc netem</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid #1d2a38;border-radius:14px;background:#0e131a;">
+          <div style="display:flex;align-items:center;gap:12px;"><span style="font:600 15px 'IBM Plex Mono',monospace;color:#9fd4ff;">wan_net</span><span style="font:400 13px 'IBM Plex Mono',monospace;color:#8b97a5;">50–200 ms · can congest</span><span style="flex:1;height:0;border-top:3px solid #9fd4ff;opacity:.7;"></span></div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:stretch;">
+            <div style="display:flex;flex-direction:column;gap:4px;padding:10px 14px;border-radius:10px;background:#141c26;border:1px solid #4f7aa0;min-width:200px;"><span style="font:600 15px 'IBM Plex Mono',monospace;color:#cfe9ff;">cloud</span><span style="font:400 12px 'IBM Plex Sans',sans-serif;color:#8b97a5;">execution slots + queue · MQTT client</span><span style="font:500 11px 'IBM Plex Mono',monospace;color:#9fd4ff;">wan</span></div>
+            <div style="display:flex;align-items:center;font:400 12.5px 'IBM Plex Sans',sans-serif;color:#6f7c8b;">also on wan_net: broker, every zone</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid #222a35;border-radius:14px;background:#0e131a;">
+          <div style="display:flex;align-items:center;gap:12px;"><span style="font:600 15px 'IBM Plex Mono',monospace;color:#b4bdc8;">backhaul_net</span><span style="font:400 13px 'IBM Plex Mono',monospace;color:#8b97a5;">1–5 ms</span><span style="flex:1;height:0;border-top:3px solid #5f6b78;"></span></div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;">
+            <div style="display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:10px;background:#1a1f26;border:1px solid #6d7682;"><span style="font:600 15px 'IBM Plex Mono',monospace;color:#dfe6ee;">broker</span><span style="font:400 12px 'IBM Plex Sans',sans-serif;color:#8b97a5;">EMQX cluster</span><span style="font:500 11px 'IBM Plex Mono',monospace;color:#9aa3ad;">backhaul · wan</span></div>
+            <div style="display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:10px;background:#121821;border:1px solid #2a3440;"><span style="font:600 15px 'IBM Plex Mono',monospace;color:#dfe6ee;">zone-1</span><span style="font:400 12px 'IBM Plex Sans',sans-serif;color:#8b97a5;">fog node + agent</span><span style="font:500 11px 'IBM Plex Mono',monospace;color:#9aa3ad;">radio · backhaul · wan</span></div>
+            <div style="display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:10px;background:#121821;border:1px solid #2a3440;"><span style="font:600 15px 'IBM Plex Mono',monospace;color:#dfe6ee;">zone-2</span><span style="font:400 12px 'IBM Plex Sans',sans-serif;color:#8b97a5;">fog node + agent</span><span style="font:500 11px 'IBM Plex Mono',monospace;color:#9aa3ad;">radio · backhaul · wan</span></div>
+            <div style="display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:10px;background:#121821;border:1px solid #2a3440;"><span style="font:600 15px 'IBM Plex Mono',monospace;color:#dfe6ee;">zone-3</span><span style="font:400 12px 'IBM Plex Sans',sans-serif;color:#8b97a5;">fog node + agent</span><span style="font:500 11px 'IBM Plex Mono',monospace;color:#9aa3ad;">radio · backhaul · wan</span></div>
+            <div style="display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:10px;background:#121821;border:1px solid #2a3440;"><span style="font:600 15px 'IBM Plex Mono',monospace;color:#dfe6ee;">zone-4</span><span style="font:400 12px 'IBM Plex Sans',sans-serif;color:#8b97a5;">fog node + agent</span><span style="font:500 11px 'IBM Plex Mono',monospace;color:#9aa3ad;">radio · backhaul · wan</span></div>
+            <div style="display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:10px;background:transparent;border:1px dashed #4a5563;"><span style="font:600 15px 'IBM Plex Mono',monospace;color:#9aa6b4;">zone-5</span><span style="font:400 12px 'IBM Plex Sans',sans-serif;color:#8b97a5;">join test</span><span style="font:500 11px 'IBM Plex Mono',monospace;color:#9aa3ad;">radio · backhaul · wan</span></div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid #222a35;border-radius:14px;background:#0e131a;">
+          <div style="display:flex;align-items:center;gap:12px;"><span style="font:600 15px 'IBM Plex Mono',monospace;color:#eef3f8;">radio_net</span><span style="font:400 13px 'IBM Plex Mono',monospace;color:#8b97a5;">car ↔ serving zone</span><span style="flex:1;height:0;border-top:2px dashed #d8e2ee;opacity:.5;"></span></div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            <span style="padding:7px 11px;border-radius:8px;background:rgba(255,210,63,.1);border:1px solid #8a7420;font:500 13px 'IBM Plex Mono',monospace;color:#ffd23f;">car-1</span>
+            <span style="padding:7px 11px;border-radius:8px;background:rgba(255,210,63,.1);border:1px solid #8a7420;font:500 13px 'IBM Plex Mono',monospace;color:#ffd23f;">car-2</span>
+            <span style="padding:7px 11px;border-radius:8px;background:rgba(255,210,63,.1);border:1px solid #8a7420;font:500 13px 'IBM Plex Mono',monospace;color:#ffd23f;">car-3</span>
+            <span style="padding:7px 11px;border-radius:8px;background:rgba(255,210,63,.1);border:1px solid #8a7420;font:500 13px 'IBM Plex Mono',monospace;color:#ffd23f;">car-4</span>
+            <span style="padding:7px 11px;border-radius:8px;background:rgba(255,210,63,.1);border:1px solid #8a7420;font:500 13px 'IBM Plex Mono',monospace;color:#ffd23f;">car-5</span>
+            <span style="padding:7px 11px;border-radius:8px;background:rgba(255,210,63,.1);border:1px solid #8a7420;font:500 13px 'IBM Plex Mono',monospace;color:#ffd23f;">car-6</span>
+            <span style="padding:7px 11px;border-radius:8px;background:rgba(255,210,63,.1);border:1px solid #8a7420;font:500 13px 'IBM Plex Mono',monospace;color:#ffd23f;">car-7</span>
+            <span style="padding:7px 11px;border-radius:8px;background:rgba(255,210,63,.1);border:1px solid #8a7420;font:500 13px 'IBM Plex Mono',monospace;color:#ffd23f;">car-8</span>
+            <span style="padding:7px 11px;border-radius:8px;background:rgba(255,210,63,.1);border:1px solid #8a7420;font:500 13px 'IBM Plex Mono',monospace;color:#ffd23f;">car-9</span>
+            <span style="padding:7px 11px;border-radius:8px;background:rgba(255,210,63,.1);border:1px solid #8a7420;font:500 13px 'IBM Plex Mono',monospace;color:#ffd23f;">car-10</span>
+          </div>
+          <span style="font:400 12.5px 'IBM Plex Sans',sans-serif;color:#6f7c8b;">Cars are not MQTT clients: they talk HTTP / WebSocket to their serving zone only.</span>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid #222a35;border-radius:14px;background:#0e131a;">
+          <span style="font:600 12px 'IBM Plex Mono',monospace;color:#8b97a5;letter-spacing:.1em;text-transform:uppercase;">Testbed services</span>
+          <div style="display:flex;flex-direction:column;gap:2px;padding:9px 11px;border-radius:9px;border:1px solid #2a3440;"><span style="font:600 14px 'IBM Plex Mono',monospace;color:#dfe6ee;">minio</span><span style="font:400 12px 'IBM Plex Sans',sans-serif;color:#8b97a5;">storage · task data</span></div>
+          <div style="display:flex;flex-direction:column;gap:2px;padding:9px 11px;border-radius:9px;border:1px solid #2a3440;"><span style="font:600 14px 'IBM Plex Mono',monospace;color:#dfe6ee;">influxdb + grafana</span><span style="font:400 12px 'IBM Plex Sans',sans-serif;color:#8b97a5;">metrics</span></div>
+          <div style="display:flex;flex-direction:column;gap:2px;padding:9px 11px;border-radius:9px;border:1px solid #2a3440;"><span style="font:600 14px 'IBM Plex Mono',monospace;color:#dfe6ee;">experiment runner</span><span style="font:400 12px 'IBM Plex Sans',sans-serif;color:#8b97a5;">runs the experiments</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;padding:14px;border:1px dashed #4a5563;border-radius:14px;">
+          <span style="font:600 14px 'IBM Plex Sans',sans-serif;color:#eef3f8;">Fast mode</span>
+          <span style="font:400 13px/1.5 'IBM Plex Sans',sans-serif;color:#9aa6b4;text-wrap:pretty;">Same code, in-process bus, simulated clock.</span>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;top:64px;right:16px;width:min(420px, calc(100% - 32px));max-height:calc(100% - 140px);overflow:auto;display:flex;flex-direction:column;gap:12px;padding:16px;background:rgba(14,18,24,.97);border:1px dashed #4a5563;border-radius:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="font:600 17px 'IBM Plex Sans',sans-serif;color:#eef3f8;">Open design items</span><button onClick="{{ toggleOpen }}" style="border:0;background:transparent;color:#8b97a5;font:500 18px 'IBM Plex Mono',monospace;cursor:pointer;">×</button></div>
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <span style="font:600 12px 'IBM Plex Mono',monospace;color:#8b97a5;letter-spacing:.08em;">OPEN · shown as “?”</span>
+        <span style="font:400 13px 'IBM Plex Sans',sans-serif;color:#c9d3de;">Soft-task hold limit in a coverage gap (C12)</span>
+        <span style="font:400 13px 'IBM Plex Sans',sans-serif;color:#c9d3de;">Execution-failure timeout value (C14)</span>
+        <span style="font:400 13px 'IBM Plex Sans',sans-serif;color:#c9d3de;">How neighbour positions N1–N4 are assigned (zone join)</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <span style="font:600 12px 'IBM Plex Mono',monospace;color:#c9a6ff;letter-spacing:.08em;">PROPOSED</span>
+        <span style="font:400 13px 'IBM Plex Sans',sans-serif;color:#c9d3de;">Stale = state older than 3 × state period (300 ms at 100 ms)</span>
+        <span style="font:400 13px 'IBM Plex Sans',sans-serif;color:#c9d3de;">Agent input: 48 normalised values</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <span style="font:600 12px 'IBM Plex Mono',monospace;color:#8b97a5;letter-spacing:.08em;">OUT OF SCOPE · not shown as working</span>
+        <span style="font:400 13px/1.6 'IBM Plex Sans',sans-serif;color:#9aa6b4;text-wrap:pretty;">Cancelling a task on another node · lost-task timeout value · full-queue refusal message · duplicate-result filtering · clock sync · federated learning · security · full broker outage</span>
+      </div>
+    </div>
+  </sc-if>
+
+  <div style="position:absolute;left:0;right:0;bottom:0;padding:10px 16px 12px;background:#0b0e13;border-top:1px solid #161c24;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;font:400 12px 'IBM Plex Mono',monospace;color:#8b97a5;">
+    <button onClick="{{ toggleLegend }}" style="border:1px solid #2a3440;background:rgba(14,18,24,.9);color:#8b97a5;border-radius:6px;padding:3px 8px;font:500 12px 'IBM Plex Mono',monospace;cursor:pointer;white-space:nowrap;">{{ legendLabel }}</button>
+    <sc-if value="{{ legendOpen }}" hint-placeholder-val="{{ true }}">
+      <span style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;pointer-events:none;">
+        <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;"><span style="width:10px;height:10px;border-radius:50%;background:#4da3ff;"></span>task</span>
+        <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;"><span style="width:10px;height:10px;border-radius:50%;background:#3ddc84;"></span>result</span>
+        <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;"><span style="width:10px;height:10px;border-radius:50%;background:#ffd23f;"></span>ack</span>
+        <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;"><span style="width:10px;height:10px;border-radius:50%;background:#ffffff;"></span>attach / GPS</span>
+        <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;"><span style="width:8px;height:8px;border-radius:50%;background:#8a94a3;opacity:.6;"></span>state</span>
+        <span style="width:1px;height:12px;background:#2a3440;"></span>
+        <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;"><span style="width:11px;height:11px;border-radius:3px;border:2px solid #ff6fa8;"></span>anchor</span>
+        <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;"><span style="width:11px;height:11px;border-radius:3px;border:2px solid #4da3ff;"></span>serving</span>
+        <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;"><span style="width:11px;height:11px;border-radius:3px;background:#3ddc84;"></span>executor</span>
+        <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;"><span style="width:11px;height:11px;border-radius:3px;background:#ffd23f;"></span>car</span>
+        <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;"><span style="width:11px;height:11px;border-radius:3px;background:#9aa3ad;"></span>broker</span>
+        <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;"><span style="width:11px;height:11px;border-radius:3px;background:#9fd4ff;"></span>cloud</span>
+        <span style="width:1px;height:12px;background:#2a3440;"></span>
+        <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;"><span style="width:18px;height:0;border-top:1px solid #d8e2ee;opacity:.6;"></span>radio</span>
+        <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;"><span style="width:18px;height:0;border-top:2px solid #5f6b78;"></span>backhaul 1–5 ms</span>
+        <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;"><span style="width:18px;height:0;border-top:2px solid {{ wanColor }};"></span>WAN {{ wanMs }} ms</span>
+      </span>
+    </sc-if>
+    <span style="margin-left:auto;color:#56616f;white-space:nowrap;pointer-events:none;">{{ hint }}</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;speed&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;min&quot;:0.25,&quot;max&quot;:2,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Simulation&quot;},&quot;ambientState&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Simulation&quot;},&quot;radioLinks&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Simulation&quot;}}">
+class Component extends DCLogic {
+  state = { view: '3d', flow: null, log: [], decision: null, sel: null, stats: null, ready: false, err: null, topic: null, paused: false, stepMode: false, gate: false, topicsOpen: true, legendOpen: true, showOpen: false, wide: true };
+  stageRef = React.createRef();
+  componentDidMount() {
+    const tier = () => window.innerWidth >= 1500 ? 2 : window.innerWidth >= 1100 ? 1 : 0;
+    this.onResize = () => { const t = tier(); if (t !== this.state.tier) this.setState({ tier: t, legendOpen: t === 2, topicsOpen: t > 0 }, () => this.applyInsets()); };
+    window.addEventListener('resize', this.onResize);
+    const t = tier();
+    Object.assign(this.state, { tier: t, legendOpen: t === 2, topicsOpen: t > 0 });
+    this.boot();
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this.onResize); this.api && this.api.destroy(); }
+  componentDidUpdate(pp) {
+    if (pp.speed !== this.props.speed || pp.ambientState !== this.props.ambientState || pp.radioLinks !== this.props.radioLinks) this.applyProps();
+  }
+  dims() { return [{ L: 250, R: 270 }, { L: 290, R: 320 }, { L: 340, R: 380 }][this.state.tier ?? 2]; }
+  applyInsets() {
+    if (!this.api) return;
+    const { L, R } = this.dims();
+    this.api.setInsets({ left: L + 32, right: R + 32, top: 72, bottom: 56 });
+  }
+  applyProps() {
+    if (!this.api) return;
+    this.api.set({ speed: this.props.speed ?? 1, ambient: this.props.ambientState ?? true, radio: this.props.radioLinks ?? true });
+  }
+  async boot() {
+    try {
+      for (let i = 0; i < 200 && !(window.PCNME && window.THREE); i++) await new Promise(r => setTimeout(r, 50));
+      const m = window.PCNME;
+      if (!m) throw new Error('pcnme-v1.js or three.js did not load (check internet connection)');
+      this.FLOWS = m.FLOWS;
+      this.api = await m.createPCNME(this.stageRef.current, {
+        onLog: e => this.setState(s => ({ log: [...s.log, e] })),
+        onClear: () => this.setState({ log: [] }),
+        onDecision: d => this.setState({ decision: d }),
+        onFlow: f => this.setState(s => ({ flow: f, lastFlow: f ?? s.lastFlow })),
+        onSelect: z => this.setState({ sel: z }),
+        onTopic: t => this.setState({ topic: t }),
+        onGate: g => this.setState({ gate: g }),
+        onTick: st => this.setState({ stats: st }),
+      });
+      this.applyProps(); this.applyInsets();
+      this.setState({ ready: true });
+    } catch (e) { console.error(e); this.setState({ err: String(e) }); }
+  }
+  setView(v) { this.setState({ view: v, sel: v === 'testbed' ? null : this.state.sel }); this.api && this.api.setView(v); }
+  renderVals() {
+    const s = this.state, f = s.flow, { L, R } = this.dims();
+    const KC = { task: '#4da3ff', result: '#3ddc84', ack: '#ffd23f', state: '#c9d3de', warn: '#ff6b6b', info: '#8b97a5', done: '#3ddc84', end: '#56616f' };
+    const v = {};
+    for (let n = 1; n <= 10; n++) {
+      v['p' + n] = () => { this.setState({ log: [], decision: null }); this.api && this.api.play(n); };
+      v['g' + n] = f === n ? 'rgba(77,163,255,.14)' : 'transparent';
+      v['b' + n] = f === n ? '#4da3ff' : '#222a35';
+    }
+    const d = s.decision;
+    const options = d && d.options ? d.options.map(o => {
+      const st3 = d.stage >= 3;
+      return {
+        label: o.label,
+        v: o.masked ? o.why + (o.why === 'stale' ? '*' : '') : st3 ? o.q.toFixed(2) : 'ok',
+        vfg: o.masked ? '#ff8a8a' : o.chosen ? '#3ddc84' : '#8b97a5',
+        w: !o.masked && st3 ? Math.round(o.q * 100) + '%' : '0%',
+        bar: o.chosen ? '#3ddc84' : '#4a5868',
+        fg: o.chosen ? '#3ddc84' : o.masked ? '#566170' : '#c9d3de',
+        strike: o.masked ? 'line-through' : 'none',
+        op: o.masked ? .6 : 1,
+      };
+    }) : [];
+    const tb = k => s.topic === k ? 'rgba(77,163,255,.16)' : 'transparent';
+    const z = s.sel && s.stats && s.stats.zones[s.sel];
+    const NC = { fresh: '#3ddc84', offline: '#ff6b6b', empty: '#56616f' };
+    const SB = { busy: '#3ddc84', idle: '#24303b', fail: '#ff4545' };
+    const insp = z ? {
+      id: z.id,
+      status: !z.joined ? 'can join later' : !z.alive ? 'offline' : 'online',
+      statusColor: !z.joined ? '#8b97a5' : !z.alive ? '#ff6b6b' : '#3ddc84',
+      roles: z.roles.join(' · ') + (z.held ? ' · holding a result' : ''),
+      queue: z.queue ? z.queue + ' waiting' : 'empty',
+      slots: z.slots.map(x => ({ bg: SB[x] })),
+      neigh: z.neigh.map(n => ({ slot: n.slot, id: n.id, state: n.state, color: NC[n.state] })),
+      cars: z.cars.length ? z.cars.map(c => 'car ' + c).join(', ') : 'no cars attached',
+      anchored: z.anchored ? z.anchored + ' task' + (z.anchored > 1 ? 's' : '') + ' anchored here' : 'no tasks',
+      replay: z.replay,
+    } : { id: '', status: '', statusColor: '#8b97a5', roles: '', queue: '', slots: [], neigh: [], cars: '', anchored: '', replay: 0 };
+    const st = s.stats, FL = this.FLOWS || [];
+    const cur = FL.find(x => x.n === (f ?? s.lastFlow));
+    const n = s.log.length;
+    return {
+      ...v,
+      stageRef: this.stageRef,
+      loading: !s.ready, loadText: s.err ? 'Could not load the 3D scene: ' + s.err : 'Loading scene…',
+      v3bg: s.view === '3d' ? '#24303d' : 'transparent', v3fg: s.view === '3d' ? '#eef3f8' : '#8b97a5',
+      vpbg: s.view === 'poster' ? '#24303d' : 'transparent', vpfg: s.view === 'poster' ? '#eef3f8' : '#8b97a5',
+      vtbg: s.view === 'testbed' ? '#24303d' : 'transparent', vtfg: s.view === 'testbed' ? '#eef3f8' : '#8b97a5',
+      show3d: () => this.setView('3d'), showPoster: () => this.setView('poster'), showTestbed: () => this.setView('testbed'),
+      isPoster: s.view === 'poster', isTestbed: s.view === 'testbed', showSide: s.view !== 'testbed',
+      printPoster: () => this.api && this.api.printPoster(),
+      leftW: L + 'px', rightW: R + 'px',
+      togglePause: () => { const p = !s.paused; this.setState({ paused: p }); this.api && this.api.pause(p); },
+      pauseLabel: s.paused ? '▶ Resume' : '❚❚ Pause', pauseBg: s.paused ? '#24303d' : 'transparent',
+      next: () => { this.setState({ paused: false }); this.api && this.api.next(); },
+      nextBg: s.gate ? '#4da3ff' : 'transparent', nextFg: s.gate ? '#0b0e13' : '#8b97a5', nextBorder: s.gate ? '#4da3ff' : '#2a3440',
+      toggleStep: () => { const m = !s.stepMode; this.setState({ stepMode: m }); this.api && this.api.setStepMode(m); },
+      stepLabel: s.stepMode ? 'Step mode: on' : 'Step mode: off', stepBg: s.stepMode ? 'rgba(77,163,255,.14)' : 'transparent', stepFg: s.stepMode ? '#4da3ff' : '#8b97a5',
+      doReset: () => { this.api && this.api.reset(); this.setState({ log: [], decision: null, paused: false, lastFlow: null }); this.api && this.api.pause(false); },
+      toggleTopics: () => this.setState({ topicsOpen: !s.topicsOpen }), topicsOpen: s.topicsOpen, topicsCaret: s.topicsOpen ? '−' : '+',
+      tAttach: tb('attach'), tGps: tb('gps'), tResult: tb('result'), tAck: tb('ack'), tState: tb('state'), tStatus: tb('status'),
+      noDecision: !d, hasDecision: !!d, dZone: d ? 'anchor ' + d.zone : 'D3QN',
+      s1op: 1, s2op: d && d.stage >= 2 ? 1 : .35,
+      tofKind: d ? d.tof.kind : '', tofText: d ? d.tof.text : '', tofColor: d && d.tof.kind === 'boulder' ? '#9fd4ff' : '#3ddc84',
+      skipped: !!(d && d.tof.kind === 'boulder'), options,
+      hasNote: !!(d && d.note), dNote: d ? d.note : '', hasReward: !!(d && d.reward), dReward: d ? d.reward : '',
+      flowTitle: cur ? cur.n + ' · ' + cur.title + ' · ' + cur.code : '',
+      gate: s.gate, noLog: n === 0,
+      log: s.log.map((e, i) => ({ text: e.text, n: e.kind === 'end' ? '' : i + 1, dot: KC[e.kind] || '#8b97a5', fg: i === n - 1 ? '#eef3f8' : e.kind === 'end' ? '#56616f' : '#9aa6b4', bg: i === n - 1 && e.kind !== 'end' ? 'rgba(77,163,255,.09)' : 'transparent' })),
+      hasSel: !!z && s.view !== 'testbed', insp,
+      closeSel: () => { this.api && this.api.select(null); this.setState({ sel: null }); },
+      toggleOpen: () => this.setState({ showOpen: !s.showOpen }), showOpen: s.showOpen,
+      toggleLegend: () => this.setState({ legendOpen: !s.legendOpen }), legendOpen: s.legendOpen, legendLabel: s.legendOpen ? 'legend −' : 'legend +',
+      wanMs: st ? st.wanMs : 50, wanColor: st && st.wanHot > .5 ? '#ff4545' : '#9fd4ff',
+      hint: s.view === '3d' ? 'drag to orbit · scroll to zoom · hover a car · click a cabinet' : s.view === 'poster' ? 'hover a car · click a zone card' : '',
+    };
+  }
+}
+</script>
+</body>
+</html>

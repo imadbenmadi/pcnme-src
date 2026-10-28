@@ -1,0 +1,22 @@
+node_modules
+__pycache__
+build
+
+# Python venvs
+.venv/
+venv/
+
+# Pytest
+.pytest_cache/
+
+# PCNME outputs
+# results/
+# results_*/
+*.logi
+*.log
+.run
+weights
+weights/*
+*.pt
+# Runtime logs (implementation)
+code/implementation/results/logs/
