@@ -1,0 +1,180 @@
+# PCNME default configuration (final doc, section 18), 27 Oct 2026.
+# Source tags: P = from a paper, R = chosen by reasoning, C = calibrated by a rule or in fast mode,
+# M = measured (the value here is a placeholder until the calibration run).
+# Units: seconds, bits, bits per second, watts, joules, metres, unless the key says otherwise.
+
+layout:                          # R: the same zone layout on both maps
+  area_m: [1200, 1200]
+  zone_radius_m: 350             # P: Yin et al. 2026 (350 m)
+  zone_positions_m:              # z1-z4 active, z5 joins (topology experiment)
+    z1: [300, 300]
+    z2: [900, 300]
+    z3: [300, 900]
+    z4: [900, 900]
+    z5: [600, 600]
+  d_nb_m: 900                    # R: makes diagonal zones neighbours; every zone gets <= 4
+  handover_hysteresis_m: 20      # R: switch only when the new access point is 20 m closer
+  maps:
+    dev: vfc_grid                # P: VFC (200 m blocks), extended with lights and stops
+    final: lust_crop             # P: LuST (Codeca et al. 2015); 1.2 x 1.2 km central crop, SUMO FCD at 0.1 s
+
+cars:
+  count: [200, 1000]             # final doc 15.1
+  gps_period: 0.100
+  speed_kmh:
+    low: [10, 20, 25, 40]        # P: VFC
+    high: [30, 40, 50, 60]       # R: arterial roads, still urban
+  hotspot_share: 0.4             # R: 40 % of cars routed through z1 (Fan et al.'s high-load RSU)
+
+radio:                           # P: VFC (Friis free-space + Shannon)
+  bandwidth: 40.0e6
+  tx_power_w: 1.0
+  gain_tx_dbi: 5
+  gain_rx_dbi: 5
+  noise_dbm_per_hz: -174
+  carrier_hz: 5.9e9              # R: ITS band; check against the VFC code
+  delay: [0.001, 0.005]          # R: 5G NR user-plane latency, uniform
+  downlink_delay: [0.001, 0.005] # R
+
+links:
+  backhaul_bw: 1.0e9             # P: final doc 4.2 example (fiber), per zone outgoing pipe
+  backhaul_delay: [0.001, 0.005] # final doc 4.2
+  wan_delay: [0.025, 0.100]      # final doc 4.2 (one way); VFC 50-200 ms round trip
+  wan_bw: calibrated             # C: B_WAN = cloud-eligible bits/s at S2 / 0.9 (about 515 Mbps with placeholders)
+  broker_extra_delay: 0.001      # R: EMQX processing, added to the backhaul delay
+
+task_types:                      # sizes M (BDD100K JPEG at quality 80); run times M
+  T1: {model: yolov8n, cls: hard, share: 0.73, input_kb: 150, result_kb: 3, deadline: {loose: 0.100, tight: 0.050}}
+  T3: {model: yolov8n-seg, cls: hard, share: 0.15, input_kb: 150, result_kb: 3, deadline: {loose: 0.100, tight: 0.070}}
+  T4: {model: detector+ocr, cls: soft, share: 0.10, input_kb: 150, result_kb: 3, deadline: {loose: 1.0, tight: 0.5}}
+  T2: {model: yolov8l x60 frames, cls: soft, share: 0.02, input_kb: 9000, result_kb: 10,
+       deadline: {loose: 3.0, tight: 1.1x_E_strong}}   # C: tight D = 1.1 x mean run on the strongest fog class -> a boulder at alpha = 0.8
+  T5: {enabled: false}           # optional stress test (PointPillars)
+  L_max: equal_to_D              # final doc
+
+hardware:                        # run times and powers are M; placeholders below
+  F-GPU:                         # reference and strongest fog class (T4-class GPU, 8 cores)
+    c_gpu: 2
+    c_cpu: 2                     # 4 cores per CPU slot
+    queue: {gpu: 32, cpu: 16}    # R: hard 'late' binds before 'full' (32 T1 = 128 ms of work > D)
+    p_dyn_w: {gpu_slot: 25, cpu_slot: 20}
+    p_idle_w: 83.4               # P: iFogSim default via Jafari & Rezvani (reporting only)
+  F-CPU:                         # S6 only
+    c_gpu: 0
+    c_cpu: 2
+    queue: {cpu: 16}
+    p_dyn_w: {cpu_slot: 20}
+    p_idle_w: 83.4
+  cloud:
+    c_gpu: 32
+    c_cpu: 32
+    queue: {gpu: 100000, cpu: 100000}
+    p_dyn_w: {gpu_slot: 150, cpu_slot: 30}
+    p_idle_w: 57                 # P: Behbehani et al. (per server, reporting only)
+
+time_table_placeholder:          # mean run per task (s); p5 = 0.9 x mean, p95 = 1.3 x mean, longest step = 0.5 x mean
+  T1: {F-GPU: {gpu: 0.008, cpu: 0.090}, F-CPU: {cpu: 0.090}, cloud: {gpu: 0.004, cpu: 0.045}}
+  T3: {F-GPU: {gpu: 0.010, cpu: 0.110}, F-CPU: {cpu: 0.110}, cloud: {gpu: 0.005, cpu: 0.055}}
+  T4: {F-GPU: {gpu: 0.025, cpu: 0.200}, F-CPU: {cpu: 0.200}, cloud: {gpu: 0.012, cpu: 0.100}}
+  T2: {F-GPU: {gpu: 0.720}, cloud: {gpu: 0.200}}   # GPU only
+
+energy:
+  pue_fog: 1.5                   # R: between Behbehani's 1.0 (open edge) and the Uptime 2023 average
+  pue_cloud: 1.1                 # P: Behbehani et al.
+  pue_network: 1.5               # P: Behbehani et al.
+  e_bh_nj_per_bit: 0.141         # P: Behbehani Table 7: aggregation switch 0.088 + aggregation router port 0.053
+  e_wan_nj_per_bit: 0.228        # P: Behbehani Table 7: core 0.075 + cloud router 0.075 + cloud switch 0.078
+  e_down_nj_per_bit: 4.2         # P/R: Behbehani method: AP tx 28 dBm (630 mW) / 150 Mbps
+  car_tx_w: 0.158                # P: Behbehani (DSRC 22 dBm); reporting only
+  reference_class: F-GPU
+  e_bar: computed                # C: max E_k / E_ref over types and options with p95 times
+
+stateplane:
+  state_period: 0.100
+  stale_after: 0.300             # 3 x state period
+  wan_ewma_lambda: 0.2           # R
+
+scheduler:
+  reserve_hard_r: 4              # R
+  headroom_h: 2                  # R: small next to Q
+  soft_promotion_A_max: 0.200    # R: 2 x the loose hard deadline
+  probe_timeout: {fog: 0.050, cloud: 0.300}   # R: about 10 backhaul RTTs / the WAN RTT max + margin
+  T_keep: 10.0                   # R: >= longest D + L_max = 6 s
+  retries: {hard: 1, soft: 2}    # final doc
+
+timing:
+  kappa_up: 2.0                  # R
+  m_wd: {fog: 0.020, cloud: 0.050}  # R: covers delay jitter
+  quantiles: {low: 0.05, high: 0.95}
+  T_ack: 0.200                   # R: > result + radio + confirm (about 20 ms) with margin
+  T_leave: 0.300                 # final doc
+  gps_expiry: 1.0                # final doc
+  reward_grace_G: 0.500          # R: > the slowest status report (cloud one way 100 ms + broker) + d_abort
+
+tof:
+  alpha: 0.8
+  alpha_sweep: [0.5, 0.65, 0.8, 1.0]
+
+reward:
+  B: 1.0
+  P: 2.0
+  w3: 1.0
+  C_drop: 5.0                    # 1 + (1 + w3) L_max/D + P
+  w: from_knee                   # median knee weight over training windows
+
+rl:
+  gamma_per_tau: 0.9             # P: Tang & Wong, QECO (0.9 per 0.1 s)
+  tau: 0.100
+  hidden: [256, 256]             # P: GA-DRL (2 x 256)
+  dueling: true
+  double: true
+  optimizer: adam
+  lr: 1.0e-4                     # P: GA-DRL lr sweep
+  batch: 64                      # P: Ruan et al.
+  replay_agent: 100000           # P: Ruan et al.; expert data kept apart, never overwritten
+  target_update_every: 1000      # R: hard copy, in gradient updates
+  updates_per_transition: 0.25   # R: one update per 4 new transitions
+  epsilon_online: 0.01           # P: DQfD
+  epsilon_baselines: [1.0, 0.01, 0.2]   # P: Tang & Wong (1 -> 0.01), over the first 20 % of the budget
+  loss: mse                      # Huber if unstable (final doc 11.3)
+  lstm_history_H: 10             # R: Tang & Wong and QECO baselines only
+  ppo: {clip: 0.2, lr: 3.0e-4, gae_lambda: 0.95, epochs: 10, minibatch: 64}   # P: Schulman et al. defaults
+
+dqfd:                            # P: Hester et al. 2018
+  n_step: 10
+  lambda_n: 1.0
+  lambda_margin: 1.0
+  lambda_l2: 1.0e-5
+  margin: 0.8
+  per: {alpha: 0.4, beta0: 0.6, beta_final: 1.0, eps_demo: 1.0, eps_agent: 0.001}
+  pretrain_updates: 200000       # R: scaled from 750k; stop early when held-out expert agreement stops rising
+
+nsga2:
+  population: 100                # P: Mokni & Yassa
+  generations: 100               # P: Mokni & Yassa
+  crossover_prob: 0.9            # P: Deb et al. 2002 (uniform crossover on genes)
+  mutation_per_gene: inverse_n   # P: Deb et al. 2002 (1 / number of genes)
+  T_win: 2.0                     # R: about 600 genes at S2
+  T_warmup: 5.0                  # R: greedy run before the window, so it starts loaded
+  windows_per_scenario: 20       # R
+  expert_filter_margin: 0.0      # ablation sets it > 0 (Maus et al.)
+
+fast_mode:
+  episode_length: 60.0           # P: VFC (1 min)
+  eval_seeds: 20                 # N19
+  testbed_seeds: 5
+  seed_split: {nsga2_and_demos: 1000-1999, training: 2000-2999, evaluation: 3000-3999}   # Maus et al.: disjoint
+
+scenarios:                       # rho_fog = per-zone arrival rate x mean GPU run / c_gpu (all pebbles here)
+  S1: {rho_fog: 0.5, deadlines: loose, mobility: low, fog: [F-GPU]}
+  S2: {rho_fog: 0.9, deadlines: loose, mobility: low, fog: [F-GPU]}
+  S3: {rho_fog: 1.5, deadlines: loose, mobility: low, fog: [F-GPU]}
+  S4: {rho_fog: 0.9, deadlines: tight, mobility: low, fog: [F-GPU]}
+  S5: {rho_fog: 0.9, deadlines: tight, mobility: high, fog: [F-GPU]}
+  S6: {rho_fog: 0.9, deadlines: tight, mobility: low, fog: {z1: F-GPU, z2: F-CPU, z3: F-GPU, z4: F-CPU, z5: F-GPU}}
+  arrival_rate: calibrated       # C: lambda_car = rho_fog x c_gpu / (mean GPU run x cars per zone)
+
+fedavg:
+  T_fl: {fast_mode: 60.0, testbed: 300.0, real_world: 3600.0}
+  upload_deadline: 30.0          # R
+  finetune_K: 500                # R
