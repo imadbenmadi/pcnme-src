@@ -18,5 +18,21 @@ venv/
 weights
 weights/*
 *.pt
-# Runtime logs (implementation)
-code/implementation/results/logs/
+
+# Build / packaging
+*.egg-info/
+dist/
+
+# Experiment outputs (kept out of git; stored on the desktop's data drive)
+results/
+runs/
+demos/
+checkpoints/
+
+# Local data (BDD100K frames, LuST traces) - never commit
+data/
+*.zip.part
+
+# Tools
+.ruff_cache/
+.claude/settings.local.json
