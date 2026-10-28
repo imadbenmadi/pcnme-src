@@ -24,14 +24,14 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 - [x] **M1.2 FIFO pipe** (`net/pipe.py`), section 4.1: `W_pipe = max(0, t_free − t_now)`, `t_free ← max(t_now, t_free) + S/B`, delivery at `t_now + W_pipe + S/B + d`. The delay does not hold the pipe.
   - Test: hand-computed sequence of 3 transfers (overlapping and not).
   - Test: offered load with TI > 1 → the pipe wait grows linearly over time; TI < 1 → bounded.
-- [~] **M1.3 Two pipes in series** (section 4.1): cloud transfer `T = W_bh + d_bh + W_WAN + S/B_WAN + d_WAN`.
+- [x] **M1.3 Two pipes in series** (section 4.1): cloud transfer `T = W_bh + d_bh + W_WAN + S/B_WAN + d_WAN`.
   - Test: hand calculation with both pipes busy.
-- [~] **M1.4 Time table** (`node/timetable.py`), sections 14.4 and 18: rows per (type, hardware class, slot type) with mean, p5, p95, longest step, energy per run; a missing row = cannot run there. Run time draws use the run-time stream.
-- [~] **M1.5 Executor: slots and queues** (`node/executor.py`), sections 8.1–8.3: c_GPU and c_CPU slots, one queue per slot type, capacity Q_q with r places reserved for hard tasks, slot-type choice by earliest estimated finish, refusal "full" / "late".
-- [~] **M1.6 Scheduler** (section 8.4): skip hopeless heads, soft promotion after A_max only if every queued hard task still meets its deadline, then hard, then soft, then work stealing. Order inside a class: EDF on d_k, ties by arrival order then task id (section 8.2).
-- [~] **M1.7 Drops and aborts** (section 8.6): abort at d_k (hard) or d_k + L_max (soft); the slot stays busy for min(remaining, d_abort); every drop reported at once with the energy spent; (attempt key, outcome) kept for T_keep.
-- [~] **M1.8 Published state and wait estimate** (section 8.5): c_q, Q_q, n_hard, n_soft, B_hard, B_soft, R, u per slot type; Ŵ = 0 while a slot is free, otherwise the pooled formula.
-- **M1 acceptance tests** (section 16.5 and 8.7):
+- [x] **M1.4 Time table** (`node/timetable.py`), sections 14.4 and 18: rows per (type, hardware class, slot type) with mean, p5, p95, longest step, energy per run; a missing row = cannot run there. Run time draws use the run-time stream.
+- [x] **M1.5 Executor: slots and queues** (`node/executor.py`), sections 8.1–8.3: c_GPU and c_CPU slots, one queue per slot type, capacity Q_q with r places reserved for hard tasks, slot-type choice by earliest estimated finish, refusal "full" / "late".
+- [x] **M1.6 Scheduler** (section 8.4): skip hopeless heads, soft promotion after A_max only if every queued hard task still meets its deadline, then hard, then soft, then work stealing. Order inside a class: EDF on d_k, ties by arrival order then task id (section 8.2).
+- [x] **M1.7 Drops and aborts** (section 8.6): abort at d_k (hard) or d_k + L_max (soft); the slot stays busy for min(remaining, d_abort); every drop reported at once with the energy spent; (attempt key, outcome) kept for T_keep.
+- [x] **M1.8 Published state and wait estimate** (section 8.5): c_q, Q_q, n_hard, n_soft, B_hard, B_soft, R, u per slot type; Ŵ = 0 while a slot is free, otherwise the pooled formula.
+- **M1 acceptance tests** (section 16.5 and 8.7), all passing and approved 28 Oct (`tests/acceptance/`):
   - M/M/1: one slot, one class, FIFO order, Poisson arrivals, exponential run times, ρ = 0.5 and 0.8, ≥ 200 000 tasks: mean wait within 3 % of λ/(μ(μ − λ)).
   - M/M/c: c = 2 and 4 against Erlang C, same tolerance.
   - One unit test per scheduler rule in 8.4 and per row of the table in 8.6.
