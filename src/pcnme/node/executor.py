@@ -16,7 +16,7 @@ from typing import Literal
 
 from pcnme.config import SLOT_TYPES, Config, HardwareClass, SlotType, TaskClass
 from pcnme.node.timetable import RunRow, RunTimeTable
-from pcnme.sim.clock import EventClock
+from pcnme.sim.clock import EventClock, EventHandle
 from pcnme.sim.rng import KeyPart, RandomStreams
 
 
@@ -51,8 +51,15 @@ class Refused:
     reason: Literal["full", "late"]
 
 
-Reply = Accepted | Refused
-Outcome = Literal["done", "skipped"]
+@dataclass(frozen=True, slots=True)
+class Ignored:
+    """A repeated upload of an attempt this executor already has or kept (8.6): nothing is done. The reply
+    itself is an engineering choice; the design says only that the repeat is ignored."""
+
+
+Reply = Accepted | Refused | Ignored
+Outcome = Literal["done", "skipped", "aborted", "cancelled"]
+Status = Literal["queued", "running", "done", "skipped", "aborted", "cancelled", "not found"]
 Estimate = Literal["mean", "high"]
 
 
@@ -105,7 +112,9 @@ class _Running:
     task: _Queued
     row: RunRow
     start: float
-    end: float
+    end: float  # when the drawn run would end
+    event: EventHandle | None = None  # its finish or abort event
+    tail_end: float | None = None  # after an abort or cancel: when the slot is free again (8.6)
 
 
 class Executor:
@@ -122,6 +131,7 @@ class Executor:
         pue: float,
         a_max: float,
         promotion_estimate: Estimate,
+        t_keep: float,
         on_report: Callable[[Report], None],
         trace: Callable[[TraceEntry], None] | None = None,
     ) -> None:
@@ -137,11 +147,14 @@ class Executor:
         self._pue = pue
         self._a_max = a_max
         self._promotion = promotion_estimate
+        self._t_keep = t_keep
         self._on_report = on_report
         self._trace = trace
         self._queues: dict[SlotType, list[_Queued]] = {q: [] for q in hw.slot_types}
         self._keys: dict[SlotType, list[tuple[object, ...]]] = {q: [] for q in hw.slot_types}
         self._running: dict[SlotType, list[_Running]] = {q: [] for q in hw.slot_types}
+        self._live: dict[AttemptKey, _Queued | _Running] = {}
+        self._kept: dict[AttemptKey, tuple[Outcome, float]] = {}  # (outcome, time) for T_keep (8.6, 5.5)
 
     @classmethod
     def from_config(
@@ -166,6 +179,7 @@ class Executor:
             pue=config.energy.pue(hw),
             a_max=config.scheduler.soft_promotion_a_max,
             promotion_estimate=promotion_estimate,
+            t_keep=config.scheduler.t_keep,
             on_report=on_report,
             trace=trace,
         )
@@ -180,7 +194,14 @@ class Executor:
 
     def _remaining(self, q: SlotType, now: float) -> float:
         """R_q: the remaining part of the running tasks' mean runs, max(0, Ê - elapsed) each (8.5; Q9)."""
-        return sum(max(0.0, r.start + r.row.mean - now) for r in self._running[q])
+        return sum(self._left(r, now) for r in self._running[q])
+
+    @staticmethod
+    def _left(r: _Running, now: float) -> float:
+        """One slot's remaining time: exact in an abort tail, else max(0, Ê - elapsed) (8.5; Q9)."""
+        if r.tail_end is not None:
+            return r.tail_end - now
+        return max(0.0, r.start + r.row.mean - now)
 
     def wait_estimate(self, q: SlotType, cls: TaskClass) -> float:
         """Ŵ_q for a new task of class `cls`: 8.5 on the executor's exact state (QUESTIONS Q8, Q9).
@@ -203,6 +224,9 @@ class Executor:
     def submit(self, req: TaskRequest) -> Reply:
         """A task arrives now: accept it into the queue of its best slot type, or refuse it at once."""
         now = self._clock.now
+        if req.key in self._live or req.key in self._kept:
+            self._log("ignore", req.key, "repeat")
+            return Ignored()  # 8.6: a repeated upload of the same attempt is ignored
         d_k = now + req.budget  # 6C step 9
         latest = d_k if req.cls == "hard" else d_k + req.l_max  # 8.3.3
         runnable = [q for q in self._table.slot_types(req.task_type, self._hw.name) if self._hw.slots(q) > 0]
@@ -218,6 +242,7 @@ class Executor:
             return self._refuse(req, "late")  # 8.3.3: hard misses d_k; soft is later than d_k + L_max
         task = _Queued(req=req, d_k=d_k, arrival=now, slot=q, mean=self._row(req.task_type, q).mean)
         self._enqueue(task)
+        self._live[req.key] = task
         self._log("accept", req.key, q)
         self._dispatch()
         return Accepted(slot=q, wait=waits[q])
@@ -281,18 +306,25 @@ class Executor:
                 self._skip(head, now)
 
     def _skip(self, task: _Queued, now: float) -> None:
+        self._remove_queued(task, "skipped", now)
+
+    def _remove_queued(self, task: _Queued, outcome: Outcome, now: float) -> None:
+        """A queued task leaves without running: skipped (8.4 step 1) or cancelled (8.6). Reported at once;
+        no execution energy (12.5: forwarding only, which the anchor counts)."""
         self._dequeue(task)
+        del self._live[task.req.key]
         report = Report(
             key=task.req.key,
             task_type=task.req.task_type,
-            outcome="skipped",
+            outcome=outcome,
             slot=task.slot,
             start=None,
             finish=now,
             busy=0.0,
-            energy=0.0,  # 12.5: a skipped attempt spent forwarding only, which the anchor counts
+            energy=0.0,
         )
-        self._log("skip", task.req.key, task.slot)
+        self._log(outcome, task.req.key, task.slot)
+        self._keep(task.req.key, outcome)
         self._on_report(report)
 
     def _promotion_is_safe(self, q: SlotType, soft: _Queued, now: float) -> bool:
@@ -304,7 +336,8 @@ class Executor:
         free_at = [now + self._row(soft.req.task_type, q).high]  # this slot
         for r in self._running[q]:
             run = r.row.mean if self._promotion == "mean" else r.row.high
-            free_at.append(now + max(0.0, r.start + run - now))
+            left = r.tail_end - now if r.tail_end is not None else max(0.0, r.start + run - now)
+            free_at.append(now + left)
         free_at += [now] * (self._hw.slots(q) - 1 - len(self._running[q]))  # other free slots
         heapq.heapify(free_at)
         for t in hard:
@@ -353,25 +386,88 @@ class Executor:
         now = self._clock.now
         running = _Running(task=task, row=row, start=now, end=now + run)
         self._running[q].append(running)
+        self._live[k] = running
         self._log("start", k, q)
-        self._clock.schedule(running.end, lambda: self._finish(q, running))
+        latest = task.latest
+        if running.end > latest:
+            # 8.6: aborted while running when t > d_k (hard) or d_k + L_max (soft); the run is drawn, so the
+            # abort time is known now. Finishing exactly at the limit is in time.
+            running.event = self._clock.schedule(latest, lambda: self._abort(q, running, "aborted"))
+        else:
+            running.event = self._clock.schedule(running.end, lambda: self._finish(q, running))
 
     def _finish(self, q: SlotType, running: _Running) -> None:
         self._running[q].remove(running)
-        busy = running.end - running.start
+        del self._live[running.task.req.key]
+        self._report_run(q, running, "done", running.end)
+        self._dispatch()
+
+    def _abort(self, q: SlotType, running: _Running, outcome: Outcome) -> None:
+        """Stop a running task for good (8.6): the worker stops at the end of its current DAG step, so the
+        slot stays busy for min(remaining, d_abort), d_abort = the longest step of the task on this slot type.
+        The drop is reported at once with the energy of the whole busy time (12.2, 12.5)."""
+        now = self._clock.now
+        if running.event is not None:
+            self._clock.cancel(running.event)
+        running.tail_end = now + min(running.end - now, running.row.longest_step)
+        del self._live[running.task.req.key]
+        self._report_run(q, running, outcome, running.tail_end)
+        running.event = self._clock.schedule(running.tail_end, lambda: self._release(q, running))
+
+    def _release(self, q: SlotType, running: _Running) -> None:
+        """The abort tail is over: the slot is free (8.6 "no leftovers")."""
+        self._running[q].remove(running)
+        self._dispatch()
+
+    def _report_run(self, q: SlotType, running: _Running, outcome: Outcome, slot_free: float) -> None:
+        busy = slot_free - running.start
         report = Report(
             key=running.task.req.key,
             task_type=running.task.req.task_type,
-            outcome="done",
+            outcome=outcome,
             slot=q,
             start=running.start,
-            finish=running.end,
+            finish=slot_free,
             busy=busy,
-            energy=self._pue * running.row.power * busy,  # 12.2: PUE_k x p x T_run
+            energy=self._pue * running.row.power * busy,  # 12.2: PUE_k x p x T_run, the d_abort tail included
         )
-        self._log("done", report.key, q)
+        self._log(outcome, report.key, q)
+        self._keep(report.key, outcome)
         self._on_report(report)
-        self._dispatch()
+
+    # --- cancel, status and T_keep (8.6, 9.3, 9.4, 5.5) -----------------------------------------------------
+
+    def cancel(self, key: AttemptKey) -> bool:
+        """The anchor's cancel (9.4): removed if queued, aborted if running; unknown or finished: ignored.
+        True if it removed or aborted something; sending it twice is harmless."""
+        live = self._live.get(key)
+        if live is None:
+            return False
+        if isinstance(live, _Queued):
+            self._remove_queued(live, "cancelled", self._clock.now)
+            return True
+        q = next(q for q, runs in self._running.items() if live in runs)
+        self._abort(q, live, "cancelled")
+        return True
+
+    def status(self, key: AttemptKey) -> Status:
+        """What the executor knows of an attempt, for the status probe (9.3): live, kept, or not found."""
+        live = self._live.get(key)
+        if live is not None:
+            return "queued" if isinstance(live, _Queued) else "running"
+        kept = self._kept.get(key)
+        return kept[0] if kept is not None else "not found"
+
+    def _keep(self, key: AttemptKey, outcome: Outcome) -> None:
+        """Keep (attempt key, outcome) for T_keep (8.6, 5.5)."""
+        now = self._clock.now
+        self._kept[key] = (outcome, now)
+
+        def forget() -> None:
+            if self._kept.get(key) == (outcome, now):
+                del self._kept[key]
+
+        self._clock.schedule(now + self._t_keep, forget)
 
     # --- helpers --------------------------------------------------------------------------------------------
 
