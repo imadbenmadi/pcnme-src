@@ -13,7 +13,7 @@ B = 1e9  # bit/s
 S = 1e6  # bits: 1 ms push at 1 Gbps
 
 
-# --- R1-R4: hand-computed sequence of three transfers (PLAN M1.2) -----------------------------------------
+# --- R1-R4: hand-computed sequence of three transfers (PLAN M1.2) -------------------------------------------
 
 
 def test_three_transfers_by_hand() -> None:
@@ -71,7 +71,7 @@ def test_back_to_back_transfers_queue_their_pushes() -> None:
     assert pipe.t_free == pytest.approx(0.005)
 
 
-# --- R5: the current wait is known exactly (final-design 4.3) ---------------------------------------------
+# --- R5: the current wait is known exactly (final-design 4.3) -----------------------------------------------
 
 
 def test_wait_at_reads_the_wait_without_sending() -> None:
@@ -128,7 +128,7 @@ def test_exactly_periodic_overload_by_hand() -> None:
     assert waits == pytest.approx([0.0005 * k for k in range(10)])
 
 
-# --- R7: refused ----------------------------------------------------------------------------------------
+# --- R7: refused --------------------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("bad", [0.0, -1.0, math.nan, math.inf])
