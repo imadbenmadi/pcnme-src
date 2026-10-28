@@ -16,6 +16,7 @@ This is the one complete design of PCNME. It merges the PCNME Architecture doc, 
 | --- | --- | --- | --- |
 | 28 Oct | 16.2 | ρ_fog uses every task of the whole mix, boulders included (not pebbles only), so S4–S6 keep S2's arrival rate | CHANGES C2 (QUESTIONS Q1) |
 | 28 Oct | 13.2 | Random draws keyed by task, not by event order: a run time is a uniform keyed by (seed, task id, attempt) through the inverse CDF of the row it runs on; a delay is keyed by (seed, task id, attempt, hop); arrivals and mobility stay sequential per car | CHANGES C3 (QUESTIONS Q6) |
+| 28 Oct | 8.5, 5.2 | The wait estimate is water-filling over each slot's remaining time r_i (published per slot instead of their sum R): Σ max(0, Ŵ − r_i) = B; still 0 while a slot is free; for c_q = 1 the same as before | CHANGES C4 |
 
 ## 1. What PCNME is
 
@@ -162,7 +163,7 @@ Two rules apply to every message:
 | car/{id}/gps | 0, retained with an MQTT 5 message expiry | Serving zone, every 100 ms → the car's anchors | car_id, x, y, speed, heading, zone_id, car_time (the car's clock; only differences between its own samples are used) |
 | car/{id}/result | 1 | Executor, once → serving zone + anchor | kind = result: task_id, anchor_id, attempt, car_id, executor_id, slot_type, run_ms, energy_J, output (about 3 KB). kind = status: task_id, anchor_id, attempt, executor_id, skipped or aborted, energy_J spent |
 | car/{id}/ack | 1 | Serving zone → anchor | task_id, anchor_id and attempt of the copy the car kept, car_id, zone_id, latency_ms measured by the car |
-| zone/{id}/state | 0, retained, every 100 ms | Each zone and the cloud → neighbours | zone_id, version (epoch, counter); per slot type with c_q > 0: c, Q, n_hard, n_soft, u (busy slots), B_hard_ms, B_soft_ms, R_ms; wan_wait_ms and its sample age; load |
+| zone/{id}/state | 0, retained, every 100 ms | Each zone and the cloud → neighbours | zone_id, version (epoch, counter); per slot type with c_q > 0: c, Q, n_hard, n_soft, u (busy slots), B_hard_ms, B_soft_ms, r_ms (the remaining time of each of the c slots, 0 if free); wan_wait_ms and its sample age; load |
 | zone/{id}/status | 1, retained, last will = offline | Each zone and the cloud → all zones | zone_id, status, x, y, radius |
 | fl/round, fl/global | 1 | Cloud → all zones (phase 2) | round k, global version, upload deadline / version k ready |
 
@@ -374,13 +375,13 @@ Stealing only makes tasks finish earlier, so every estimate the anchor holds sta
 
 ### 8.5 What a node publishes and how the anchor estimates the wait
 
-Per slot type with c_q > 0: c_q, Q_q, n_q^hard, n_q^soft, B_q^hard and B_q^soft (sum of the mean run times of the queued tasks), R_q (sum of the remaining mean time of the running tasks), u_q (busy slots). The anchor's estimate, a shared pool of c_q slots without preemption, is 0 while a slot is free (u_q + its own pending sends to q < c_q), and otherwise:
+Per slot type with c_q > 0: c_q, Q_q, n_q^hard, n_q^soft, B_q^hard and B_q^soft (sum of the mean run times of the queued tasks), r_{q,i} (the remaining mean time of the task on each of the c_q slots, 0 for a free slot), u_q (busy slots). The anchor's estimate is 0 while a slot is free (u_q + its own pending sends to q < c_q), and otherwise the water level W at which the class backlog, poured onto the slots in the order they free up, fills them all (CHANGES C4):
 
 ```latex
-\hat{W}_q^{hard} = \frac{R_q + B_q^{hard}}{c_q}, \qquad \hat{W}_q^{soft} = \frac{R_q + B_q^{hard} + B_q^{soft}}{c_q}
+\sum_{i=1}^{c_q} \max(0,\; \hat{W}_q^{hard} - r_{q,i}) = B_q^{hard}, \qquad \sum_{i=1}^{c_q} \max(0,\; \hat{W}_q^{soft} - r_{q,i}) = B_q^{hard} + B_q^{soft}
 ```
 
-For c_q = 1 this is exact in the mean; for c_q > 1 it treats the slots as one pooled server, an approximation checked against Erlang C (8.7). The hard estimate assumes the new task waits behind every queued hard task (safe side). The soft one ignores hard tasks that arrive later (optimistic); the status probe covers that (section 9.3). The anchor's own pending sends (R1) are added to the backlog of their class on their q\*.
+For c_q = 1 this is r + B, exact in the mean; with equal r_{q,i} it equals the pooled (R_q + B) ÷ c_q, which it replaces because one long run (a 720 ms T2 on one GPU slot) would be spread over every slot and the wait overestimated several times over. It treats queued work as divisible, so it can underestimate by up to one task's run per slot. The hard estimate assumes the new task waits behind every queued hard task. The soft one ignores hard tasks that arrive later (optimistic); the status probe covers that (section 9.3). The anchor's own pending sends (R1) are added to the backlog of their class on their q*. The executor's own estimate (8.3) is the same function on its exact state, without pending sends.
 
 ### 8.6 Dropping and aborting
 

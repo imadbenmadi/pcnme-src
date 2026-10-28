@@ -175,5 +175,5 @@ def test_the_event_log_hash_is_pinned(cfg: Config) -> None:
     assert event_log_hash(cfg, 2000) == GOLDEN_HASH
 
 
-# 28 Oct, Windows; re-pinned when Q10 made "high" the promotion default.
-GOLDEN_HASH = "915586064a17d722057b5bbde7f01aafc0b40fdbd069338198a83426789ab294"
+# 28 Oct, Windows; re-pinned when Q10 made "high" the promotion default and when C4 changed Ŵ.
+GOLDEN_HASH = "ded9351348bef47a6d2c4acf24c6fe3623044a5c1814c687f4f5c69461691ded"

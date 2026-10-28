@@ -16,7 +16,7 @@ from types import MappingProxyType
 from typing import Literal
 
 from pcnme.config import SLOT_TYPES, Config, HardwareClass, SlotType, TaskClass
-from pcnme.node.state import SlotState, wait_estimate
+from pcnme.node.state import SlotState, wait_estimate, water_fill
 from pcnme.node.timetable import RunRow, RunTimeTable
 from pcnme.sim.clock import EventClock, EventHandle
 from pcnme.sim.rng import KeyPart, RandomStreams
@@ -194,9 +194,11 @@ class Executor:
     def busy(self, q: SlotType) -> int:
         return len(self._running[q])
 
-    def _remaining(self, q: SlotType, now: float) -> float:
-        """R_q: the remaining part of the running tasks' mean runs, max(0, Ê - elapsed) each (8.5; Q9)."""
-        return sum(self._left(r, now) for r in self._running[q])
+    def _slot_remaining(self, q: SlotType, now: float) -> tuple[float, ...]:
+        """r_i of each of the c_q slots, ascending: max(0, Ê - elapsed) for a running task (Q9), its exact
+        tail after an abort, 0 for a free slot (8.5, CHANGES C4)."""
+        busy = [self._left(r, now) for r in self._running[q]]
+        return tuple(sorted(busy + [0.0] * (self._hw.slots(q) - len(busy))))
 
     @staticmethod
     def _left(r: _Running, now: float) -> float:
@@ -218,7 +220,7 @@ class Executor:
             n_soft=sum(1 for t in queue if t.req.cls == "soft"),
             b_hard=sum(t.mean for t in queue if t.req.cls == "hard"),
             b_soft=sum(t.mean for t in queue if t.req.cls == "soft"),
-            r=self._remaining(q, self._clock.now),
+            remaining=self._slot_remaining(q, self._clock.now),
             u=self.busy(q),
         )
 
@@ -381,9 +383,8 @@ class Executor:
         c = self._hw.slots(q)
         if self.busy(q) < c:
             wait = 0.0
-        else:
-            remaining = self._remaining(q, now)
-            wait = (remaining + sum(t.mean for t in queue[:index])) / c
+        else:  # the C4 estimate over the tasks ahead of it
+            wait = water_fill(self._slot_remaining(q, now), sum(t.mean for t in queue[:index]))
         return now + wait + queue[index].mean
 
     def _start(self, q: SlotType, task: _Queued) -> None:
