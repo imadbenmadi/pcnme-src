@@ -13,24 +13,27 @@ Predictive task offloading for connected cars across fog zones and the cloud. MS
 
 ## Setup
 
+Every environment installs exactly the versions in `uv.lock` (the desktop venv, CI, cloud sessions and every Docker container). Install [uv](https://docs.astral.sh/uv/) first.
+
 **Home desktop (Windows, repo on F:)**
 
 ```powershell
-cd F:\pcnme-src
+winget install astral-sh.uv                # once; then open a new terminal
+cd F:\projects\pcnme-src
 powershell -ExecutionPolicy Bypass -File scripts\setup-windows.ps1
 .\.venv\Scripts\Activate.ps1
 pytest -q
 ```
 
-PyTorch for the GTX 1070 (needed from M5): install a CUDA 12.4 or 12.6 wheel, then check it sees the GPU. Newer CUDA builds may have dropped Pascal (compute 6.1), so verify:
+The setup installs the `dev`, `analysis` and `ml` extras. PyTorch comes from the lock: the CUDA 12.6 build on Windows (newer CUDA builds may drop Pascal, compute 6.1), the CPU build on Linux, version 2.14.1 on both. Check that it sees the GTX 1070:
 
 ```powershell
-pip install torch --index-url https://download.pytorch.org/whl/cu126
 python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_capability())"   # True (6, 1)
-pip install -e ".[ml]"
 ```
 
 **Claude Code cloud session (Linux):** set the environment's setup script to `bash scripts/setup.sh`.
+
+**Changing a dependency.** Edit `pyproject.toml`, run `uv lock` (or `uv lock --upgrade-package <name>`), commit `uv.lock` with it, in its own PR. `uv sync --locked` (setup scripts, CI, Docker) refuses an out-of-date lock.
 
 ## Everyday commands
 

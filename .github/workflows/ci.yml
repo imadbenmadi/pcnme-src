@@ -19,18 +19,21 @@ jobs:
         python: ["3.12"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
+          version: "0.13.6"
           python-version: ${{ matrix.python }}
-          cache: pip
-      - name: Install
-        run: python -m pip install -e ".[dev]"
+          enable-cache: true
+      - name: Install (exactly uv.lock; fails if the lock is out of date, PLAN M0.4)
+        run: uv sync --locked --extra dev
       - name: Lint
-        run: ruff check src tests tools && ruff format --check src tests tools
+        run: uv run --no-sync ruff check src tests tools && uv run --no-sync ruff format --check src tests tools
+      - name: Types
+        run: uv run --no-sync mypy
       - name: Tests (fast)
-        run: pytest -q -n auto --cov --cov-report=term-missing:skip-covered
+        run: uv run --no-sync pytest -q -n auto --cov --cov-report=term-missing:skip-covered
       - name: Config arithmetic
-        run: python tools/calc_defaults.py
+        run: uv run --no-sync python tools/calc_defaults.py
 
   slow:
     name: statistical tests (slow)
@@ -38,16 +41,17 @@ jobs:
     if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
+          version: "0.13.6"
           python-version: "3.12"
-          cache: pip
-      - run: python -m pip install -e ".[dev]"
+          enable-cache: true
+      - run: uv sync --locked --extra dev
       - name: Slow tests (exit code 5 = none collected yet, allowed until M1)
         shell: bash
         run: |
           set +e
-          pytest -q -m slow -n auto
+          uv run --no-sync pytest -q -m slow -n auto
           rc=$?
           if [ $rc -eq 5 ]; then exit 0; fi
           exit $rc
