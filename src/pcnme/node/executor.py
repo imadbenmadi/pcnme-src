@@ -132,10 +132,10 @@ class Executor:
         reserve_hard: int,
         pue: float,
         a_max: float,
-        promotion_estimate: Estimate,
         t_keep: float,
         on_report: Callable[[Report], None],
         trace: Callable[[TraceEntry], None] | None = None,
+        promotion_estimate: Estimate = "high",
     ) -> None:
         if promotion_estimate not in ("mean", "high"):
             raise ValueError(
@@ -167,9 +167,9 @@ class Executor:
         hw_name: str,
         table: RunTimeTable,
         *,
-        promotion_estimate: Estimate,
         on_report: Callable[[Report], None],
         trace: Callable[[TraceEntry], None] | None = None,
+        promotion_estimate: Estimate = "high",
     ) -> Executor:
         hw = config.hardware[hw_name]
         return cls(
