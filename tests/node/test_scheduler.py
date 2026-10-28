@@ -7,83 +7,9 @@ side), so a skip needs a run that takes longer than its mean.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-
 import pytest
 
-from pcnme.config import HardwareClass, SlotType, TaskClass
-from pcnme.node.executor import Accepted, AttemptKey, Executor, Report, TaskRequest
-from pcnme.node.timetable import Deterministic, RunRow, RunTimeTable
-from pcnme.sim.clock import EventClock
-from pcnme.sim.rng import RandomStreams
-
-A_MAX = 0.200  # config scheduler.soft_promotion_A_max
-SPLIT = {"training": range(2000, 3000)}
-
-
-def row(task: str, slot: SlotType, mean: float, run: float | None = None, low: float | None = None) -> RunRow:
-    """A row on the test node "N": mean Ê, p5 = 0.9 Ê unless given, p95 = 1.3 Ê; runs take `run` (or Ê)."""
-    return RunRow(
-        task=task,
-        hw="N",
-        slot=slot,
-        mean=mean,
-        low=0.9 * mean if low is None else low,
-        high=1.3 * mean,
-        longest_step=0.5 * mean,
-        energy_per_run=20.0 * mean,
-        distribution=Deterministic(mean if run is None else run),
-    )
-
-
-@dataclass
-class Tiny:
-    clock: EventClock
-    ex: Executor
-    reports: list[Report]
-    trace: list[tuple[str, float, AttemptKey, str]]
-    seq: list[int] = field(default_factory=lambda: [0])
-
-    def req(self, task: str, cls: TaskClass, budget: float, l_max: float = 0.0) -> TaskRequest:
-        self.seq[0] += 1
-        return TaskRequest(AttemptKey(("c01", 0, self.seq[0]), "z1", 1), task, cls, l_max, budget)
-
-    def submit(self, task: str, cls: TaskClass, budget: float, l_max: float = 0.0) -> TaskRequest:
-        r = self.req(task, cls, budget, l_max)
-        assert isinstance(self.ex.submit(r), Accepted), r
-        return r
-
-    def started(self) -> list[AttemptKey]:
-        return [k for kind, _, k, _ in self.trace if kind == "start"]
-
-    def outcome(self, r: TaskRequest) -> str:
-        return next(rep.outcome for rep in self.reports if rep.key == r.key)
-
-
-def tiny(rows: list[RunRow], c_gpu: int = 0, c_cpu: int = 1, promotion: str = "mean") -> Tiny:
-    hw = HardwareClass(
-        name="N",
-        c_gpu=c_gpu,
-        c_cpu=c_cpu,
-        queue={q: 100 for q, c in (("gpu", c_gpu), ("cpu", c_cpu)) if c > 0},
-        p_dyn_w={q: 20.0 for q, c in (("gpu", c_gpu), ("cpu", c_cpu)) if c > 0},
-        p_idle_w=0.0,
-    )
-    clock, reports, trace = EventClock(), list[Report](), list[tuple[str, float, AttemptKey, str]]()
-    ex = Executor(
-        clock,
-        RandomStreams(2000, "training", SPLIT),
-        hw,
-        RunTimeTable({(r.task, r.hw, r.slot): r for r in rows}),
-        reserve_hard=4,
-        pue=1.0,
-        a_max=A_MAX,
-        promotion_estimate=promotion,  # type: ignore[arg-type]
-        on_report=reports.append,
-        trace=trace.append,
-    )
-    return Tiny(clock, ex, reports, trace)
-
+from tests.node.helpers import TaskRequest, Tiny, row, tiny
 
 # --- S1: skip hopeless heads (8.4 step 1; 8.6 "head of the queue") ------------------------------------------
 
@@ -111,11 +37,13 @@ def test_a_hard_head_that_can_still_just_finish_is_not_skipped() -> None:
     # Binary-exact times: "long" (mean 250 ms) really runs 312.5 ms; H (mean 125 ms, low 62.5 ms, d_k = 375
     # ms) is accepted with F = 250 + 125 = 375 ms. At 312.5 ms, t + Ê^low = 375 ms = d_k, not later: it runs.
     # The skip rule uses Ê^low, not the mean (t + Ê = 437.5 ms would be later).
+    # (It then runs past d_k and is aborted at 375 ms: 8.6, M1.7. Not skipping it is what this test checks.)
     n = tiny([row("long", "cpu", 0.25, run=0.3125), row("H", "cpu", 0.125, low=0.0625)])
     n.submit("long", "hard", 10.0)
     h = n.submit("H", "hard", 0.375)
     n.clock.run_until(5.0)
-    assert n.outcome(h) == "done"
+    assert n.started()[1] == h.key
+    assert n.outcome(h) != "skipped"
 
 
 def test_a_soft_head_is_skipped_only_past_deadline_plus_l_max() -> None:
