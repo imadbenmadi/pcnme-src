@@ -171,18 +171,20 @@ def starts(node: Node) -> list[object]:
 
 
 def test_a_free_slot_takes_hard_before_soft_then_earliest_deadline(make_node: Callable[..., Node]) -> None:
+    # Both CPU slots run a T3 (110 ms), so they free before the soft task has waited A_max = 200 ms (no soft
+    # promotion, 8.4 step 2, which test_scheduler.py covers).
     node = make_node("F-CPU")
     for _ in range(2):
-        node.submit("T4", LONG)
+        node.submit("T3", LONG)
     soft = node.request("T4", 5.0)
     late_hard = node.request("T1", 3.0)
     early_hard = node.request("T1", 2.0)
     replies = [node.executor.submit(req) for req in (soft, late_hard, early_hard)]
-    # Hard waits count only the queued hard tasks: (2 x 200 ms) / 2, then + 90 ms / 2 for the second hard one.
+    # Hard waits count only the queued hard tasks: (2 x 110 ms) / 2, then + 90 ms / 2 for the second hard one.
     assert replies == [
-        Accepted(slot="cpu", wait=pytest.approx(0.200)),
-        Accepted(slot="cpu", wait=pytest.approx(0.200)),
-        Accepted(slot="cpu", wait=pytest.approx(0.245)),
+        Accepted(slot="cpu", wait=pytest.approx(0.110)),
+        Accepted(slot="cpu", wait=pytest.approx(0.110)),
+        Accepted(slot="cpu", wait=pytest.approx(0.155)),
     ]
     node.run(10.0)
     assert starts(node)[2:] == [early_hard.key, late_hard.key, soft.key]
