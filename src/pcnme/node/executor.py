@@ -12,9 +12,11 @@ import bisect
 import heapq
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Literal
 
 from pcnme.config import SLOT_TYPES, Config, HardwareClass, SlotType, TaskClass
+from pcnme.node.state import SlotState, wait_estimate
 from pcnme.node.timetable import RunRow, RunTimeTable
 from pcnme.sim.clock import EventClock, EventHandle
 from pcnme.sim.rng import KeyPart, RandomStreams
@@ -203,21 +205,27 @@ class Executor:
             return r.tail_end - now
         return max(0.0, r.start + r.row.mean - now)
 
-    def wait_estimate(self, q: SlotType, cls: TaskClass) -> float:
-        """Ŵ_q for a new task of class `cls`: 8.5 on the executor's exact state (QUESTIONS Q8, Q9).
+    def snapshot(self) -> Mapping[SlotType, SlotState]:
+        """What this node publishes, per slot type with c_q > 0 (8.5)."""
+        return MappingProxyType({q: self._slot_state(q) for q in self._hw.slot_types})
 
-        0 while a slot is free; otherwise (R + B_hard) / c for hard and (R + B_hard + B_soft) / c for soft,
-        with R = the remaining part of the running tasks' mean runs and B = the queued tasks' mean runs.
-        """
-        c = self._hw.slots(q)
-        if self.busy(q) < c:
-            return 0.0
-        now = self._clock.now
-        remaining = self._remaining(q, now)
-        b_hard = sum(t.mean for t in self._queues[q] if t.req.cls == "hard")
-        b_soft = sum(t.mean for t in self._queues[q] if t.req.cls == "soft")
-        backlog = remaining + b_hard + (b_soft if cls == "soft" else 0.0)
-        return backlog / c
+    def _slot_state(self, q: SlotType) -> SlotState:
+        queue = self._queues[q]
+        return SlotState(
+            c=self._hw.slots(q),
+            capacity=self._hw.queue[q],
+            n_hard=sum(1 for t in queue if t.req.cls == "hard"),
+            n_soft=sum(1 for t in queue if t.req.cls == "soft"),
+            b_hard=sum(t.mean for t in queue if t.req.cls == "hard"),
+            b_soft=sum(t.mean for t in queue if t.req.cls == "soft"),
+            r=self._remaining(q, self._clock.now),
+            u=self.busy(q),
+        )
+
+    def wait_estimate(self, q: SlotType, cls: TaskClass) -> float:
+        """Ŵ_q for a new task of class `cls`: the 8.5 estimate on this executor's exact state, with no pending
+        sends (QUESTIONS Q8). One formula, shared with the anchor: `pcnme.node.state.wait_estimate`."""
+        return wait_estimate(self._slot_state(q), cls)
 
     # --- arrival (8.3) --------------------------------------------------------------------------------------
 
