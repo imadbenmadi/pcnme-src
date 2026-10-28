@@ -21,7 +21,7 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 
 - [x] **M1.1 Event clock** (`sim/clock.py`). Discrete-event loop: schedule(time, callback), cancel, run_until. Ties broken by a monotonically increasing sequence number (deterministic).
   - Test: events run in time order; equal times run in scheduling order; cancelled events never run.
-- [ ] **M1.2 FIFO pipe** (`net/pipe.py`), section 4.1: `W_pipe = max(0, t_free − t_now)`, `t_free ← max(t_now, t_free) + S/B`, delivery at `t_now + W_pipe + S/B + d`. The delay does not hold the pipe.
+- [x] **M1.2 FIFO pipe** (`net/pipe.py`), section 4.1: `W_pipe = max(0, t_free − t_now)`, `t_free ← max(t_now, t_free) + S/B`, delivery at `t_now + W_pipe + S/B + d`. The delay does not hold the pipe.
   - Test: hand-computed sequence of 3 transfers (overlapping and not).
   - Test: offered load with TI > 1 → the pipe wait grows linearly over time; TI < 1 → bounded.
 - [ ] **M1.3 Two pipes in series** (section 4.1): cloud transfer `T = W_bh + d_bh + W_WAN + S/B_WAN + d_WAN`.
