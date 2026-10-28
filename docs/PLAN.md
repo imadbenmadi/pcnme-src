@@ -19,7 +19,7 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 
 ## M1 — Core simulator (one node, pipes)
 
-- [ ] **M1.1 Event clock** (`sim/clock.py`). Discrete-event loop: schedule(time, callback), cancel, run_until. Ties broken by a monotonically increasing sequence number (deterministic).
+- [x] **M1.1 Event clock** (`sim/clock.py`). Discrete-event loop: schedule(time, callback), cancel, run_until. Ties broken by a monotonically increasing sequence number (deterministic).
   - Test: events run in time order; equal times run in scheduling order; cancelled events never run.
 - [ ] **M1.2 FIFO pipe** (`net/pipe.py`), section 4.1: `W_pipe = max(0, t_free − t_now)`, `t_free ← max(t_now, t_free) + S/B`, delivery at `t_now + W_pipe + S/B + d`. The delay does not hold the pipe.
   - Test: hand-computed sequence of 3 transfers (overlapping and not).
