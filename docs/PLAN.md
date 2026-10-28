@@ -24,7 +24,7 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 - [x] **M1.2 FIFO pipe** (`net/pipe.py`), section 4.1: `W_pipe = max(0, t_free − t_now)`, `t_free ← max(t_now, t_free) + S/B`, delivery at `t_now + W_pipe + S/B + d`. The delay does not hold the pipe.
   - Test: hand-computed sequence of 3 transfers (overlapping and not).
   - Test: offered load with TI > 1 → the pipe wait grows linearly over time; TI < 1 → bounded.
-- [ ] **M1.3 Two pipes in series** (section 4.1): cloud transfer `T = W_bh + d_bh + W_WAN + S/B_WAN + d_WAN`.
+- [~] **M1.3 Two pipes in series** (section 4.1): cloud transfer `T = W_bh + d_bh + W_WAN + S/B_WAN + d_WAN`.
   - Test: hand calculation with both pipes busy.
 - [ ] **M1.4 Time table** (`node/timetable.py`), sections 14.4 and 18: rows per (type, hardware class, slot type) with mean, p5, p95, longest step, energy per run; a missing row = cannot run there. Run time draws use the run-time stream.
 - [ ] **M1.5 Executor: slots and queues** (`node/executor.py`), sections 8.1–8.3: c_GPU and c_CPU slots, one queue per slot type, capacity Q_q with r places reserved for hard tasks, slot-type choice by earliest estimated finish, refusal "full" / "late".
