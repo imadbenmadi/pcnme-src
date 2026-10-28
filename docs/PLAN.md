@@ -12,7 +12,7 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 - [x] **M0.2 Config loader** (`config.py`). Load `config/default.yaml` into typed, frozen dataclasses. Compute the derived values exactly as `tools/calc_defaults.py` does: mean GPU run of the mix, zone capacity, λ_car per scenario, B_WAN, E_ref per type, ē, T2's tight deadline (1.1 × Ê_strong).
   - Test: derived values equal the numbers printed by `tools/calc_defaults.py` (zone capacity 82.5 tasks/s, B_WAN ≈ 515 Mbps, T2 tight D ≈ 0.792 s, …).
   - Test: a missing or misspelled key raises an error naming the key.
-- [~] **M0.3 Seeded random streams** (`sim/rng.py`). One `numpy.random.Generator` per purpose (arrivals, run times, link delays, mobility, radio, nsga), all derived from one run seed. Seed ranges from config (`fast_mode.seed_split`) are enforced.
+- [x] **M0.3 Seeded random streams** (`sim/rng.py`). One `numpy.random.Generator` per purpose (arrivals, run times, link delays, mobility, radio, nsga), all derived from one run seed. Seed ranges from config (`fast_mode.seed_split`) are enforced.
   - Test: same seed → identical draws; different purposes are independent; a seed outside its range is refused.
 
 - [ ] **M0.4 Lock dependencies** so the venv, CI and every Docker container run identical library versions. Generate a lock file (`uv lock`, or `pip-compile` to `requirements.lock`) on the desktop, commit it, and install from it in `scripts/setup*.{sh,ps1}`, CI and `docker/Dockerfile`. Re-lock only on purpose, in its own PR.
