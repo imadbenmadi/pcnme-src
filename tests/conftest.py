@@ -22,5 +22,5 @@ def default_config_path() -> Path:
 
 @pytest.fixture
 def seed() -> int:
-    """A fixed seed from the training range (config fast_mode.seed_split). Tests never use evaluation seeds."""
+    """A fixed training-range seed (config fast_mode.seed_split). Tests never use evaluation seeds."""
     return 2000
