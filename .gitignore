@@ -36,3 +36,6 @@ data/
 # Tools
 .ruff_cache/
 .claude/settings.local.json
+
+# Docker secrets
+docker/.env
