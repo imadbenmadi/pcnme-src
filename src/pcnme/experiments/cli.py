@@ -1,4 +1,6 @@
-"""Command-line entry point `pcnme` (final-design 15.6 pipeline). Subcommands are filled in milestone by milestone."""
+"""Command-line entry point `pcnme` (final-design 15.6 pipeline). Subcommands are filled in milestone by
+milestone.
+"""
 
 from __future__ import annotations
 
