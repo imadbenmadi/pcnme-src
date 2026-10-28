@@ -56,7 +56,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra --strict-markers -m 'not slow and not testbed'"
+addopts = "-ra --strict-markers -m 'not slow and not testbed and not gpu'"
 markers = [
   "slow: long statistical tests (M/M/1, M/M/c with 200 000 tasks); run with -m slow",
   "testbed: needs Docker and the running testbed; run with -m testbed",
