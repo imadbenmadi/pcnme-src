@@ -49,7 +49,6 @@ def mmc_waits(c: int, rho: float, n: int, seed: int, exponential: bool = True) -
         reserve_hard=0,
         pue=1.0,
         a_max=NEVER,
-        promotion_estimate="mean",  # one class: promotion never applies
         t_keep=1.0,
         on_report=on_report,
     )

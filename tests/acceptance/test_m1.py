@@ -128,7 +128,6 @@ def event_log_hash(cfg: Config, seed: int, seconds: float = 5.0) -> str:
         cfg,
         "F-GPU",
         RunTimeTable.from_config(cfg, exponential),
-        promotion_estimate="mean",
         on_report=reports.append,
         trace=trace.append,
     )
@@ -176,4 +175,5 @@ def test_the_event_log_hash_is_pinned(cfg: Config) -> None:
     assert event_log_hash(cfg, 2000) == GOLDEN_HASH
 
 
-GOLDEN_HASH = "059bd63a4d7390c3429bdf447c97641d56c6bc26c574b0df0415ba6b9304ca48"  # 28 Oct, Windows
+# 28 Oct, Windows; re-pinned when Q10 made "high" the promotion default.
+GOLDEN_HASH = "915586064a17d722057b5bbde7f01aafc0b40fdbd069338198a83426789ab294"
