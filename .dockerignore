@@ -1,0 +1,15 @@
+# Keep the Docker build context small: the image installs from uv.lock, never from the host's venv.
+.venv/
+venv/
+.git/
+**/__pycache__/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+results/
+reference/
+visual/
+excalidraw/
+docs/*.pdf
+docker/.env
