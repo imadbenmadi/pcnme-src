@@ -51,6 +51,33 @@ all = ["pcnme[dev,ml,analysis,testbed,maps]"]
 [project.scripts]
 pcnme = "pcnme.experiments.cli:main"
 
+[tool.uv]
+# One lock (uv.lock) for the venv, CI and every Docker container (PLAN M0.4). Re-lock only on purpose, in its
+# own PR: `uv lock --upgrade` (or `--upgrade-package <name>`), then commit uv.lock.
+required-version = ">=0.13.6,<0.14"
+environments = ["sys_platform == 'win32'", "sys_platform == 'linux'"]   # the desktop; CI, cloud and Docker
+# The same torch everywhere: 2.14.1 is the newest build on the CUDA 12.6 index (newer CUDA builds may drop
+# Pascal), so Linux's CPU build is held to it too. Raise both together, in a re-lock PR.
+constraint-dependencies = ["torch==2.14.1"]
+
+# PyTorch: the CUDA 12.6 build on the Windows desktop (keeps Pascal, compute 6.1, for the GTX 1070), the CPU
+# build on Linux (CI and cloud sessions have no GPU; the testbed containers do not install torch).
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu126", marker = "sys_platform == 'win32'" },
+  { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
