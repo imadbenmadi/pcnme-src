@@ -16,19 +16,11 @@ from types import MappingProxyType
 from typing import Literal
 
 from pcnme.config import SLOT_TYPES, Config, HardwareClass, SlotType, TaskClass
+from pcnme.ids import AttemptKey
 from pcnme.node.state import SlotState, wait_estimate, water_fill
 from pcnme.node.timetable import RunRow, RunTimeTable
 from pcnme.sim.clock import EventClock, EventHandle
-from pcnme.sim.rng import KeyPart, RandomStreams
-
-
-@dataclass(frozen=True, slots=True, order=True)
-class AttemptKey:
-    """(task_id, anchor_id, attempt): names one attempt everywhere (final-design 5.5)."""
-
-    task_id: tuple[KeyPart, ...]  # (car_id, epoch, seq)
-    anchor_id: str
-    attempt: int
+from pcnme.sim.rng import RandomStreams
 
 
 @dataclass(frozen=True, slots=True)
