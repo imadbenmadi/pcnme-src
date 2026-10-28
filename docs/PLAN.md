@@ -15,6 +15,8 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 - [ ] **M0.3 Seeded random streams** (`sim/rng.py`). One `numpy.random.Generator` per purpose (arrivals, run times, link delays, mobility, radio, nsga), all derived from one run seed. Seed ranges from config (`fast_mode.seed_split`) are enforced.
   - Test: same seed → identical draws; different purposes are independent; a seed outside its range is refused.
 
+- [ ] **M0.4 Lock dependencies** so the venv, CI and every Docker container run identical library versions. Generate a lock file (`uv lock`, or `pip-compile` to `requirements.lock`) on the desktop, commit it, and install from it in `scripts/setup*.{sh,ps1}`, CI and `docker/Dockerfile`. Re-lock only on purpose, in its own PR.
+
 ## M1 — Core simulator (one node, pipes)
 
 - [ ] **M1.1 Event clock** (`sim/clock.py`). Discrete-event loop: schedule(time, callback), cancel, run_until. Ties broken by a monotonically increasing sequence number (deterministic).
