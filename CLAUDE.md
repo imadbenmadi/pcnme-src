@@ -28,11 +28,15 @@ Use the `implement-step` skill. In short: read the PLAN item → read every fina
 
 ## Environment
 
-- Python 3.12 (not 3.14). Dev machine: Windows 10, repo on drive F:. Also used from Claude Code cloud sessions (Linux, no GPU, no Docker).
-- Install: `pip install -e ".[dev]"`. Later milestones add `.[ml]` (PyTorch, pymoo).
-- Run tests: `pytest -q`. Lint: `ruff check src tests`.
-- Check the numbers fit together: `python tools/calc_defaults.py`.
-- Fast mode must run on Windows and Linux alike: use `pathlib`, no shell-specific code; multiprocessing must work with the `spawn` start method.
+- Python 3.12 (3.11–3.13 supported, not 3.14). Dev machine: Windows 10, repo on drive F:. Also used from Claude Code cloud sessions (Linux, no GPU, no Docker).
+- Install: `pip install -e ".[dev]"`; add extras as milestones need them: `ml` (PyTorch, pymoo; M5–M6), `analysis` (pandas, Parquet, plots; M3.10+), `testbed` (MQTT, HTTP, InfluxDB, MinIO clients; M9), `maps` (SUMO tools; LuST). Never add a dependency outside `pyproject.toml`.
+- Tests: `pytest -q` (fast suite). Long statistical tests carry `@pytest.mark.slow` and run with `pytest -m slow`; Docker tests `@pytest.mark.testbed`; GPU tests `@pytest.mark.gpu`. Parallel: `pytest -n auto`.
+- Lint and types: `ruff check src tests`, `ruff format src tests`, `mypy` (strict on new code).
+- CI (GitHub Actions, `.github/workflows/ci.yml`) runs lint + tests on Linux and Windows for every PR; keep it green.
+- Config arithmetic: `python tools/calc_defaults.py`.
+- Results: every run writes Parquet under `$PCNME_DATA_DIR/results/<run_id>/` (default `./results`, git-ignored), schema in `docs/METRICS.md`. Grafana is only for viewing; reported numbers always come from Parquet.
+- Docker (M9 only, home desktop): `docker/compose.yaml`, profiles `monitoring` (InfluxDB, Grafana, MinIO) and `testbed`. Do not change networks, addresses or shaping without checking final-design 15.4.
+- Fast mode must run on Windows and Linux alike: use `pathlib`, no shell-specific code; multiprocessing must work with the `spawn` start method; set `PYTHONUTF8=1` on Windows.
 
 ## Layout
 
@@ -51,7 +55,11 @@ src/pcnme/
   expert/          NSGA-II plans, knee, demonstrations                           13.2–13.4
   methods/         greedy, random, baselines                                     16.1
   energy.py        energy accounting                                             12
-  metrics/         logs, metrics, statistics                                     16.3
+  metrics/         logs, metrics, statistics (docs/METRICS.md)                   16.3
+  fl/              federated learning, phase 2                                   13.7
+  experiments/     scenario runner, CLI `pcnme`                                  16
+  testbed/         Docker entry points: zone, car, cloud, wan-gw, runner (M9)    15.4
 tests/             mirrors src/ ; one test file per module
 tools/             calc_defaults.py and small scripts
+docker/            Dockerfile, compose.yaml, net-setup.sh (tc netem), Grafana provisioning
 ```

@@ -1,0 +1,323 @@
+# PCNME Docker testbed (final-design 15.4). One machine, Docker Compose.
+#
+#   docker compose -f docker/compose.yaml --profile monitoring up -d     # InfluxDB + Grafana + MinIO (usable now)
+#   docker compose -f docker/compose.yaml --profile testbed up -d        # the testbed itself (milestone M9)
+#
+# Networks (final-design 15.4): radio_net cars <-> zones; backhaul_net zones <-> zones <-> broker <-> wan-gw;
+# wan_net wan-gw <-> cloud (the one shared WAN pipe); mgmt_net everything <-> storage and metrics, never shaped.
+# Shaping: docker/net-setup.sh (tc netem), parameters from the environment; the runner sets them per scenario.
+# Image versions are pinned; MinIO uses a moving tag until M9 pins it (see the comment there).
+
+name: pcnme
+
+x-pcnme: &pcnme
+  build:
+    context: ..
+    dockerfile: docker/Dockerfile
+  image: pcnme:dev
+  cap_add: [NET_ADMIN]            # tc netem and routes
+  sysctls:
+    net.ipv4.tcp_slow_start_after_idle: 0   # warm connections (final-design 15.4)
+  env_file:
+    - path: .env
+      required: false
+  restart: "no"
+
+x-zone-env: &zone-env
+  PCNME_ROLE: zone
+  PCNME_CONFIG: /app/config/default.yaml
+  MQTT_HOST: 10.20.0.2
+  CLOUD_URL: http://10.30.0.10:8000
+  BACKHAUL_DELAY_MS: "3"
+  BACKHAUL_JITTER_MS: "2"
+  BACKHAUL_RATE: 1gbit
+  RADIO_DELAY_MS: "3"
+  RADIO_JITTER_MS: "2"
+
+x-car-env: &car-env
+  PCNME_ROLE: car
+  PCNME_CONFIG: /app/config/default.yaml
+  RADIO_DELAY_MS: "3"
+  RADIO_JITTER_MS: "2"
+
+x-zone: &zone
+  <<: *pcnme
+  command: ["python", "-m", "pcnme.testbed.zone"]
+  depends_on: [broker, wan-gw]
+  deploy:
+    resources:
+      limits: {cpus: "1.0"}      # --cpus limits only the zone's own work (final-design 15.5)
+
+x-car: &car
+  <<: *pcnme
+  profiles: ["testbed"]
+  command: ["python", "-m", "pcnme.testbed.car"]
+  depends_on: [zone-1, zone-2, zone-3, zone-4]
+
+services:
+  broker:
+    image: emqx/emqx:5.8.0
+    profiles: ["testbed"]
+    hostname: broker
+    networks:
+      backhaul_net: {ipv4_address: 10.20.0.2}
+      mgmt_net: {ipv4_address: 10.40.0.20}
+    ports: ["18083:18083"]        # EMQX dashboard
+
+  broker-net:                     # sidecar: shapes the broker's backhaul interface (one crossing per message)
+    <<: *pcnme
+    profiles: ["testbed"]
+    network_mode: service:broker
+    environment: {PCNME_ROLE: broker-net}
+    command: ["sleep", "infinity"]
+    sysctls: {}
+
+  wan-gw:
+    <<: *pcnme
+    profiles: ["testbed"]
+    hostname: wan-gw
+    environment: {PCNME_ROLE: wan-gw, WAN_DELAY_MS: "62.5", WAN_JITTER_MS: "37.5", WAN_RATE: 515mbit}
+    command: ["sleep", "infinity"]
+    sysctls:
+      net.ipv4.ip_forward: 1
+      net.ipv4.tcp_slow_start_after_idle: 0
+    networks:
+      backhaul_net: {ipv4_address: 10.20.0.3}
+      wan_net: {ipv4_address: 10.30.0.3}
+      mgmt_net: {ipv4_address: 10.40.0.21}
+
+  cloud:
+    <<: *pcnme
+    profiles: ["testbed"]
+    hostname: cloud
+    environment: {PCNME_ROLE: cloud, PCNME_CONFIG: /app/config/default.yaml, MQTT_HOST: 10.20.0.2,
+                  WAN_DELAY_MS: "62.5", WAN_JITTER_MS: "37.5"}
+    command: ["python", "-m", "pcnme.testbed.cloud"]
+    networks:
+      wan_net: {ipv4_address: 10.30.0.10}
+      mgmt_net: {ipv4_address: 10.40.0.22}
+
+  zone-1:
+    <<: *zone
+    hostname: zone-1
+    profiles: ["testbed"]
+    environment:
+      <<: *zone-env
+      PCNME_ZONE_ID: z1
+    networks:
+      radio_net: {ipv4_address: 10.10.0.11}
+      backhaul_net: {ipv4_address: 10.20.0.11}
+      mgmt_net: {ipv4_address: 10.40.0.11}
+
+  zone-2:
+    <<: *zone
+    hostname: zone-2
+    profiles: ["testbed"]
+    environment:
+      <<: *zone-env
+      PCNME_ZONE_ID: z2
+    networks:
+      radio_net: {ipv4_address: 10.10.0.12}
+      backhaul_net: {ipv4_address: 10.20.0.12}
+      mgmt_net: {ipv4_address: 10.40.0.12}
+
+  zone-3:
+    <<: *zone
+    hostname: zone-3
+    profiles: ["testbed"]
+    environment:
+      <<: *zone-env
+      PCNME_ZONE_ID: z3
+    networks:
+      radio_net: {ipv4_address: 10.10.0.13}
+      backhaul_net: {ipv4_address: 10.20.0.13}
+      mgmt_net: {ipv4_address: 10.40.0.13}
+
+  zone-4:
+    <<: *zone
+    hostname: zone-4
+    profiles: ["testbed"]
+    environment:
+      <<: *zone-env
+      PCNME_ZONE_ID: z4
+    networks:
+      radio_net: {ipv4_address: 10.10.0.14}
+      backhaul_net: {ipv4_address: 10.20.0.14}
+      mgmt_net: {ipv4_address: 10.40.0.14}
+
+  zone-5:
+    <<: *zone
+    hostname: zone-5
+    profiles: ["zone5"]           # joins mid-run (final-design 15.7); the runner starts it
+    environment:
+      <<: *zone-env
+      PCNME_ZONE_ID: z5
+    networks:
+      radio_net: {ipv4_address: 10.10.0.15}
+      backhaul_net: {ipv4_address: 10.20.0.15}
+      mgmt_net: {ipv4_address: 10.40.0.15}
+
+  car-1:
+    <<: *car
+    hostname: car-01
+    environment:
+      <<: *car-env
+      PCNME_CAR_CONTAINER: c01
+    networks:
+      radio_net: {ipv4_address: 10.10.0.101}
+      mgmt_net: {ipv4_address: 10.40.0.101}
+
+  car-2:
+    <<: *car
+    hostname: car-02
+    environment:
+      <<: *car-env
+      PCNME_CAR_CONTAINER: c02
+    networks:
+      radio_net: {ipv4_address: 10.10.0.102}
+      mgmt_net: {ipv4_address: 10.40.0.102}
+
+  car-3:
+    <<: *car
+    hostname: car-03
+    environment:
+      <<: *car-env
+      PCNME_CAR_CONTAINER: c03
+    networks:
+      radio_net: {ipv4_address: 10.10.0.103}
+      mgmt_net: {ipv4_address: 10.40.0.103}
+
+  car-4:
+    <<: *car
+    hostname: car-04
+    environment:
+      <<: *car-env
+      PCNME_CAR_CONTAINER: c04
+    networks:
+      radio_net: {ipv4_address: 10.10.0.104}
+      mgmt_net: {ipv4_address: 10.40.0.104}
+
+  car-5:
+    <<: *car
+    hostname: car-05
+    environment:
+      <<: *car-env
+      PCNME_CAR_CONTAINER: c05
+    networks:
+      radio_net: {ipv4_address: 10.10.0.105}
+      mgmt_net: {ipv4_address: 10.40.0.105}
+
+  car-6:
+    <<: *car
+    hostname: car-06
+    environment:
+      <<: *car-env
+      PCNME_CAR_CONTAINER: c06
+    networks:
+      radio_net: {ipv4_address: 10.10.0.106}
+      mgmt_net: {ipv4_address: 10.40.0.106}
+
+  car-7:
+    <<: *car
+    hostname: car-07
+    environment:
+      <<: *car-env
+      PCNME_CAR_CONTAINER: c07
+    networks:
+      radio_net: {ipv4_address: 10.10.0.107}
+      mgmt_net: {ipv4_address: 10.40.0.107}
+
+  car-8:
+    <<: *car
+    hostname: car-08
+    environment:
+      <<: *car-env
+      PCNME_CAR_CONTAINER: c08
+    networks:
+      radio_net: {ipv4_address: 10.10.0.108}
+      mgmt_net: {ipv4_address: 10.40.0.108}
+
+  car-9:
+    <<: *car
+    hostname: car-09
+    environment:
+      <<: *car-env
+      PCNME_CAR_CONTAINER: c09
+    networks:
+      radio_net: {ipv4_address: 10.10.0.109}
+      mgmt_net: {ipv4_address: 10.40.0.109}
+
+  car-10:
+    <<: *car
+    hostname: car-10
+    environment:
+      <<: *car-env
+      PCNME_CAR_CONTAINER: c10
+    networks:
+      radio_net: {ipv4_address: 10.10.0.110}
+      mgmt_net: {ipv4_address: 10.40.0.110}
+
+  runner:
+    <<: *pcnme
+    profiles: ["testbed"]
+    environment: {PCNME_ROLE: runner, PCNME_CONFIG: /app/config/default.yaml}
+    command: ["python", "-m", "pcnme.testbed.runner"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock   # starts zones, sets shaping per scenario, kills zones
+    networks:
+      mgmt_net: {ipv4_address: 10.40.0.5}
+
+  storage:
+    image: quay.io/minio/minio:latest   # pin to a RELEASE tag in M9
+    profiles: ["monitoring", "testbed"]
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD}
+    volumes: ["minio-data:/data"]
+    ports: ["9000:9000", "9001:9001"]
+    networks:
+      mgmt_net: {ipv4_address: 10.40.0.2}
+
+  influxdb:
+    image: influxdb:2.7
+    profiles: ["monitoring", "testbed"]
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUX_USER}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUX_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUX_ORG}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUX_BUCKET}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUX_TOKEN}
+    volumes: ["influx-data:/var/lib/influxdb2"]
+    ports: ["8086:8086"]
+    networks:
+      mgmt_net: {ipv4_address: 10.40.0.3}
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    profiles: ["monitoring", "testbed"]
+    depends_on: [influxdb]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+      INFLUX_ORG: ${INFLUX_ORG}
+      INFLUX_BUCKET: ${INFLUX_BUCKET}
+      INFLUX_TOKEN: ${INFLUX_TOKEN}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports: ["3000:3000"]
+    networks:
+      mgmt_net: {ipv4_address: 10.40.0.4}
+
+networks:
+  radio_net:    {ipam: {config: [{subnet: 10.10.0.0/24}]}}
+  backhaul_net: {ipam: {config: [{subnet: 10.20.0.0/24}]}}
+  wan_net:      {ipam: {config: [{subnet: 10.30.0.0/24}]}}
+  mgmt_net:     {ipam: {config: [{subnet: 10.40.0.0/24}]}}
+
+volumes:
+  minio-data:
+  influx-data:
+  grafana-data:
