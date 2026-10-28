@@ -148,7 +148,7 @@ def test_schedule_in_is_relative_to_now() -> None:
     assert log == [(2.25, "x")]
 
 
-# --- R6: refused -----------------------------------------------------------------------------------------
+# --- R6: refused --------------------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("bad", [math.nan, math.inf, -math.inf])
@@ -198,7 +198,7 @@ def test_a_failing_callback_stops_the_run_and_leaves_the_clock_usable() -> None:
     assert log == [(0.2, "next")]
 
 
-# --- R7: events scheduled from a callback ----------------------------------------------------------------
+# --- R7: events scheduled from a callback -------------------------------------------------------------------
 
 
 def test_an_event_scheduled_now_from_a_callback_runs_after_those_already_waiting() -> None:

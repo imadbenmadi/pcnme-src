@@ -108,7 +108,7 @@ def test_loading_twice_gives_equal_configs(default_config_path: Path) -> None:
     assert load_config(default_config_path) == load_config(default_config_path)
 
 
-# --- Derived values (PLAN M0.2) ---------------------------------------------------------------------------
+# --- Derived values (PLAN M0.2) -----------------------------------------------------------------------------
 
 
 def test_mean_gpu_run_of_the_whole_mix(cfg: Config) -> None:
@@ -274,7 +274,7 @@ def test_derived_values_equal_calc_defaults_output(cfg: Config, repo_root: Path)
         assert number(rf"{s}: .*TI_WAN ([\d.]+)") == f"{d.ti_wan[s]:.2f}"
 
 
-# --- Time table placeholders (QUESTIONS Q2) ----------------------------------------------------------------
+# --- Time table placeholders (QUESTIONS Q2) -----------------------------------------------------------------
 
 
 def test_placeholder_rows_use_the_factors(cfg: Config) -> None:
