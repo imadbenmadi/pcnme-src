@@ -7,14 +7,21 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends iproute2 procps \
  && rm -rf /var/lib/apt/lists/*
 
+# uv at the version pinned in pyproject.toml ([tool.uv] required-version); installs exactly uv.lock (PLAN M0.4).
+COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /usr/local/bin/uv
+ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 UV_PYTHON_DOWNLOADS=never
+
 WORKDIR /app
-COPY pyproject.toml README.md ./
+# Dependencies first, so the layer is cached until uv.lock changes.
+COPY pyproject.toml uv.lock README.md ./
+RUN uv sync --locked --no-install-project --extra testbed
 COPY src ./src
 COPY config ./config
-RUN pip install --no-cache-dir -e ".[testbed]"
+RUN uv sync --locked --extra testbed
 
 COPY docker/net-setup.sh /usr/local/bin/net-setup.sh
 RUN chmod +x /usr/local/bin/net-setup.sh
 
-ENV PYTHONUNBUFFERED=1 PYTHONUTF8=1
+# The venv's python first, so compose's `python -m pcnme.testbed.<role>` runs with the locked libraries.
+ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONUTF8=1
 ENTRYPOINT ["/usr/local/bin/net-setup.sh"]
