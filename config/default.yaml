@@ -32,7 +32,7 @@ radio:                           # P: VFC (Friis free-space + Shannon)
   gain_tx_dbi: 5
   gain_rx_dbi: 5
   noise_dbm_per_hz: -174
-  carrier_hz: 5.9e9              # R: ITS band; check against the VFC code
+  carrier_hz: 5.9e9              # P: confirmed in the VFC code (5900 MHz); noise uses correct units, see docs/CHANGES.md C1
   delay: [0.001, 0.005]          # R: 5G NR user-plane latency, uniform
   downlink_delay: [0.001, 0.005] # R
 
@@ -53,7 +53,7 @@ task_types:                      # sizes M (BDD100K JPEG at quality 80); run tim
   L_max: equal_to_D              # final doc
 
 hardware:                        # run times and powers are M; placeholders below
-  F-GPU:                         # reference and strongest fog class (T4-class GPU, 8 cores)
+  F-GPU:                         # reference and strongest fog class; measured on the GTX 1070 (calibration), 8 cores
     c_gpu: 2
     c_cpu: 2                     # 4 cores per CPU slot
     queue: {gpu: 32, cpu: 16}    # R: hard 'late' binds before 'full' (32 T1 = 128 ms of work > D)

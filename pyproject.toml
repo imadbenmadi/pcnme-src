@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pcnme"
+version = "0.1.0"
+description = "PCNME: predictive task offloading for connected cars across fog zones and the cloud (MSc thesis, ELTE)"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+  "numpy>=1.26",
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5"]
+ml = ["torch>=2.3", "pymoo>=0.6.1"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"

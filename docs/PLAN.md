@@ -1,0 +1,117 @@
+# PCNME build plan
+
+Build in this order. Each milestone ends with its acceptance tests passing and Imed's review. Do not start a milestone before the previous one is approved. Section numbers refer to `docs/final-design.md`.
+
+Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
+
+---
+
+## M0 — Project setup
+
+- [ ] **M0.1 Packaging.** `pyproject.toml` (Python ≥ 3.11, < 3.14; deps numpy, pyyaml; extras `dev` = pytest, ruff; `ml` = torch, pymoo added in M5). `src/` layout, `pytest` configured.
+- [ ] **M0.2 Config loader** (`config.py`). Load `config/default.yaml` into typed, frozen dataclasses. Compute the derived values exactly as `tools/calc_defaults.py` does: mean GPU run of the mix, zone capacity, λ_car per scenario, B_WAN, E_ref per type, ē, T2's tight deadline (1.1 × Ê_strong).
+  - Test: derived values equal the numbers printed by `tools/calc_defaults.py` (zone capacity 82.5 tasks/s, B_WAN ≈ 515 Mbps, T2 tight D ≈ 0.792 s, …).
+  - Test: a missing or misspelled key raises an error naming the key.
+- [ ] **M0.3 Seeded random streams** (`sim/rng.py`). One `numpy.random.Generator` per purpose (arrivals, run times, link delays, mobility, radio, nsga), all derived from one run seed. Seed ranges from config (`fast_mode.seed_split`) are enforced.
+  - Test: same seed → identical draws; different purposes are independent; a seed outside its range is refused.
+
+## M1 — Core simulator (one node, pipes)
+
+- [ ] **M1.1 Event clock** (`sim/clock.py`). Discrete-event loop: schedule(time, callback), cancel, run_until. Ties broken by a monotonically increasing sequence number (deterministic).
+  - Test: events run in time order; equal times run in scheduling order; cancelled events never run.
+- [ ] **M1.2 FIFO pipe** (`net/pipe.py`), section 4.1: `W_pipe = max(0, t_free − t_now)`, `t_free ← max(t_now, t_free) + S/B`, delivery at `t_now + W_pipe + S/B + d`. The delay does not hold the pipe.
+  - Test: hand-computed sequence of 3 transfers (overlapping and not).
+  - Test: offered load with TI > 1 → the pipe wait grows linearly over time; TI < 1 → bounded.
+- [ ] **M1.3 Two pipes in series** (section 4.1): cloud transfer `T = W_bh + d_bh + W_WAN + S/B_WAN + d_WAN`.
+  - Test: hand calculation with both pipes busy.
+- [ ] **M1.4 Time table** (`node/timetable.py`), sections 14.4 and 18: rows per (type, hardware class, slot type) with mean, p5, p95, longest step, energy per run; a missing row = cannot run there. Run time draws use the run-time stream.
+- [ ] **M1.5 Executor: slots and queues** (`node/executor.py`), sections 8.1–8.3: c_GPU and c_CPU slots, one queue per slot type, capacity Q_q with r places reserved for hard tasks, slot-type choice by earliest estimated finish, refusal "full" / "late".
+- [ ] **M1.6 Scheduler** (section 8.4): skip hopeless heads, soft promotion after A_max only if every queued hard task still meets its deadline, then hard, then soft, then work stealing. Order inside a class: EDF on d_k, ties by arrival order then task id (section 8.2).
+- [ ] **M1.7 Drops and aborts** (section 8.6): abort at d_k (hard) or d_k + L_max (soft); the slot stays busy for min(remaining, d_abort); every drop reported at once with the energy spent; (attempt key, outcome) kept for T_keep.
+- [ ] **M1.8 Published state and wait estimate** (section 8.5): c_q, Q_q, n_hard, n_soft, B_hard, B_soft, R, u per slot type; Ŵ = 0 while a slot is free, otherwise the pooled formula.
+- **M1 acceptance tests** (section 16.5 and 8.7):
+  - M/M/1: one slot, one class, FIFO order, Poisson arrivals, exponential run times, ρ = 0.5 and 0.8, ≥ 200 000 tasks: mean wait within 3 % of λ/(μ(μ − λ)).
+  - M/M/c: c = 2 and 4 against Erlang C, same tolerance.
+  - One unit test per scheduler rule in 8.4 and per row of the table in 8.6.
+  - Ŵ: 0 with a free slot; equals the formula otherwise; c_q = 1 exact in the mean.
+  - Determinism: two runs with the same seed give the same event-log hash.
+
+## M2 — One zone, end to end (no mobility, Greedy)
+
+- [ ] **M2.1 Identifiers** (`ids.py`), section 5.5: task_id (car_id, epoch, seq), attempt key (task_id, anchor_id, attempt), snapshot version (epoch, counter) compared epoch first.
+- [ ] **M2.2 Cars and tasks** (`car/`), sections 6A, 14.1–14.3: task types and mix, deadlines (loose / tight), sizes, arrivals at λ_car, the car's latency clock.
+- [ ] **M2.3 Radio uplink** (`net/radio.py`), sections 4.2 and 18: Shannon rate from distance (free-space path loss, 5.9 GHz, correct units, see CHANGES C1), one car at a time per zone.
+- [ ] **M2.4 Intake and anchor deadline**, section 6A: task exists only after the whole upload; `d_A = t_rx + B_car − Û_up`.
+- [ ] **M2.5 TOF-Broker** (section 7.1), including the boulder drop test.
+- [ ] **M2.6 Budgets and delivery** (sections 6C–6E): B_k, d_k, result path delays, the car keeps the first result and confirms.
+- [ ] **M2.7 Energy accounting** (`energy.py`), section 12: E_k = forwarding + execution + return, PUE, E_ref, ê = min(E/E_ref, ē), the per-attempt table in 12.5.
+- [ ] **M2.8 Greedy and Random** (section 16.1) over the options available in one zone (here, cloud).
+- **M2 acceptance tests:**
+  - Hand calculation (16.5): one task, empty system, fixed numbers, once per destination (here, cloud): simulator within 1 %.
+  - Energy: E_ref and ê for each task type equal `tools/calc_defaults.py`.
+  - TOF: in tight deadlines T2 is a boulder; in loose it is not; a boulder whose cloud path cannot make it is dropped at intake with no transition.
+  - Cloud-only at TI_WAN 1.5: the WAN queue grows without limit (VFC Fig. 6 behaviour); at 0.5 it stays bounded.
+
+## M3 — Many zones, mobility, failures (fast mode complete, Greedy)
+
+- [ ] **M3.1 Bus and calls in fast mode** (`bus/`), sections 5.1–5.3, 15.2: in-process topic table with modelled broker delay; QoS 1 may deliver twice; retained messages; last will. Direct calls after the modelled transfer time.
+- [ ] **M3.2 Layout and neighbours**, sections 7.5 and 18: 5 zone positions, R_z, d_nb, neighbour positions fixed at start, the join rule.
+- [ ] **M3.3 Zone state plane**, sections 5.2, 9.2: state every 100 ms, snapshot versions, newest wins, staleness, R1 pending sends, the WAN-wait estimate (4.3).
+- [ ] **M3.4 Masks** (section 7.2) and q*.
+- [ ] **M3.5 Placement to neighbours and cloud**, refusals and the one re-decision (9.1, 9.2).
+- [ ] **M3.6 Loss detection, retry, cancel** (9.3, 9.4): upload timeout, last will, watchdog, status probe, retry mask, cancel, first result wins.
+- [ ] **M3.7 Duplicates, subscriptions, cleanup** (9.5, 9.6).
+- [ ] **M3.8 Mobility** (`mobility/`), section 10: VFC grid with lights and stops, speeds, hotspot, attach with hysteresis, GPS every 100 ms, coverage gaps, cut uploads (9.7), result follows the car (10.3).
+- [ ] **M3.9 Predictor** (10.2): exit time (ray–circle formula), next zone at intersections.
+- [ ] **M3.10 Logging** (16.3): one row per task and per attempt, with run_id.
+- **M3 acceptance tests:**
+  - One scenario test per row of the failure table (9.1) and per case C1–C14 (7.4).
+  - S1–S3 with Greedy, 3 seeds: ρ_fog and TI_WAN measured from the run match the config targets within 5 %; z1 load ≈ 1.6 × the mean; the WAN congests in S3. If not, stop and debug the queueing before anything else.
+  - Exit-time formula against hand calculations; infinity when stopped.
+
+## M4 — Agent inputs and rewards (no learning yet)
+
+- [ ] **M4.1 The 48 inputs** (11.1), caps (times ≤ 2, energy ≤ ē), masked options still get numbers.
+- [ ] **M4.2 Rewards** (11.4) for every attempt outcome; C_drop = 5.
+- [ ] **M4.3 Transitions** (11.3): s, a, s', Δt at the same anchor, pending buffer keyed by (task_id, attempt), moved to replay at close + G, no transition for boulders and all-masked drops.
+- **M4 acceptance tests:**
+  - Input vector length 48, every value in its range, order as in 11.1.
+  - Property test: for random w in (0, 1] and random energies, every drop reward is lower than every delivery reward (N18).
+  - Transition timing on a scripted scenario.
+
+## M5 — NSGA-II expert and demonstrations
+
+- [ ] **M5.1 Windows** (13.2): T_win, T_warmup of greedy decisions, common random numbers, genome = action index per task, repair to "here", tasks after the window placed by greedy.
+- [ ] **M5.2 NSGA-II in pymoo** with the operators of 13.2 and section 18 numbers; parallel evaluation (spawn-safe).
+- [ ] **M5.3 Knee and w** (13.3): normalisation, knee = smallest f̃1 + f̃2, slope, w̃, w; median w*; w_p for every front point.
+- [ ] **M5.4 Demonstrations** (13.4): replay plans with the input builder, flag expert transitions, store to disk.
+- **M5 acceptance tests:**
+  - Knee and w on synthetic fronts with known answers.
+  - Front check (16.5): S2 fronts hold at least 5 distinct points. If not, stop: the energy model needs revisiting.
+  - Replaying a plan reproduces its objective values exactly (same seed).
+
+## M6 — D3QN with DQfD, online learning
+
+- [ ] **M6.1 Network**: 48 → 256 → 256 → dueling heads, masked argmax (11.2, 11.3).
+- [ ] **M6.2 Losses** (13.5): 1-step double-DQN, n-step with the time-based discount, margin loss on expert transitions only, L2.
+- [ ] **M6.3 Replay**: agent part (100 000) + expert part never overwritten; prioritized replay with ε_d, ε_a, α, β.
+- [ ] **M6.4 Pretraining loop** with held-out expert agreement and early stop.
+- [ ] **M6.5 Online learning** in every zone; neighbour order shuffled per episode in training (13.6).
+- **M6 acceptance tests:** hand-computed n-step target; margin loss is zero on non-expert transitions; masked actions never chosen; learning sanity on a two-action toy problem.
+
+## M7 — Baselines, experiments, statistics
+
+- [ ] Baselines in the agent's seat with the same inputs, masks, reward and budget (16.1): D3QN from scratch, D3QN + greedy expert, VFC PPO, Tang & Wong, QECO, Greedy, Random, NSGA-II knee reference.
+- [ ] Scenario runner S1–S6, seeds from the evaluation range only, metrics and CIs (16.3), ablations and sweeps (16.4).
+
+## M8 — Federated learning (phase 2)
+
+- [ ] FedAvg rounds and the three variants (13.7).
+
+## M9 — Docker testbed
+
+- [ ] Containers and networks of 15.4; MQTT (EMQX) and HTTP behind the same interfaces as fast mode; netem shaping; the runner. Needs the home desktop (Docker, WSL2 backend).
+
+## C — Calibration (any time after M0, on the home desktop)
+
+- [ ] Measure YOLO run times and energy per run on the GTX 1070 (slot fixed to x16 first), JPEG sizes on BDD100K frames; write the time table; rerun `tools/calc_defaults.py`. Cloud rows from Ultralytics' A100 numbers plus measured pre- and post-processing.
