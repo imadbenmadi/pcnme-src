@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from pcnme.config import HardwareClass, SlotType, TaskClass
 from pcnme.node.executor import Accepted, AttemptKey, Executor, Report, TaskRequest
-from pcnme.node.timetable import Deterministic, RunRow, RunTimeTable
+from pcnme.node.timetable import Deterministic, RunRow, RunTimeDistribution, RunTimeTable
 from pcnme.sim.clock import EventClock
 from pcnme.sim.rng import RandomStreams
 
@@ -14,7 +14,14 @@ A_MAX = 0.200  # config scheduler.soft_promotion_A_max
 SPLIT = {"training": range(2000, 3000)}
 
 
-def row(task: str, slot: SlotType, mean: float, run: float | None = None, low: float | None = None) -> RunRow:
+def row(
+    task: str,
+    slot: SlotType,
+    mean: float,
+    run: float | None = None,
+    low: float | None = None,
+    distribution: RunTimeDistribution | None = None,
+) -> RunRow:
     """A row on the test node "N": mean Ê, p5 = 0.9 Ê unless given, p95 = 1.3 Ê; runs take `run` (or Ê)."""
     return RunRow(
         task=task,
@@ -25,7 +32,7 @@ def row(task: str, slot: SlotType, mean: float, run: float | None = None, low: f
         high=1.3 * mean,
         longest_step=0.5 * mean,
         energy_per_run=20.0 * mean,
-        distribution=Deterministic(mean if run is None else run),
+        distribution=distribution or Deterministic(mean if run is None else run),
     )
 
 
