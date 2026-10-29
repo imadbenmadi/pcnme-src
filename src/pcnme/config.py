@@ -252,6 +252,14 @@ class Cars:
     speed_high_mps: tuple[float, ...]
     hotspot_share: float
     grid: Grid
+    calibration: Calibration
+    coverage: Mapping[str, float]  # per mobility: the share of task creations with coverage (Q29, C)
+
+
+@dataclass(frozen=True, slots=True)
+class Calibration:
+    seconds: float
+    seed: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -679,6 +687,16 @@ def _layout(n: _Node) -> Layout:
         )
 
 
+def _calibration(n: _Node) -> Calibration:
+    with n:
+        return Calibration(seconds=n.number("seconds", gt=0.0), seed=n.integer("seed"))
+
+
+def _coverage(n: _Node) -> Mapping[str, float]:
+    with n, n.node("coverage") as c:
+        return _frozen({m: c.number(m, gt=0.0, le=1.0) for m in ("low", "high")})
+
+
 def _grid(n: _Node) -> Grid:
     with n:
         stop = n.numbers("stop_s", ge=0.0)
@@ -714,6 +732,8 @@ def _cars(n: _Node) -> Cars:
             speed_high_mps=fast,
             hotspot_share=_fraction(n, "hotspot_share"),
             grid=_grid(n.node("grid")),
+            calibration=_calibration(n.node("calibration")),
+            coverage=_coverage(n.node("calibrated")),
         )
 
 

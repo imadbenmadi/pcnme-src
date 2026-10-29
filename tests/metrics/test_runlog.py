@@ -55,7 +55,7 @@ def test_every_car_position_every_100_ms(run_dir: Path) -> None:
 def test_attach_and_handover_events(run_dir: Path) -> None:
     rows = table(run_dir, "events")
     kinds = {r["kind"] for r in rows}
-    assert "attach" in kinds and kinds <= {"attach", "handover", "gap", "upload_cut", "car_drop"}
+    assert "attach" in kinds and kinds <= {"attach", "handover", "gap", "upload_cut", "car_drop", "uncovered"}
     assert all(r["zone_to"] in ("z1", "z2", "z3", "z4") for r in rows if r["kind"] in ("attach", "handover"))
 
 

@@ -69,6 +69,7 @@ class Car:
         position: tuple[float, float],
         on_task: Callable[[Task], None],
         fleet: int,
+        coverage: float = 1.0,
     ) -> None:
         """`fleet` is the run's city-wide number of cars: λ_car = the per-zone rate / cars per zone (18)."""
         self.car_id = car_id
@@ -77,7 +78,8 @@ class Car:
         self._mode: DeadlineMode = scenario.deadlines
         self._types = list(config.task_types.values())
         self._shares = np.array([t.share for t in self._types])
-        self._rate = config.arrival_rate_per_car(scenario.name, fleet)
+        # Q29: the per-zone rate counts covered creations; frames made in a gap reach no zone
+        self._rate = config.arrival_rate_per_car(scenario.name, fleet) / coverage
         self._encode = config.timing.encode
         self._arrivals = streams.generator("arrivals", car_id)  # gaps and types, in order (sequential, Q4)
         self._ids = TaskIds(car_id)
