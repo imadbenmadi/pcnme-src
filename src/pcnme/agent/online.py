@@ -26,7 +26,7 @@ import torch
 from pcnme.agent.budget import Budget, epsilon
 from pcnme.agent.inputs import Decision
 from pcnme.agent.losses import Batch, dqfd_loss
-from pcnme.agent.network import DuelingQNet, deterministic, masked_argmax
+from pcnme.agent.network import deterministic, masked_argmax
 from pcnme.agent.nstep import Sample, build
 from pcnme.agent.replay import Replay
 from pcnme.agent.transitions import Transition
@@ -85,7 +85,7 @@ class OnlineAgent:
 
     cfg: Config
     zone_id: str
-    network: DuelingQNet
+    network: torch.nn.Module  # the D3QN, or an LSTM baseline's network
     expert: Sequence[Sample] = ()
     seed: int = 2000  # the agent's own streams: a seed of `usage`'s range
     usage: str = "training"  # evaluation for a deployed agent (16.3: evaluation seeds only there)
@@ -120,11 +120,15 @@ class OnlineAgent:
             a = open_[int(self._eps_rng.integers(len(open_)))]
         else:
             with torch.no_grad():
-                q = self.online(torch.tensor([ctx.inputs], dtype=torch.float32))
+                q = self.online(torch.tensor([self.state(ctx)], dtype=torch.float32))
                 a = int(masked_argmax(q, torch.tensor([valid]))[0])
         if self.budget is not None:
             self.budget.spend()  # a decision (16.1: the budget counts decisions)
         return OPTIONS[a]
+
+    def state(self, ctx: DecisionContext) -> tuple[float, ...]:
+        """What the network sees at a decision: the 48 inputs (an LSTM baseline adds its history)."""
+        return ctx.inputs
 
     def current_epsilon(self) -> float:
         if self.schedule is not None and self.budget is not None:
