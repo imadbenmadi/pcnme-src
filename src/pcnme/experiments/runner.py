@@ -24,6 +24,7 @@ window tasks and the knee's objectives, so the report can put every method on th
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 from collections.abc import Callable, Mapping, Sequence
@@ -59,6 +60,8 @@ class RunSpec:
     nsga_population: int | None = None  # knee-reference (nsga2.population)
     nsga_generations: int | None = None  # knee-reference (nsga2.generations)
     workers: int = 1  # knee-reference: NSGA-II evaluations in parallel
+    overrides: tuple[tuple[str, Any], ...] = ()  # (dotted config key, value): ablations and sweeps (16.4)
+    variant: str = ""  # the ablation's or sweep point's label: runs go to out/<variant>/ (empty: the design)
 
 
 @dataclass
@@ -110,6 +113,10 @@ def budget_of(cfg: Config, spec: RunSpec) -> int:
 def _check(cfg: Config, spec: RunSpec) -> None:
     if spec.method not in METHODS:
         raise ValueError(f"unknown method {spec.method!r}; known: {', '.join(METHODS)}")
+    if spec.overrides and not spec.variant:
+        raise ValueError(
+            "an ablation or a sweep point needs a variant label (its runs would mix with the design's)"
+        )
     if spec.scenario not in cfg.scenarios:
         raise ValueError(f"unknown scenario {spec.scenario!r}; known: {', '.join(cfg.scenarios)}")
     check_seeds(cfg, spec.seeds, "evaluation")
@@ -298,11 +305,75 @@ def report_constants(cfg: Config, scenario: str) -> dict[str, Any]:
     }
 
 
+# --- ablations and sweeps (16.4) ------------------------------------------------------------------------
+
+ABLATIONS: dict[str, tuple[tuple[str, Any], ...]] = {
+    "gamma-0": (("rl.gamma_per_tau", 0.0),),  # placement as a bandit problem
+    "no-n-step": (("dqfd.lambda_n", 0.0),),
+    "no-margin": (("dqfd.lambda_margin", 0.0),),
+    "no-neighbours": (("ablation.neighbours", False),),
+    "no-predictor": (("ablation.predictor", False),),
+    "no-forwarding": (("ablation.result_forwarding", False),),
+    "no-tof": (("ablation.tof", False),),
+    "r3": (("stateplane.r3.enabled", True),),
+}
+SENSITIVITY = ("arrival_rate", "deadline", "input_size", "cars", "fog_capacity", "wan_bandwidth")
+FACTORS = (0.5, 0.75, 1.0, 1.25, 1.5)  # 16.4: 50 % to 150 % of the default
+
+
+def with_overrides(source: Mapping[str, object], overrides: Sequence[tuple[str, Any]]) -> dict[str, Any]:
+    """A copy of the config data with each dotted key set; a key that is not in the config is refused."""
+    out: dict[str, Any] = copy.deepcopy(dict(source))
+    for dotted, value in overrides:
+        *head, last = dotted.split(".")
+        node: Any = out
+        for part in head:
+            if not isinstance(node, dict) or part not in node:
+                raise ValueError(f"unknown config key {dotted!r}")
+            node = node[part]
+        if not isinstance(node, dict) or last not in node:
+            raise ValueError(f"unknown config key {dotted!r}")
+        node[last] = value
+    return out
+
+
+def sweep_points(source: Mapping[str, object], name: str) -> list[tuple[str, tuple[tuple[str, Any], ...]]]:
+    """The (variant, overrides) points of a 16.4 sweep: state-period (10 / 100 / 500 ms, R3 off and on;
+    stale_after stays 3 state periods), alpha (tof.alpha_sweep), or a sensitivity parameter (FACTORS)."""
+    if name == "state-period":
+        return [
+            (
+                f"state-{round(p * 1000)}ms{'-r3' if r3 else ''}",
+                (
+                    ("stateplane.state_period", p),
+                    ("stateplane.stale_after", 3 * p),
+                    ("stateplane.r3.enabled", r3),
+                ),
+            )
+            for p in (0.010, 0.100, 0.500)
+            for r3 in (False, True)
+        ]
+    if name == "alpha":
+        alphas: Sequence[float] = source["tof"]["alpha_sweep"]  # type: ignore[index]
+        return [(f"alpha-{a}", (("tof.alpha", a),)) for a in alphas]
+    if name in SENSITIVITY:
+        return [(f"{name}-x{f}", ((f"sweep.{name}", f),)) for f in FACTORS]
+    raise ValueError(f"unknown sweep {name!r}; known: state-period, alpha, {', '.join(SENSITIVITY)}")
+
+
+def w_points(ws: Sequence[float]) -> list[tuple[str, tuple[tuple[str, Any], ...]]]:
+    """16.4 w sweep: the w-conditioned agent run at the front's w_p values (input 48 and the reward)."""
+    return [(f"w-{w:g}", (("reward.w", w),)) for w in ws]
+
+
 # --- running ------------------------------------------------------------------------------------------------
 
 
 def run(source: Mapping[str, object], spec: RunSpec, out: Path) -> RunResult:
-    """Train (a learning method), then one episode per evaluation seed; each writes out/<run_id>/."""
+    """Train (a learning method), then one episode per evaluation seed; each writes out/<run_id>/, or
+    out/<variant>/<run_id>/ for an ablation or a sweep point (16.4)."""
+    source = with_overrides(source, spec.overrides)
+    out = out / spec.variant if spec.variant else out
     base = config_from_mapping(source)
     _check(base, spec)
     cfg = method_config(base, spec.method)
@@ -318,6 +389,9 @@ def run(source: Mapping[str, object], spec: RunSpec, out: Path) -> RunResult:
             "usage": "evaluation",
             "reward_w": cfg.reward.w,
             "training": tinfo,
+            "variant": spec.variant,
+            "overrides": [list(o) for o in spec.overrides],
+            "broker_messages": None,
             **report_constants(cfg, spec.scenario),
         }
         ref = None
@@ -333,6 +407,7 @@ def run(source: Mapping[str, object], spec: RunSpec, out: Path) -> RunResult:
         city = City(
             cfg, spec.scenario, method, seed, spec.n_cars, usage="evaluation", method_name=spec.method
         ).run(seconds)
+        extra["broker_messages"] = city.bus.published  # 9.2: broker load (the state-period experiment)
         if ref is not None:
             window = _window_check(cfg, city, ref)
             extra["knee"] = {k: window[k] for k in ("f1", "f2", "w", "is_knee", "replayed", "applied")}
