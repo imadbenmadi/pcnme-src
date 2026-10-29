@@ -30,7 +30,7 @@ def test_the_shannon_rate_at_300_m_by_hand(cfg: Config) -> None:
     lam = 299_792_458 / 5.9e9
     received = 1.0 * 10.0 * (lam / (4 * math.pi * 300)) ** 2
     snr = received / (10**-20.4 * 40e6)
-    assert shannon_rate(300.0, cfg.radio) == pytest.approx(40e6 * math.log2(1 + snr), rel=1e-12)
+    assert shannon_rate(300.0, cfg.radio) == round(40e6 * math.log2(1 + snr))  # whole bit/s
     assert shannon_rate(300.0, cfg.radio) == pytest.approx(539.1e6, rel=1e-3)
 
 
@@ -102,7 +102,7 @@ def test_a_hop_delay_is_uniform_on_its_interval_and_keyed_by_task_attempt_hop(cf
     assert stats.kstest((draws - lo) / (hi - lo), "uniform").pvalue > 1e-3
     t = TaskId("c01", 0, 5)
     u = streams.uniform("radio", *t, 0, hops.RADIO_UP)
-    assert hops.delay(streams, hops.RADIO_UP, (lo, hi), t, 0) == pytest.approx(lo + u * (hi - lo), rel=1e-15)
+    assert hops.delay(streams, hops.RADIO_UP, (lo, hi), t, 0) == round((lo + u * (hi - lo)) * 1e9) / 1e9  # ns
     # Another hop, another attempt or another task: another draw.
     d = hops.delay(streams, hops.RADIO_UP, (lo, hi), t, 0)
     assert d != hops.delay(streams, hops.RADIO_DOWN, (lo, hi), t, 0)

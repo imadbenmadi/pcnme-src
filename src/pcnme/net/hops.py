@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from types import MappingProxyType
 
+from pcnme.sim.quantize import to_ns
 from pcnme.sim.rng import KeyPart, RandomStreams
 
 RADIO_UP = "radio_up"  # car -> access point: the upload (and later the car's confirm)
@@ -44,7 +45,8 @@ def delay(
     task_id: tuple[KeyPart, ...],
     attempt: int,
 ) -> float:
-    """The delay of one crossing of `hop`, uniform on `interval` (s), keyed by (task_id, attempt, hop)."""
+    """The delay of one crossing of `hop`, uniform on `interval` (s), keyed by (task_id, attempt, hop), in
+    whole nanoseconds like every drawn time (sim/quantize.py)."""
     low, high = interval
     u = streams.uniform(STREAM[hop], *task_id, attempt, hop)
-    return low + u * (high - low)
+    return to_ns(low + u * (high - low))

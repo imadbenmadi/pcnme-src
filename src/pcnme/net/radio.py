@@ -11,18 +11,20 @@ import math
 
 from pcnme.config import Radio
 from pcnme.net.pipe import FifoPipe, Transfer
+from pcnme.sim.quantize import to_whole_bps
 
 SPEED_OF_LIGHT = 299_792_458.0  # m/s
 MIN_DISTANCE = 1.0  # m: engineering choice, free-space loss has no limit as d -> 0
 
 
 def shannon_rate(distance: float, radio: Radio) -> float:
-    """bit/s at `distance` metres from the access point (4.2, 18)."""
+    """bit/s at `distance` metres from the access point (4.2, 18), in whole bit/s: log2, pi and the car's
+    position (cos, sin) may differ in the last bit between platforms (sim/quantize.py)."""
     d = max(distance, MIN_DISTANCE)
     wavelength = SPEED_OF_LIGHT / radio.carrier_hz
     received = radio.tx_power_w * radio.gain_tx * radio.gain_rx * (wavelength / (4 * math.pi * d)) ** 2
     noise = radio.noise_w_per_hz * radio.bandwidth_hz  # 10^-20.4 W/Hz x B (C1)
-    return radio.bandwidth_hz * math.log2(1 + received / noise)
+    return to_whole_bps(radio.bandwidth_hz * math.log2(1 + received / noise))
 
 
 class RadioUplink:

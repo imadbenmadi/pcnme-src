@@ -1,9 +1,10 @@
 """The car app: creates tasks, keeps its latency clock, keeps the first result, confirms (final-design
 6A, 9.5, 14.1-14.3, 18).
 
-A car creates tasks at its arrival rate λ_car (18; STAND-IN for the process: Poisson, QUESTIONS Q12), each of
-a type drawn by the count mix, with the scenario's deadlines and the config's sizes. Its clock starts at
-creation (6A.1); the upload carries B_car = D - time since creation (6A.2). It keeps the first result per
+A car creates tasks at its arrival rate λ_car (18; Poisson, QUESTIONS Q12), from the run's fleet size, each
+of a type drawn by the count mix, with the scenario's deadlines and the config's sizes. Its clock starts at
+creation (6A.1); the upload starts after the encode time (timing.encode, 14.3, Q14) and carries
+B_car = D - time since creation (6A.2), so the encode time is counted once. It keeps the first result per
 task id until D + L_max and confirms every copy, naming the copy it kept (9.5).
 """
 
@@ -17,10 +18,8 @@ import numpy as np
 from pcnme.config import Config, DeadlineMode, Scenario, TaskClass
 from pcnme.ids import TaskId, TaskIds
 from pcnme.sim.clock import EventClock
+from pcnme.sim.quantize import to_ns
 from pcnme.sim.rng import RandomStreams
-
-# STAND-IN (QUESTIONS Q14): 14.3 puts the JPEG encode time inside L, but section 18 gives no number.
-ENCODE_TIME = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,14 +68,17 @@ class Car:
         clock: EventClock,
         position: tuple[float, float],
         on_task: Callable[[Task], None],
+        fleet: int,
     ) -> None:
+        """`fleet` is the run's city-wide number of cars: λ_car = the per-zone rate / cars per zone (18)."""
         self.car_id = car_id
         self.position = position
         self.clock = clock
         self._mode: DeadlineMode = scenario.deadlines
         self._types = list(config.task_types.values())
         self._shares = np.array([t.share for t in self._types])
-        self._rate = config.arrival_rate_per_car(scenario.name, config.cars.count[0])
+        self._rate = config.arrival_rate_per_car(scenario.name, fleet)
+        self._encode = config.timing.encode
         self._arrivals = streams.generator("arrivals", car_id)  # gaps and types, in order (sequential, Q4)
         self._ids = TaskIds(car_id)
         self._on_task = on_task
@@ -88,7 +90,7 @@ class Car:
         self._schedule_next(until)
 
     def _schedule_next(self, until: float) -> None:
-        gap = float(self._arrivals.exponential(1 / self._rate))  # STAND-IN (Q12): Poisson at lambda_car
+        gap = to_ns(float(self._arrivals.exponential(1 / self._rate)))  # Poisson (Q12), whole ns
         t = self.clock.now + gap
         if t <= until:
             self.clock.schedule(t, lambda: self._create(until))
@@ -109,11 +111,12 @@ class Car:
         self._tasks[task.task_id] = task
         self.clock.schedule(task.created + task.deadline + task.l_max, lambda: self._forget(task.task_id))
         self._schedule_next(until)
-        self._on_task(task)
+        self.clock.schedule(task.created + self._encode, lambda: self._on_task(task))  # upload (14.3, Q14)
 
     def budget(self, task: Task, now: float) -> float:
-        """B_car = D - time since creation, sent with the upload (6A.2); encode time inside it (Q14)."""
-        return task.deadline - (now - task.created) - ENCODE_TIME
+        """B_car = D - time since creation, sent with the upload (6A.2). The upload starts after the encode
+        time, so `now - created` already holds it (Q14)."""
+        return task.deadline - (now - task.created)
 
     def receive(self, result: Result, now: float) -> Confirm | None:
         """A result copy reaches the car. The first one per task id is kept; every copy is confirmed with the
