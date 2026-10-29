@@ -177,15 +177,18 @@ def test_hop_names_are_fixed_strings_in_one_place() -> None:
         hops.ACK_UP,
         hops.REPLY_BH,
         hops.REPLY_WAN,
+        hops.CALL_BH,
+        hops.CALL_WAN,
     ]
     assert len(set(names)) == len(names)
     assert all(isinstance(n, str) for n in names)
     assert (
         hops.STREAM[hops.RADIO_UP] == hops.STREAM[hops.RADIO_DOWN] == hops.STREAM[hops.ACK_UP] == "radio"
     )  # Q5
-    assert {hops.STREAM[h] for h in (hops.BH_OUT, hops.WAN_IN, hops.REPLY_BH, hops.REPLY_WAN)} == {
-        "link_delays"
-    }
+    assert {
+        hops.STREAM[h]
+        for h in (hops.BH_OUT, hops.WAN_IN, hops.REPLY_BH, hops.REPLY_WAN, hops.CALL_BH, hops.CALL_WAN)
+    } == {"link_delays"}
     assert set(hops.STREAM) == set(names)  # MQTT hops are drawn in the bus (M3.1)
 
 
