@@ -12,10 +12,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from pcnme.car.car import Car
+from pcnme.car.car import Car, Task
 from pcnme.car.placement import standin_uniform_disk
 from pcnme.config import Config
 from pcnme.energy import EnergyModel
+from pcnme.ids import TaskId
 from pcnme.methods.simple import Greedy, Random
 from pcnme.net.pipe import FifoPipe
 from pcnme.node.timetable import RunTimeTable, lognormal
@@ -32,7 +33,9 @@ class Run:
     cfg: Config
     scenario: str
     seconds: float
-    records: list[TaskRecord] = field(default_factory=list)
+    records: list[TaskRecord] = field(default_factory=list)  # one per close, in close order (then sorted)
+    uploaded: list[TaskId] = field(default_factory=list)  # every task a car handed to the zone
+    open_at_end: int = 0  # anchor rows still open when the run ends
 
 
 def run_one_zone(
@@ -44,7 +47,8 @@ def run_one_zone(
     n_cars: int | None = None,
     shape: Callable[..., Any] = lognormal,
 ) -> Run:
-    """`n_cars` defaults to the zone's share of the smallest city fleet: cars.count[0] / 4 active zones."""
+    """`n_cars` (the zone's cars) defaults to its share of the smallest city fleet, cars.count[0] / 4 active
+    zones; the city fleet is then n_cars x 4, which sets λ_car (18)."""
     clock = EventClock()
     streams = RandomStreams.from_config(cfg, seed, "training")
     table = RunTimeTable.from_config(cfg, shape)
@@ -74,33 +78,51 @@ def run_one_zone(
         on_close=run.records.append,
     )
     centre = cfg.layout.zone_positions_m["z1"]
-    count = n_cars if n_cars is not None else cfg.cars.count[0] // len(cfg.layout.active_zones)
+    zones = len(cfg.layout.active_zones)
+    count = n_cars if n_cars is not None else cfg.cars.count[0] // zones
+
+    def upload(task: Task) -> None:
+        run.uploaded.append(task.task_id)
+        zone.upload(task)
+
     for i in range(count):
         car_id = f"c{i:03d}"
         pos = standin_uniform_disk(streams, car_id, centre, cfg.layout.zone_radius_m)  # STAND-IN (Q13)
-        car = Car(car_id, cfg, s, streams, clock, position=pos, on_task=zone.upload)
+        car = Car(car_id, cfg, s, streams, clock, position=pos, on_task=upload, fleet=count * zones)
         zone.add_car(car, math.dist(pos, centre))
         car.start(until=seconds)
     clock.run_until(seconds + DRAIN)
+    run.open_at_end = zone.anchor.open_count
     run.records.sort(key=lambda r: r.task.task_id)
     return run
 
 
+SUM_TOLERANCE = 1e-12  # s: L and its parts are sums of the same terms in another order (|diff| <= 7e-15 seen)
+
+
 def check_invariants(run: Run) -> list[str]:
-    """Every task closes exactly once; L = the sum of its parts; no hard task counts as on time after D;
-    energy >= 0. Returns the violations (empty when all hold)."""
+    """Every uploaded task closes exactly once and no anchor row is left open; L = encode + the sum of its
+    parts; no hard task counts as on time after D; energy >= 0. Returns the violations (empty when all
+    hold)."""
     bad: list[str] = []
     ids = [r.task.task_id for r in run.records]
     if len(ids) != len(set(ids)):
         bad.append("a task closed twice")
+    for missing in sorted(set(run.uploaded) - set(ids)):
+        bad.append(f"{missing} never closed")
+    for extra in sorted(set(ids) - set(run.uploaded)):
+        bad.append(f"{extra} closed but never uploaded")
+    if run.open_at_end:
+        bad.append(f"{run.open_at_end} anchor rows still open")
     em = EnergyModel(run.cfg)
+    encode = run.cfg.timing.encode
     for r in run.records:
         if r.outcome is None:
-            bad.append(f"{r.task.task_id} never closed")
+            bad.append(f"{r.task.task_id} closed with no outcome")
         if r.confirm is not None:
-            parts = sum(r.parts.values())
-            if r.confirm.latency < parts - 1e-9:
-                bad.append(f"{r.task.task_id}: L {r.confirm.latency} < parts {parts}")
+            parts = encode + sum(r.parts.values())
+            if abs(r.confirm.latency - parts) > SUM_TOLERANCE:
+                bad.append(f"{r.task.task_id}: L {r.confirm.latency} != parts {parts}")
             if r.task.cls == "hard" and r.outcome == "on_time" and r.confirm.latency > r.task.deadline:
                 bad.append(f"{r.task.task_id}: hard on time after D")
         e = em.of_record(r)
