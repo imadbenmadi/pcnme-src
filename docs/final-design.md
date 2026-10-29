@@ -232,7 +232,7 @@ Three loops run all the time: **GPS** (each car → its serving zone every 100 m
 
 1. **Create.** The car creates the task: type (which fixes its time-table rows), class (hard or soft), deadline D, compressed input (JPEG per frame, N10). The car starts its own latency clock at creation.
 2. **Upload.** The car uploads to its serving zone over the radio pipe, with B_car = D − time since creation. A task exists only once the whole upload arrived (hole 12): that zone becomes the anchor, stores the input and answers task id + anchor id. A cut upload leaves nothing behind; the car re-uploads to the zone it reaches next.
-3. **Anchor deadline.** The whole upload has arrived at t_rx (anchor clock). The anchor sets the task's deadline on its own clock, taking off the upload time: W_radio = how much longer the upload took than its push alone, from sharing the air with the other uploads in progress (t_rx − δ_radio − t_start − S ÷ R_car; known exactly, because the zone runs its uplink; CHANGES C6), S ÷ R_car = its push time alone at the car's rate, δ̂_radio = the radio delay:
+3. **Anchor deadline.** The whole upload has arrived at t_rx (anchor clock). The anchor sets the task's deadline on its own clock, taking off the upload time: W_radio = the time from the upload's first bit to its last, minus S ÷ R_car (the extra time from sharing the air; known exactly, because the zone runs its uplink; CHANGES C6), S ÷ R_car = its push time alone at the car's rate, δ̂_radio = the radio delay:
 
 ```latex
 d_A = t_{rx} + B_{car} - \hat{U}_{up}, \qquad \hat{U}_{up} = W_{radio} + S / R_{car} + \hat{\delta}_{radio}
