@@ -441,6 +441,8 @@ class Ablation:
     predictor: bool
     result_forwarding: bool
     tof: bool
+    expert: str  # keep | fade | clear
+    online: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -1083,6 +1085,8 @@ def _ablation(n: _Node) -> Ablation:
             predictor=n.flag("predictor"),
             result_forwarding=n.flag("result_forwarding"),
             tof=n.flag("tof"),
+            expert=n.text("expert", ("keep", "fade", "clear")),
+            online=n.flag("online"),
         )
 
 

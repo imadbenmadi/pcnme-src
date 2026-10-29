@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 import torch
@@ -108,6 +108,8 @@ class OnlineAgent:
         self.opt = torch.optim.Adam(self.online.parameters(), lr=rl.lr)
         self.chain = OnlineChain(self.cfg.dqfd.n_step, rl.gamma_per_tau, rl.tau)
         self.eps = rl.epsilon_online if self.epsilon is None else self.epsilon
+        self._loss_cfg: tuple[float, Config] = (1.0, self.cfg)
+        self._fade()
 
     # --- acting (11.2) -------------------------------------------------------------------------------------
 
@@ -165,10 +167,40 @@ class OnlineAgent:
             if self.learning and self.new_samples * per >= self.updates + 1:
                 self.update()
 
+    # --- the expert data online (16.4: kept / shrinking share + fading margin / cleared) ------------------
+
+    def margin_scale(self) -> float:
+        """keep and clear: 1. fade: 1 - the share of the training budget used, linearly to 0; a deployed agent
+        (no budget) has faded out."""
+        if self.cfg.ablation.expert != "fade":
+            return 1.0
+        if self.budget is None:
+            return 0.0
+        return max(0.0, 1.0 - self.budget.used / self.budget.total)
+
+    def loss_config(self) -> Config:
+        """The config of the loss: the margin weight λ_E x margin_scale() when fading."""
+        f = self.margin_scale()
+        if f == 1.0:
+            return self.cfg
+        if self._loss_cfg[0] != f:
+            d = self.cfg.dqfd
+            self._loss_cfg = (f, replace(self.cfg, dqfd=replace(d, lambda_margin=d.lambda_margin * f)))
+        return self._loss_cfg[1]
+
+    def _fade(self) -> None:
+        """The expert part's sampling scale follows margin_scale(), rebuilt every 1 % of the budget."""
+        f = self.margin_scale()
+        if f != self.replay.expert_scale and (abs(f - self.replay.expert_scale) >= 0.01 or f == 0.0):
+            self.replay.scale_expert(f)
+
     def update(self) -> None:
         rl, per = self.cfg.rl, self.cfg.dqfd.per
+        self._fade()
         drawn = self.replay.draw(rl.batch, per.beta_final)
-        parts = dqfd_loss(self.online, self.target, Batch.of(drawn.samples, drawn.weights), self.cfg)
+        parts = dqfd_loss(
+            self.online, self.target, Batch.of(drawn.samples, drawn.weights), self.loss_config()
+        )
         self.opt.zero_grad()
         parts.total.backward()
         self.opt.step()

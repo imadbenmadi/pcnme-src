@@ -85,9 +85,13 @@ def train_d3qn(
     pretrain_updates: int | None = None,
     episode_hook: Callable[[Episode], None] | None = None,
 ) -> Trained:
-    """PCNME, D3QN from scratch, or D3QN + greedy expert (16.1)."""
+    """PCNME, D3QN from scratch, or D3QN + greedy expert (16.1). 16.4 ablations: the expert data cleared
+    after pretraining (ablation.expert clear), or pretraining only (ablation.online false: no online
+    episode, the budget unused)."""
     if method not in D3QN_FAMILY:
         raise ValueError(f"{method} is not a D3QN method")
+    if not cfg.ablation.online and method == "d3qn-scratch":
+        raise ValueError("pretraining only needs a method that pretrains (pcnme, d3qn-greedy)")
     seeds = iter(training_seeds(cfg, seed))
     first = next(iter(training_seeds(cfg, seed)))
     init, rng = _seed(cfg, method, "init", first)
@@ -101,7 +105,8 @@ def train_d3qn(
                 f"{method} needs demonstrations ({'knee' if method == 'pcnme' else 'greedy'} plans)"
             )
         pre = pretrain(cfg, demos, rng, init, updates=pretrain_updates)
-        net, expert, agreement = pre.network, tuple(s for _, s in demos), pre.best_agreement
+        net, agreement = pre.network, pre.best_agreement
+        expert = () if cfg.ablation.expert == "clear" else tuple(s for _, s in demos)
     budget = Budget(budget_decisions)
     schedule = cfg.rl.epsilon_baselines if method == "d3qn-scratch" else None  # 18: baselines 1 -> 0.01
     agents = {
@@ -109,7 +114,7 @@ def train_d3qn(
     }
     out = Trained(method, {}, expert, budget, agreement=agreement, schedule=schedule)
     length = cfg.fast_mode.episode_length if seconds is None else seconds
-    while not budget.exhausted:
+    while cfg.ablation.online and not budget.exhausted:
         (ep,) = train_online(cfg, agents, scenario, [next(seeds)], length, n_cars)
         out.episodes.append(ep)
         if episode_hook is not None:
@@ -120,10 +125,13 @@ def train_d3qn(
 
 def deployed_d3qn(cfg: Config, trained: Trained, zones: Sequence[str], seed: int) -> dict[str, OnlineAgent]:
     """The trained agents deployed for one evaluation episode: each zone from its own weights, learning
-    online with ε online and its expert data kept (13.5; QUESTIONS Q42 stand-in)."""
+    online with ε online and its expert data kept (13.5; QUESTIONS Q42 stand-in); frozen when pretraining
+    only (16.4)."""
     out = {}
     for z in zones:
         net = make_network(cfg, 0)
         net.load_state_dict(trained.states[z])
-        out[z] = OnlineAgent(cfg, z, net, trained.expert, seed=seed, usage="evaluation")
+        out[z] = OnlineAgent(
+            cfg, z, net, trained.expert, seed=seed, usage="evaluation", learn=cfg.ablation.online
+        )
     return out

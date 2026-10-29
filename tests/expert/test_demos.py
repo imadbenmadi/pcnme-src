@@ -181,3 +181,51 @@ def test_the_stored_samples_load_back_as_they_were(demo: Demonstration, tmp_path
     assert {g for g, _ in loaded} == {("S2", 0)}
     assert any(s.hasn and s.m == 10 for _, s in loaded)  # full 10-step chains
     assert all(s.expert == d.expert for (_, s), d in zip(loaded, demo.transitions, strict=True))
+
+
+# --- 16.4: the expert filter and the random-plan expert (QUESTIONS Q49) -------------------------------------
+
+
+def test_the_expert_filter_by_hand() -> None:
+    from pcnme.expert.demos import beats_greedy
+
+    # w 0.5: knee cost 0.5 x 0.2 + 0.5 x 1.0 = 0.6; greedy 0.5 x 0.3 + 0.5 x 1.1 = 0.7: 14.3 % better
+    assert beats_greedy((0.2, 1.0), (0.3, 1.1), 0.5, 0.14)
+    assert not beats_greedy((0.2, 1.0), (0.3, 1.1), 0.5, 0.15)
+    assert beats_greedy((0.4, 1.2), (0.3, 1.1), 0.5, 0.0)  # margin 0: no filter, even a worse knee stays
+
+
+def test_the_rows_carry_the_objectives(demo: Demonstration, window: Window) -> None:
+    r = rows([demo])[0]
+    assert (r["f1"], r["f2"]) == (demo.objectives.f1, demo.objectives.f2)
+    assert (r["greedy_f1"], r["greedy_f2"]) == (window.greedy.f1, window.greedy.f2)
+
+
+def test_loading_filters_windows_whose_knee_does_not_beat_greedy(
+    cfg: Config, window: Window, tmp_path: Path
+) -> None:
+    from dataclasses import replace
+
+    from pcnme.expert.demos import load_samples
+
+    good = replace(replay(cfg, window, window.greedy_genome, 0.5), is_knee=True)  # the knee = greedy: 0 %
+    path = write(tmp_path / "w0.parquet", [good])
+    assert len(load_samples([path])) == len(good.transitions)
+    assert len(load_samples([path], 0.0)) == len(good.transitions)
+    assert load_samples([path], 0.01) == []  # not 1 % better than greedy: the window is left out
+    # only the knee counts: another front plan far better than greedy does not keep the window
+    from pcnme.expert.window import Objectives
+
+    other = replace(good, plan=1, is_knee=False, objectives=Objectives(0.01, 0.01, good.objectives.n, 0))
+    both = write(tmp_path / "w0b.parquet", [good, other])
+    assert load_samples([both], 0.01) == []
+
+
+def test_a_random_plan_teacher(cfg: Config) -> None:
+    from pcnme.expert.demos import random_plan
+
+    w = discover(cfg, WindowSpec("S2", window_seed(cfg, "S2", 0), 0, n_cars=40))
+    g1, g2 = random_plan(cfg, w), random_plan(cfg, w)
+    assert g1 == g2 and len(g1) == len(w.tasks)  # from the window's own stream: the same plan every time
+    assert all(0 <= g < len(t.options) for g, t in zip(g1, w.tasks, strict=True))
+    assert g1 != w.greedy_genome
