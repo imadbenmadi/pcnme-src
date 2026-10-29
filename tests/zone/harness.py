@@ -122,3 +122,57 @@ def task_now(s: System, kind: str, seq: int = 1, mode: str = "loose") -> Task:
     s.car._tasks[task.task_id] = task  # the car knows its own task (as Car._create does)
     s.clock.schedule(task.created + task.deadline + task.l_max, lambda: s.car._forget(task.task_id))
     return task
+
+
+@dataclass
+class City:
+    cfg: Config
+    clock: EventClock
+    bus: Bus
+    cloud: Cloud
+    zones: dict[str, Zone]
+    closed: list[TaskRecord]
+
+
+def city(
+    cfg: Config,
+    placement: Callable[[str], Any],
+    zone_ids: tuple[str, ...] = ("z1", "z2", "z3", "z4"),
+    mode: str = "loose",
+    seed: int = 2000,
+    scenario: str = "S2",
+    shape: Callable[..., Any] = deterministic,
+) -> City:
+    """Zones on one bus and one WAN with the cloud; neighbours from the layout (7.5); no cars."""
+    from pcnme.zone.layout import Site
+
+    clock = EventClock()
+    streams = RandomStreams.from_config(cfg, seed, "training")
+    bus = Bus(clock, streams, cfg.links.broker_extra_delay)
+    table = RunTimeTable.from_config(cfg, shape)
+    wan = FifoPipe(cfg.derived.b_wan)
+    cloud = Cloud(clock, streams, cfg, table, bus)
+    r = cfg.layout.zone_radius_m
+    sites = {z: Site(z, *cfg.layout.zone_positions_m[z], r) for z in zone_ids}
+    fog = cfg.scenarios[scenario].fog
+    closed: list[TaskRecord] = []
+    zones = {
+        z: Zone(
+            z,
+            clock,
+            streams,
+            cfg,
+            table,
+            wan,
+            cloud,
+            placement(z),
+            mode,
+            hw_name=fog[z],
+            bus=bus,  # type: ignore[arg-type]
+            start_sites=tuple(s for o, s in sites.items() if o != z),
+            fog_classes=fog,
+            on_close=closed.append,
+        )
+        for z in zone_ids
+    }
+    return City(cfg, clock, bus, cloud, zones, closed)
