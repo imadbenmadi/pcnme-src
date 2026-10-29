@@ -115,3 +115,38 @@ def test_beta_is_annealed_to_one(cfg: Config) -> None:
 def test_an_empty_replay_cannot_draw(cfg: Config) -> None:
     with pytest.raises(ValueError):
         Replay(small(cfg, 2), np.random.default_rng(0)).draw(1, 1.0)
+
+
+# --- the expert data online (16.4: kept / shrinking share + fading margin / cleared) ------------------------
+
+
+def test_set_many_matches_one_by_one() -> None:
+    a, b = SumTree(5), SumTree(5)
+    for i, v in enumerate((1.0, 2.0, 3.0, 4.0, 5.0)):
+        a.set(i, v)
+        b.set(i, 1.0)
+    b.set_many(0, np.array([1.0, 2.0, 3.0]))
+    b.set(3, 4.0)
+    b.set(4, 5.0)
+    assert np.array_equal(a.tree, b.tree) and b.total == 15.0
+
+
+def test_a_scaled_expert_part_is_drawn_less(cfg: Config) -> None:
+    # two expert and two own transitions, all at priority 1: the expert share of the total is 2/4; scaled by
+    # 0.5 it is 1/3; by 0 the expert part is never drawn, and an update keeps the scale
+    r = Replay(small(cfg, 4), np.random.default_rng(2), [sample(-1, True), sample(-2, True)])
+    r.add(sample(1))
+    r.add(sample(2))
+    assert r.tree.total == pytest.approx(4.0)
+    r.scale_expert(0.5)
+    assert r.tree.total == pytest.approx(3.0) and r.tree.get(0) == pytest.approx(0.5)
+    r.update([0], [0.0])  # p = 0 + ε_d = 1: stored as 1^α x 0.5
+    assert r.tree.get(0) == pytest.approx(0.5) and r.expert_scale == 0.5
+    r.scale_expert(0.0)
+    drawn = r.draw(200, 1.0)
+    assert not any(r.is_expert(i) for i in drawn.index)
+    r.update([1], [8.0])  # p = 9 while scaled to 0: the unscaled 9^α is kept for later
+    r.scale_expert(1.0)
+    assert r.tree.get(0) == pytest.approx(1.0) and r.tree.get(1) == pytest.approx(9.0**r.alpha)
+    with pytest.raises(ValueError):
+        r.scale_expert(1.5)

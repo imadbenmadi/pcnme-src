@@ -60,6 +60,7 @@ class RunSpec:
     nsga_population: int | None = None  # knee-reference (nsga2.population)
     nsga_generations: int | None = None  # knee-reference (nsga2.generations)
     workers: int = 1  # knee-reference: NSGA-II evaluations in parallel
+    teacher: str = "knee"  # pcnme: "random" = the 16.4 random-plan expert, made from `windows` windows
     overrides: tuple[tuple[str, Any], ...] = ()  # (dotted config key, value): ablations and sweeps (16.4)
     variant: str = ""  # the ablation's or sweep point's label: runs go to out/<variant>/ (empty: the design)
 
@@ -113,7 +114,11 @@ def budget_of(cfg: Config, spec: RunSpec) -> int:
 def _check(cfg: Config, spec: RunSpec) -> None:
     if spec.method not in METHODS:
         raise ValueError(f"unknown method {spec.method!r}; known: {', '.join(METHODS)}")
-    if spec.overrides and not spec.variant:
+    if spec.teacher not in TEACHERS or (spec.teacher != "knee" and spec.method != "pcnme"):
+        raise ValueError(f"teacher {spec.teacher!r}: pcnme only, one of {', '.join(TEACHERS)}")
+    if not cfg.ablation.online and spec.method not in ("pcnme", "d3qn-greedy"):
+        raise ValueError(f"pretraining only: {spec.method} does not pretrain (pcnme, d3qn-greedy do)")
+    if (spec.overrides or spec.teacher != "knee") and not spec.variant:
         raise ValueError(
             "an ablation or a sweep point needs a variant label (its runs would mix with the design's)"
         )
@@ -132,16 +137,22 @@ def _check(cfg: Config, spec: RunSpec) -> None:
 # --- training -----------------------------------------------------------------------------------------------
 
 
-def greedy_demos(cfg: Config, scenario: str, windows: int, n_cars: int | None) -> Demos:
-    """D3QN + greedy expert's teacher (16.1): the greedy plan of each of the scenario's first `windows`
-    windows (NSGA-II and demonstrations seeds), replayed as demonstrations (13.4)."""
-    from pcnme.expert.demos import greedy_demonstrations
+def plan_demos(cfg: Config, scenario: str, windows: int, n_cars: int | None, teacher: str) -> Demos:
+    """A rule's plan of each of the scenario's first `windows` windows (NSGA-II and demonstrations seeds),
+    replayed as demonstrations (13.4) with w*: greedy (D3QN + greedy expert's teacher, 16.1) or a random
+    valid plan (16.4 random-plan expert; QUESTIONS Q49 for its w)."""
+    from pcnme.expert.demos import greedy_demonstrations, random_plan, replay
     from pcnme.expert.window import WindowSpec, discover, window_seed
 
     out = []
     for k in range(windows):
         w = discover(cfg, WindowSpec(scenario, window_seed(cfg, scenario, k), k, n_cars))
-        out += [((scenario, k), t.sample) for t in greedy_demonstrations(cfg, w).transitions]
+        demo = (
+            greedy_demonstrations(cfg, w)
+            if teacher == "greedy"
+            else replay(cfg, w, random_plan(cfg, w), cfg.reward.w)
+        )
+        out += [((scenario, k), t.sample) for t in demo.transitions]
     return out
 
 
@@ -157,13 +168,15 @@ def train(cfg: Config, spec: RunSpec) -> Trained | None:
         from pcnme.methods.learners import train_d3qn
 
         demos: Demos = ()
-        if spec.method == "pcnme":
+        k = cfg.nsga2.windows_per_scenario if spec.windows is None else spec.windows
+        if spec.method == "pcnme" and spec.teacher == "random":
+            demos = plan_demos(cfg, spec.scenario, k, spec.n_cars, "random")
+        elif spec.method == "pcnme":
             if not spec.demos:
                 raise ValueError("pcnme needs its knee demonstrations (--demos, from tools/make_demos.py)")
-            demos = load_samples(spec.demos)
+            demos = load_samples(spec.demos, cfg.nsga2.expert_filter_margin)  # 16.4 expert filter
         elif spec.method == "d3qn-greedy":
-            k = cfg.nsga2.windows_per_scenario if spec.windows is None else spec.windows
-            demos = greedy_demos(cfg, spec.scenario, k, spec.n_cars)
+            demos = plan_demos(cfg, spec.scenario, k, spec.n_cars, "greedy")
         return train_d3qn(
             cfg, spec.method, spec.scenario, zones, budget, demos=demos,
             pretrain_updates=spec.pretrain_updates, **common,
@@ -316,7 +329,11 @@ ABLATIONS: dict[str, tuple[tuple[str, Any], ...]] = {
     "no-forwarding": (("ablation.result_forwarding", False),),
     "no-tof": (("ablation.tof", False),),
     "r3": (("stateplane.r3.enabled", True),),
+    "expert-fade": (("ablation.expert", "fade"),),  # shrinking share + fading margin (Fading-BC)
+    "expert-clear": (("ablation.expert", "clear"),),
+    "pretrain-only": (("ablation.online", False),),  # Only-BC
 }
+TEACHERS = ("knee", "random")  # pcnme's teacher: its knee demonstrations, or a random valid plan (16.4)
 SENSITIVITY = ("arrival_rate", "deadline", "input_size", "cars", "fog_capacity", "wan_bandwidth")
 FACTORS = (0.5, 0.75, 1.0, 1.25, 1.5)  # 16.4: 50 % to 150 % of the default
 

@@ -83,7 +83,10 @@ def test_an_override_needs_a_variant(source: dict[str, Any], tmp_path: Path) -> 
         run(source, RunSpec("S1", "greedy", (3000,), overrides=(("tof.alpha", 0.5),)), tmp_path)
 
 
-@pytest.mark.parametrize("name", sorted(ABLATIONS))
+AGENT = ("expert-fade", "expert-clear", "pretrain-only")  # need a method that pretrains: below
+
+
+@pytest.mark.parametrize("name", sorted(set(ABLATIONS) - set(AGENT)))
 def test_every_named_ablation_runs_in_its_own_directory(tmp_path: Path, name: str) -> None:
     (d,) = cli(tmp_path, "greedy", "--ablation", name)
     assert d.parent.name == name and d.name == "S1-greedy-3000-fast"
@@ -139,3 +142,68 @@ def test_the_w_sweep_sets_input_48(tmp_path: Path) -> None:
     for d, w in zip(dirs, (0.25, 1.0), strict=True):
         assert info(d)["reward_w"] == w
         assert {r["x_w"] for r in pq.read_table(d / "decisions.parquet").to_pylist()} == {w}
+
+
+# --- the agent's ablations (16.4): expert data online, pretraining only, the random-plan expert ----------
+
+LEARN = [
+    "--windows",
+    "2",  # the held-out split needs 2 windows
+    "--pretrain-updates",
+    "20",
+    "--budget",
+    "40",
+    "--train-seconds",
+    "1",
+]
+
+
+@pytest.mark.parametrize("name", AGENT)
+def test_the_expert_ablations_on_a_tiny_run(tmp_path: Path, name: str) -> None:
+    pytest.importorskip("torch")
+    (d,) = cli(tmp_path, "d3qn-greedy", "--ablation", name, *LEARN)
+    t = info(d)["training"]
+    assert d.parent.name == name and t["agreement"] is not None
+    if name == "pretrain-only":
+        assert t["budget"]["used"] == 0 and t["episodes"] == []
+    else:
+        assert t["budget"]["used"] == 40
+    assert (t["expert_transitions"] == 0) == (name == "expert-clear")
+
+
+def test_pretraining_only_is_refused_for_a_method_that_does_not_pretrain(tmp_path: Path) -> None:
+    assert main(["run", "--scenario", "S1", "--method", "greedy", *TINY, "--ablation", "pretrain-only"]) == 2
+    assert main(["run", "--scenario", "S1", "--method", "qeco", *TINY, "--ablation", "pretrain-only"]) == 2
+
+
+def test_the_random_plan_expert(tmp_path: Path, source: dict[str, Any]) -> None:
+    pytest.importorskip("torch")
+    (d,) = cli(tmp_path, "pcnme", "--teacher", "random", *LEARN)
+    t = info(d)["training"]
+    assert d.parent.name == "random-expert" and t["expert_transitions"] > 0 and t["budget"]["used"] == 40
+    with pytest.raises(ValueError, match="teacher"):
+        run(source, RunSpec("S1", "d3qn-greedy", (3000,), teacher="random", variant="x"), tmp_path)
+    with pytest.raises(ValueError, match="variant"):
+        run(source, RunSpec("S1", "pcnme", (3000,), teacher="random"), tmp_path)
+
+
+def test_the_expert_filter_drops_windows_at_load(tmp_path: Path, source: dict[str, Any]) -> None:
+    pytest.importorskip("torch")
+    from dataclasses import replace
+
+    from pcnme.config import config_from_mapping
+    from pcnme.expert.demos import replay, write
+    from pcnme.expert.window import WindowSpec, discover, window_seed
+
+    cfg = config_from_mapping(source)
+    paths = []
+    for k in range(2):
+        w = discover(cfg, WindowSpec("S1", window_seed(cfg, "S1", k), k, 10))
+        demo = replace(replay(cfg, w, w.greedy_genome, 0.5), is_knee=True)  # the knee = greedy: 0 % better
+        paths.append(write(tmp_path / f"S1-w{k}.parquet", [demo]))
+    spec = RunSpec("S1", "pcnme", (3000,), seconds=1.0, n_cars=10, budget=20, train_seconds=1.0,
+                   demos=tuple(paths), pretrain_updates=20)  # fmt: skip
+    assert info(run(source, spec, tmp_path / "keep").runs[0])["training"]["expert_transitions"] > 0
+    flt = replace(spec, overrides=(("nsga2.expert_filter_margin", 0.05),), variant="filter-5")
+    with pytest.raises(ValueError, match="demonstrations"):  # both windows filtered out
+        run(source, flt, tmp_path / "filter")
