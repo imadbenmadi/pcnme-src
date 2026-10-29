@@ -32,6 +32,9 @@ cars:
     light_cycle_s: 60.0          # STAND-IN (QUESTIONS Q24): half the cycle green per axis
     stop_probability: 0.1        # STAND-IN (Q24): chance of a random stop at an intersection
     stop_s: [5.0, 20.0]          # STAND-IN (Q24): its duration, uniform
+  calibration: {seconds: 120.0, seed: 2999}   # R: the positions-only map run (tools/calibrate_map.py); the last training seed
+  calibrated:                    # C (Q29): tools/calibrate_map.py on the dev map, smallest fleet
+    coverage: {low: 0.8461, high: 0.8400}      # share of task creations with coverage; lambda_car / coverage
 
 radio:                           # P: VFC (Friis free-space + Shannon)
   bandwidth: 40.0e6
