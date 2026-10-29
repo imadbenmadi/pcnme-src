@@ -201,3 +201,15 @@ def test_a_re_decision_never_takes_the_gene(cfg: Config) -> None:
     assert p.choose(ctx) == "cloud" and p.applied == {ctx.task.task_id}
     assert p.choose(ctx) == "here"
     assert p.first == {ctx.task.task_id: "cloud"}
+
+
+def test_a_rule_makes_only_the_first_decision_of_its_tasks(cfg: Config) -> None:
+    # C9: the energy-greedy plan's rule decides a window task's first decision; re-decisions are greedy's.
+    from pcnme.expert.window import PlanPlacement
+    from tests.agent.test_inputs import make_ctx
+
+    ctx = make_ctx(cfg, "T4")
+    p = PlanPlacement(cfg, "z1", {}, rule=lambda c: "cloud", ruled=frozenset({ctx.task.task_id}))
+    assert p.choose(ctx) == "cloud" and p.choose(ctx) == "here"
+    other = PlanPlacement(cfg, "z1", {}, rule=lambda c: "cloud", ruled=frozenset())
+    assert other.choose(ctx) == "here"  # not a ruled task: greedy
