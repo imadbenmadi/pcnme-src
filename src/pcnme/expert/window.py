@@ -350,6 +350,8 @@ class WarmStart:
 
     def evaluate(self, genome: Sequence[int]) -> Objectives:
         """13.2.3 from the shared warm-up: the same objectives as evaluate(), exactly."""
+        if sys.platform == "win32":  # no fork (and mypy checks this file for Windows too)
+            raise RuntimeError("WarmStart needs fork (Linux or WSL)")
         read, write = os.pipe()
         pid = os.fork()
         if pid == 0:  # the child: finish this plan, send the objectives, leave without cleanup
