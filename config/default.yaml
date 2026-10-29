@@ -110,6 +110,11 @@ stateplane:
   state_period: 0.100
   stale_after: 0.300             # 3 x state period
   wan_ewma_lambda: 0.2           # R
+  r3:                            # 9.2 R3, event-driven state (an extension; the 16.4 state-period experiment)
+    enabled: false               # final doc: off; the state period alone
+    delta: 2                     # STAND-IN (QUESTIONS Q47): publish when a slot type's queue changed by >= delta tasks
+    min_interval: 0.010          # final doc 9.2: at most every 10 ms
+    heartbeat: 0.100             # final doc 9.2: at least every 100 ms
 
 scheduler:
   reserve_hard_r: 4              # R
@@ -195,6 +200,22 @@ fast_mode:
   early_decisions: 1000          # STAND-IN (QUESTIONS Q46): N of early-stage performance (16.3, Zhang et al.), about
                                  # the first 6 % of an S2 episode's decisions
   seed_split: {nsga2_and_demos: 1000-1999, training: 2000-2999, evaluation: 3000-3999}   # Maus et al.: disjoint
+
+sweep:                           # 16.4 sensitivity sweeps: one factor at a time, 0.5-1.5 (1 = the design). The
+                                 # calibrated values (B_WAN, the arrival rate per zone and per car, E_ref) are
+                                 # computed at factor 1, then only the swept quantity is scaled (QUESTIONS Q48)
+  arrival_rate: 1.0              # every scenario's arrival rate per zone
+  deadline: 1.0                  # every deadline D (and L_max = D)
+  input_size: 1.0                # every task type's input
+  cars: 1.0                      # the fleet, each car at the default fleet's arrival rate (the load scales)
+  fog_capacity: 1.0              # c_gpu and c_cpu of every fog class (rounded, at least 1)
+  wan_bandwidth: 1.0             # B_WAN
+
+ablation:                        # final-design 16.4 switches; every default is the design itself
+  neighbours: true               # false: here + cloud only (the 4 neighbour positions empty)
+  predictor: true                # false: no predictor (exit = inf, next zone = stays)
+  result_forwarding: true        # false: the result reaches the car only through its anchor (9.6)
+  tof: true                      # false: no TOF-Broker (alpha = inf: no boulders; B_WAN unchanged)
 
 scenarios:                       # rho_fog = per-zone arrival rate x mean F-GPU GPU run of the whole mix / c_gpu
                                  # (boulders included, final doc 16.2): S4-S6 keep S2's arrival rate

@@ -181,7 +181,8 @@ class City:
                 attach(zone)
         self.grid = RoadGrid.from_area(lay.area_m, cfg.cars.grid.block_m)
         hot_nodes = self.grid.within(lay.zone_positions_m["z1"], lay.zone_radius_m)
-        fleet = n_cars if n_cars is not None else cfg.cars.count[0]
+        rate_fleet = n_cars if n_cars is not None else cfg.cars.count[0]  # the fleet λ_car is set for (18)
+        fleet = max(1, round(rate_fleet * cfg.sweep.cars))  # 16.4: more or fewer cars at the same λ_car (Q48)
         self.h = cfg.cars.hotspot_h[self.scenario.mobility]  # Q30: calibrated so z1 = 1.6 x the mean
         n_hot = round(self.h * fleet)
         speeds = cfg.cars.speed_low_mps if self.scenario.mobility == "low" else cfg.cars.speed_high_mps
@@ -210,7 +211,7 @@ class City:
                 clock,
                 m.position(),
                 functools.partial(self._task, app),
-                fleet=fleet,
+                fleet=rate_fleet,
                 coverage=cfg.cars.coverage[self.scenario.mobility],
             )
             self.apps.append(app)

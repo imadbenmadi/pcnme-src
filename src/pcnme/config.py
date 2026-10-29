@@ -13,7 +13,7 @@ from __future__ import annotations
 import difflib
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType, TracebackType
 from typing import Any, Literal, TypeVar, cast
@@ -399,10 +399,48 @@ class Energy:
 
 
 @dataclass(frozen=True, slots=True)
+class R3:
+    """9.2 R3, event-driven state: publish when a queue changed by delta, at most every min_interval, at least
+    every heartbeat (an extension, off by default; QUESTIONS Q47 for delta)."""
+
+    enabled: bool
+    delta: int
+    min_interval: float
+    heartbeat: float
+
+
+@dataclass(frozen=True, slots=True)
 class StatePlane:
     state_period: float
     stale_after: float
     wan_ewma_lambda: float
+    r3: R3
+
+
+@dataclass(frozen=True, slots=True)
+class Sweep:
+    """final-design 16.4 sensitivity factors (1 = the design); applied after the calibration (Q48)."""
+
+    arrival_rate: float
+    deadline: float
+    input_size: float
+    cars: float
+    fog_capacity: float
+    wan_bandwidth: float
+
+    @property
+    def is_default(self) -> bool:
+        return all(getattr(self, f) == 1.0 for f in self.__slots__)
+
+
+@dataclass(frozen=True, slots=True)
+class Ablation:
+    """final-design 16.4 switches; every default (true) is the design itself."""
+
+    neighbours: bool
+    predictor: bool
+    result_forwarding: bool
+    tof: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -598,6 +636,8 @@ class Config:
     scenarios: Mapping[str, Scenario]
     fedavg: FedAvg
     derived: Derived
+    ablation: Ablation
+    sweep: Sweep
 
     def is_boulder(self, task: str, mode: DeadlineMode) -> bool:
         """final-design 7.1: boulder iff E_strong >= alpha x D."""
@@ -662,8 +702,10 @@ def config_from_mapping(data: Mapping[str, object]) -> Config:
             scenarios=scenarios,
             fedavg=_fedavg(root.node("fedavg")),
             derived=_derive(layout, task_types, hardware, time_table, energy, tof, scenarios, e_strong),
+            ablation=_ablation(root.node("ablation")),
+            sweep=_sweep(root.node("sweep")),
         )
-    return config
+    return _apply_sweep(config)
 
 
 def _layout(n: _Node) -> Layout:
@@ -976,6 +1018,71 @@ def _stateplane(n: _Node) -> StatePlane:
             state_period=n.number("state_period", gt=0.0),
             stale_after=n.number("stale_after", gt=0.0),
             wan_ewma_lambda=n.number("wan_ewma_lambda", gt=0.0, le=1.0),
+            r3=_r3(n.node("r3")),
+        )
+
+
+def _r3(n: _Node) -> R3:
+    with n:
+        r3 = R3(
+            enabled=n.flag("enabled"),
+            delta=n.integer("delta", ge=1),
+            min_interval=n.number("min_interval", gt=0.0),
+            heartbeat=n.number("heartbeat", gt=0.0),
+        )
+        ratio = r3.heartbeat / r3.min_interval
+        if abs(ratio - round(ratio)) > 1e-9:
+            raise ConfigError(n.key("heartbeat"), "must be a whole number of min_interval")
+        return r3
+
+
+def _sweep(n: _Node) -> Sweep:
+    with n:
+        names = ("arrival_rate", "deadline", "input_size", "cars", "fog_capacity", "wan_bandwidth")
+        return Sweep(**{k: n.number(k, gt=0.0) for k in names})
+
+
+def _apply_sweep(cfg: Config) -> Config:
+    """16.4 sensitivity (QUESTIONS Q48): the swept quantities scaled after every calibrated value was
+    derived at factor 1, so each sweep changes one thing. The fleet factor is applied by the city."""
+    sw = cfg.sweep
+    if sw.is_default:
+        return cfg
+    types = {
+        name: replace(
+            t,
+            input_bits=t.input_bits * sw.input_size,
+            deadline={m: d * sw.deadline for m, d in t.deadline.items()},
+            l_max={m: x * sw.deadline for m, x in t.l_max.items()},
+        )
+        for name, t in cfg.task_types.items()
+    }
+    hardware = {
+        name: h
+        if name == CLOUD
+        else replace(
+            h,
+            c_gpu=max(1, round(h.c_gpu * sw.fog_capacity)) if h.c_gpu else 0,
+            c_cpu=max(1, round(h.c_cpu * sw.fog_capacity)) if h.c_cpu else 0,
+        )
+        for name, h in cfg.hardware.items()
+    }
+    d = cfg.derived
+    derived = replace(
+        d,
+        b_wan=d.b_wan * sw.wan_bandwidth,
+        arrival_rate_per_zone={s: r * sw.arrival_rate for s, r in d.arrival_rate_per_zone.items()},
+    )
+    return replace(cfg, task_types=types, hardware=hardware, derived=derived)
+
+
+def _ablation(n: _Node) -> Ablation:
+    with n:
+        return Ablation(
+            neighbours=n.flag("neighbours"),
+            predictor=n.flag("predictor"),
+            result_forwarding=n.flag("result_forwarding"),
+            tof=n.flag("tof"),
         )
 
 
