@@ -110,12 +110,19 @@ class City:
         n_cars: int | None = None,
         shape: Callable[..., Any] = lognormal,
         mover: Callable[[str, bool], Mover] | None = None,
+        *,
+        usage: str = "training",
+        logging: bool = True,
     ) -> None:
+        """`usage`: the seed range (fast_mode.seed_split): training, or nsga2_and_demos for NSGA-II windows
+        and demonstrations (16.3: never evaluation seeds). `logging`: the per-period rows (positions, zones,
+        pipes); off for NSGA-II evaluations, which read only the task records. Neither changes the run."""
         self.cfg = cfg
+        self._logging = logging
         self.scenario = cfg.scenarios[scenario]
         self.log = RunLog(scenario, method if isinstance(method, str) else "custom", seed)
         self.clock = clock = EventClock()
-        self.streams = streams = RandomStreams.from_config(cfg, seed, "training")
+        self.streams = streams = RandomStreams.from_config(cfg, seed, usage)
         self.bus = bus = Bus(clock, streams, cfg.links.broker_extra_delay)
         table = RunTimeTable.from_config(cfg, shape)
         self.wan = FifoPipe(cfg.derived.b_wan)
@@ -197,7 +204,8 @@ class City:
         clock.schedule(clock.now, self._tick)
         self._bits = {"wan": 0.0, **{f"backhaul-{z}": 0.0 for z in self.zones}}
         self._refused = {z: 0 for z in self.zones}
-        clock.schedule(clock.now, self._sample)
+        if logging:
+            clock.schedule(clock.now, self._sample)
 
     # --- the GPS period: move, attach, GPS ------------------------------------------------------------------
 
@@ -213,20 +221,26 @@ class City:
             self._give_up(app, now)
             vx, vy = app.mover.velocity(now)
             speed = math.hypot(vx, vy)
-            self.log.add(
-                "positions",
-                now,
-                car_id=app.car.car_id,
-                x_m=pos[0],
-                y_m=pos[1],
-                speed_mps=speed,
-                heading_x=vx / speed if speed else 0.0,
-                heading_y=vy / speed if speed else 0.0,
-                zone=app.serving or "",
-            )
+            if self._logging:
+                self._position_row(app, now, pos, vx, vy, speed)
             if app.serving is not None:
                 self.zones[app.serving].gps(app.car.car_id, pos[0], pos[1], vx, vy, now)
         self.clock.schedule(now + self._period, self._tick)
+
+    def _position_row(
+        self, app: CarApp, now: float, pos: tuple[float, float], vx: float, vy: float, speed: float
+    ) -> None:
+        self.log.add(
+            "positions",
+            now,
+            car_id=app.car.car_id,
+            x_m=pos[0],
+            y_m=pos[1],
+            speed_mps=speed,
+            heading_x=vx / speed if speed else 0.0,
+            heading_y=vy / speed if speed else 0.0,
+            zone=app.serving or "",
+        )
 
     def _rate(self, app: CarApp, zone: str) -> float:
         return shannon_rate(math.dist(app.car.position, self.centres[zone]), self.cfg.radio)
@@ -464,15 +478,24 @@ class City:
 
     # --- running --------------------------------------------------------------------------------------------
 
-    def run(self, seconds: float) -> City:
+    def start(self, seconds: float) -> City:
+        """The cars make tasks until `seconds` (simulated); the caller runs the clock."""
         for app in self.apps:
             app.car.start(until=seconds)
         self.seconds = seconds
+        return self
+
+    def run(self, seconds: float) -> City:
+        self.start(seconds)
         self.clock.run_until(seconds + DRAIN)
+        self.end()
+        return self
+
+    def end(self) -> None:
+        """The episode ends (11.3.4); frames the cars still hold were given up."""
         for zone in self.zones.values():
             zone.transitions.end_episode()  # 11.3.4: the last transitions are truncated, not terminal
         for app in self.apps:  # frames still held at the end were given up (the budget is long gone)
             for task in app.held.values():
                 self.car_drops.append(CarDrop(task, self.clock.now))
             app.held.clear()
-        return self

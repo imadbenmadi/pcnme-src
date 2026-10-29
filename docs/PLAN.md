@@ -83,7 +83,7 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 
 ## M5 — NSGA-II expert and demonstrations
 
-- [ ] **M5.1 Windows** (13.2): T_win, T_warmup of greedy decisions, common random numbers, genome = action index per task, repair to "here", tasks after the window placed by greedy.
+- [~] **M5.1 Windows** (13.2): T_win, T_warmup of greedy decisions, common random numbers, genome = action index per task, repair to "here", tasks after the window placed by greedy.
 - [ ] **M5.2 NSGA-II in pymoo** with the operators of 13.2 and section 18 numbers; parallel evaluation (spawn-safe).
 - [ ] **M5.3 Knee and w** (13.3): normalisation, knee = smallest f̃1 + f̃2, slope, w̃, w; median w*; w_p for every front point.
 - [ ] **M5.4 Demonstrations** (13.4): replay plans with the input builder, flag expert transitions, store to disk.
