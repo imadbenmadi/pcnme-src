@@ -34,7 +34,18 @@ from pymoo.operators.sampling.rnd import IntegerRandomSampling
 from pymoo.optimize import minimize
 
 from pcnme.config import Config, config_from_mapping
-from pcnme.expert.window import USAGE, Objectives, Window, energy_greedy, evaluate, plan_of
+from pcnme.expert.window import (
+    FORK,
+    USAGE,
+    Objectives,
+    WarmStart,
+    Window,
+    WindowSpec,
+    discover,
+    energy_greedy,
+    evaluate,
+    plan_of,
+)
 from pcnme.sim.rng import RandomStreams
 
 ConfigSource = Mapping[str, Any]  # the raw config/default.yaml mapping (picklable)
@@ -61,13 +72,17 @@ class ValidOptionMutation(Mutation):
 _WORKER: dict[str, Any] = {}  # per worker process: the config and the window (set by its initializer)
 
 
-def _init_worker(source: ConfigSource, window: Window) -> None:
-    _WORKER["cfg"] = config_from_mapping(source)
+def _init_worker(source: ConfigSource, window: Window, warm: bool = False) -> None:
+    cfg = config_from_mapping(source)
+    _WORKER["cfg"] = cfg
     _WORKER["window"] = window
+    _WORKER["warm"] = WarmStart(cfg, window) if warm else None  # the shared warm-up, once per worker
 
 
 def _evaluate_one(genome: Sequence[int]) -> tuple[float, float]:
-    o, _ = evaluate(_WORKER["cfg"], _WORKER["window"], [int(g) for g in genome])
+    g = [int(x) for x in genome]
+    warm = _WORKER.get("warm")
+    o = warm.evaluate(g) if warm is not None else evaluate(_WORKER["cfg"], _WORKER["window"], g)[0]
     return o.f1, o.f2
 
 
@@ -152,9 +167,11 @@ def run_nsga(
     generations: int | None = None,
     workers: int = 1,
     energy_genome: Sequence[int] | None = None,
+    warm: bool = FORK,
 ) -> Front:
     """NSGA-II on one window. Population and generations default to the config (18: 100 x 100). The
-    energy-greedy plan is found by one run of the window unless given."""
+    energy-greedy plan is found by one run of the window unless given. `warm`: reuse the warm-up by fork
+    (Linux; the default there), the same front."""
     cfg = config_from_mapping(source)
     pop = population if population is not None else cfg.nsga2.population
     gens = generations if generations is not None else cfg.nsga2.generations
@@ -165,12 +182,12 @@ def run_nsga(
     start = time.perf_counter()
     if workers > 1:
         ctx = multiprocessing.get_context("spawn")
-        with ctx.Pool(workers, initializer=_init_worker, initargs=(source, window)) as pool:
+        with ctx.Pool(workers, initializer=_init_worker, initargs=(source, window, warm)) as pool:
             res = minimize(
                 WindowProblem(window, pool), algorithm, ("n_gen", gens), seed=nsga_seed(cfg, window)
             )
     else:
-        _init_worker(source, window)
+        _init_worker(source, window, warm)
         res = minimize(WindowProblem(window, None), algorithm, ("n_gen", gens), seed=nsga_seed(cfg, window))
     seconds = time.perf_counter() - start
     genomes, points = sort_front(res.X, res.F)
@@ -204,3 +221,28 @@ def sort_front(
 def check_front(cfg: Config, front: Front) -> list[Objectives]:
     """Re-evaluate every front genome: it must give its objectives exactly (common random numbers)."""
     return [evaluate(cfg, front.window, g)[0] for g in front.genomes]
+
+
+def _one_window(args: tuple[ConfigSource, WindowSpec, int | None, int | None, bool]) -> Front:
+    source, spec, population, generations, warm = args
+    window = discover(config_from_mapping(source), spec)
+    return run_nsga(source, window, population=population, generations=generations, workers=1, warm=warm)
+
+
+def run_windows(
+    source: ConfigSource,
+    specs: Sequence[WindowSpec],
+    *,
+    population: int | None = None,
+    generations: int | None = None,
+    workers: int = 1,
+    warm: bool = FORK,
+) -> list[Front]:
+    """Speed-up that changes no result: the windows are independent, so they run in parallel, one window per
+    spawn-started process (each window's evaluations then run in turn, from its warm-up when `warm`). The
+    fronts come back in the order of `specs`, the same as running each window alone."""
+    jobs = [(source, s, population, generations, warm) for s in specs]
+    if workers <= 1:
+        return [_one_window(j) for j in jobs]
+    with multiprocessing.get_context("spawn").Pool(min(workers, len(jobs))) as pool:
+        return pool.map(_one_window, jobs, chunksize=1)
