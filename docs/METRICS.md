@@ -22,7 +22,8 @@ Proposed 28 Oct; confirmed or changed when M3.10 is built. The metrics are those
 | `zone` | zone and state period (100 ms) | `zone`, `slot_type` | `rho` (busy share), `queue_hard`, `queue_soft`, `busy`, `refusals` (count in the period), `wan_wait_est_s` |
 | `pipe` | pipe and 100 ms | `pipe` (radio-z1 … radio-z5, backhaul-z1 … backhaul-z5, wan) | `wait_s`, `bits` (pushed in the period), `ti` (offered / bandwidth over the period) |
 | `mobility` | prediction checked at the car's next attach | `zone` | `next_zone_hit` (0/1), `t_exit_err_s` |
-| `learning` | zone and 1 000 updates | `zone`, `phase` (pretrain, online) | `td_loss`, `n_step_loss`, `margin_loss`, `mean_q`, `epsilon`, `demo_upsample_ratio`, `model_version` |
+| `learning` | zone and 1 000 updates (PLAN M6.6) | `zone` (global in pretraining), `phase` (pretrain, online) | `update`, `td_loss`, `n_step_loss`, `margin_loss`, `total_loss`, `mean_q` (means over the block), `epsilon`, `expert_agreement` (held-out, pretraining), `demo_upsample_ratio`; `model_version` comes with FL (M8) |
+| `episode` | online training episode (PLAN M6.6) | — | `episode`, `seed`, `on_time` (share, 16.3), `mean_e_hat`, `tasks`, `updates`, `mean_loss` |
 | `nsga` | window | `window` | `hv`, `front_size`, `knee_f1`, `knee_f2`, `w_knee` |
 
 ## Computed after the run (from Parquet, final-design 16.3)
