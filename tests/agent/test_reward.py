@@ -1,6 +1,7 @@
 """Rewards, one per attempt (PLAN M4.2; final-design 11.4, 12.5, 13.2, 11.3.3; QUESTIONS Q32).
 
-By hand with the config: B = 1, w3 = 1, C_drop = 5, w = 0.5 (Q32 stand-in), ē = 11.697. Scripted two zones
+By hand with the config's B = 1, w3 = 1, C_drop = 5 and ē = 11.697, and w pinned to 0.5 (the config's w is
+M5's w*, which the full NSGA-II runs will change). Scripted two zones
 (every delay and run at its mean): a T1 made at 0.1 s is in at t_rx = 0.1 + 5.226 ms; to z2 the input takes
 4.2 ms and the reply 3 ms; a result reaches the car 10 ms after its run ends (7 ms to the serving zone, 3 ms
 downlink).
@@ -27,6 +28,7 @@ from tests.zone.test_placement import refuse, two
 
 E_BH = 0.141e-9 * 1.5
 FWD_NB_T1 = E_BH * 1.2e6  # 12.2: one backhaul crossing for a 150 KB frame
+W = 0.5  # w pinned for the hand numbers
 
 
 @pytest.fixture(scope="module")
@@ -36,14 +38,17 @@ def cfg(default_config_path: Path) -> Config:
 
 @pytest.fixture(scope="module")
 def p(cfg: Config) -> RewardParams:
-    return RewardParams.from_config(cfg)
+    from dataclasses import replace as _replace
+
+    return _replace(RewardParams.from_config(cfg), w=W)
 
 
 # --- the 11.4 table by hand ---------------------------------------------------------------------------------
 
 
 def test_the_constants_come_from_the_config(p: RewardParams, cfg: Config) -> None:
-    assert (p.b, p.w3, p.c_drop, p.w) == (1.0, 1.0, 5.0, 0.5)
+    assert (p.b, p.w3, p.c_drop) == (1.0, 1.0, 5.0)
+    assert RewardParams.from_config(cfg).w == cfg.reward.w
     assert p.e_bar == cfg.derived.e_bar == pytest.approx(11.697, abs=1e-3)
 
 
@@ -111,7 +116,7 @@ def settled(c: object, wait: float = 1.0) -> TaskRecord:
 
 def test_a_task_run_here_on_time(cfg: Config, p: RewardParams) -> None:
     # L = upload 5.226 + run 8 + return 10 = 23.226 ms; E = PUE p T_run + the fog return = E_ref(T1).
-    c = two(Fixed("here"))
+    c = two(Fixed("here"), reward__w=W)
     c.zones["z1"].upload(city_task(c, "T1"))
     rec = settled(c)
     (r,) = rec.rewards.values()
@@ -123,7 +128,7 @@ def test_a_task_run_here_on_time(cfg: Config, p: RewardParams) -> None:
 
 def test_a_refused_attempt_wastes_its_time_and_forwarding(cfg: Config, p: RewardParams) -> None:
     # 9.1: attempt 1 to z2 is refused 4.2 + 3 = 7.2 ms after its send; attempt 2 runs here.
-    c = two(Seq("n1", "here"))
+    c = two(Seq("n1", "here"), reward__w=W)
     refuse(c, "z2")
     c.zones["z1"].upload(city_task(c, "T1"))
     rec = settled(c)
@@ -163,7 +168,10 @@ def test_a_hard_task_refused_twice_ends_on_the_drop_reward(p: RewardParams) -> N
     rec = settled(c)
     assert rec.outcome == "drop_refused_late"
     assert rec.rewards[1].kind == "wasted"
-    assert (rec.rewards[2].kind, rec.rewards[2].reward) == ("dropped", pytest.approx(dropped(p)))
+    assert (rec.rewards[2].kind, rec.rewards[2].reward) == (
+        "dropped",
+        pytest.approx(dropped(RewardParams.from_config(c.cfg))),
+    )
     assert rec.rewards[2].energy == pytest.approx(FWD_NB_T1)  # logged, not in the reward
 
 
@@ -181,7 +189,11 @@ def test_a_task_dropped_with_every_option_masked_logs_the_drop_reward(p: RewardP
     c = two(Fixed(None))
     c.zones["z1"].upload(city_task(c, "T1"))
     rec = settled(c)
-    assert rec.outcome == "drop_masked" and rec.rewards == {} and rec.drop_reward == pytest.approx(dropped(p))
+    assert (
+        rec.outcome == "drop_masked"
+        and rec.rewards == {}
+        and rec.drop_reward == pytest.approx(dropped(RewardParams.from_config(c.cfg)))
+    )
 
 
 def test_rewards_are_final_at_close_plus_g_with_the_late_energy_report(p: RewardParams) -> None:
@@ -201,7 +213,7 @@ def test_rewards_are_final_at_close_plus_g_with_the_late_energy_report(p: Reward
     report = rec.attempts[1].report
     assert report.outcome == "cancelled" and report.energy > 0
     assert r.energy == pytest.approx(FWD_NB_T1 + report.energy)
-    assert (r.kind, r.reward) == ("dropped", pytest.approx(dropped(p)))
+    assert (r.kind, r.reward) == ("dropped", pytest.approx(dropped(RewardParams.from_config(c.cfg))))
 
 
 def test_a_report_after_close_plus_g_is_not_counted() -> None:
