@@ -254,6 +254,7 @@ class Cars:
     grid: Grid
     calibration: Calibration
     coverage: Mapping[str, float]  # per mobility: the share of task creations with coverage (Q29, C)
+    hotspot_h: Mapping[str, float]  # per mobility: the share of cars on z1's roads (Q30, C)
 
 
 @dataclass(frozen=True, slots=True)
@@ -692,9 +693,14 @@ def _calibration(n: _Node) -> Calibration:
         return Calibration(seconds=n.number("seconds", gt=0.0), seed=n.integer("seed"))
 
 
-def _coverage(n: _Node) -> Mapping[str, float]:
-    with n, n.node("coverage") as c:
-        return _frozen({m: c.number(m, gt=0.0, le=1.0) for m in ("low", "high")})
+def _calibrated(n: _Node) -> dict[str, Mapping[str, float]]:
+    """cars.calibrated (tag C, Q29, Q30): per mobility, coverage and hotspot_h."""
+    out: dict[str, Mapping[str, float]] = {}
+    with n:
+        for name in ("coverage", "hotspot_h"):
+            with n.node(name) as c:
+                out[name] = _frozen({m: c.number(m, ge=0.0, le=1.0) for m in ("low", "high")})
+    return out
 
 
 def _grid(n: _Node) -> Grid:
@@ -725,6 +731,7 @@ def _cars(n: _Node) -> Cars:
         with n.node("speed_kmh") as speeds:
             slow = tuple(v * _MPS_PER_KMH for v in speeds.numbers("low", gt=0.0))
             fast = tuple(v * _MPS_PER_KMH for v in speeds.numbers("high", gt=0.0))
+        calibrated = _calibrated(n.node("calibrated"))
         return Cars(
             count=(low, high),
             gps_period=n.number("gps_period", gt=0.0),
@@ -733,7 +740,8 @@ def _cars(n: _Node) -> Cars:
             hotspot_share=_fraction(n, "hotspot_share"),
             grid=_grid(n.node("grid")),
             calibration=_calibration(n.node("calibration")),
-            coverage=_coverage(n.node("calibrated")),
+            coverage=calibrated["coverage"],
+            hotspot_h=calibrated["hotspot_h"],
         )
 
 

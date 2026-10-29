@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from pcnme.config import Config, load_config
-from pcnme.experiments.city import City, choose_zone, hotspot_fraction
+from pcnme.experiments.city import City, choose_zone
 from pcnme.ids import TaskId
 from tests.zone.harness import Fixed, fixed_delay_config
 
@@ -64,13 +64,14 @@ def test_the_current_access_point_is_kept_unless_another_is_20_m_closer() -> Non
     assert choose_zone((660.0, 300.0), "z1", CENTRES, 350.0, 20.0) == "z2"  # z1 out of range: switch at once
 
 
-def test_the_hotspot_share_puts_40_percent_of_covered_cars_in_z1(cfg: Config) -> None:
-    from pcnme.mobility.grid import RoadGrid
+def test_the_calibrated_hotspot_puts_z1_at_16_times_the_mean(cfg: Config) -> None:
+    # Q30: at the configured h, a positions-only run gives z1 40 % of the covered samples (1.6 x the mean).
+    from pcnme.experiments.calibrate import measure
 
-    g = RoadGrid.from_area(cfg.layout.area_m, cfg.cars.grid.block_m)
-    h = hotspot_fraction(g, CENTRES, 350.0, 0.4)
-    assert 0.1 < h < 0.2  # Q25: about 14 % of the cars stay on z1's roads
-    assert hotspot_fraction(g, CENTRES, 350.0, 0.25) == pytest.approx(0.0, abs=0.02)  # no hotspot: uniform
+    cal = cfg.cars.calibration
+    coverage, share = measure(cfg, "low", cfg.cars.hotspot_h["low"], cal.seconds, cal.seed, cfg.cars.count[0])
+    assert share * 4 == pytest.approx(1.6, rel=0.02)
+    assert coverage == pytest.approx(cfg.cars.coverage["low"], abs=1e-4)
 
 
 # --- cars that move -----------------------------------------------------------------------------------------
@@ -317,16 +318,20 @@ def test_the_car_rate_is_scaled_by_the_covered_share(cfg: Config) -> None:
     assert car._rate == pytest.approx(cfg.arrival_rate_per_car("S2", 200) / 0.8)
 
 
-def test_the_calibrated_coverage_matches_a_fresh_calibration_run(cfg: Config) -> None:
-    # tag C: the config holds what tools/calibrate_map.py measures (positions only, no tasks).
-    from pcnme.experiments.calibrate import calibrate
-
-    cal = cfg.cars.calibration
-    got = calibrate(cfg, "low", cal.seconds, cal.seed, cfg.cars.count[0])
-    assert got["coverage"] == pytest.approx(cfg.cars.coverage["low"], abs=1e-4)
-
-
 def test_the_city_gives_its_cars_the_calibrated_coverage(cfg: Config) -> None:
     c = City(cfg, "S2", "greedy", 2000, n_cars=4)
     want = cfg.arrival_rate_per_car("S2", 4) / cfg.cars.coverage["low"]
     assert c.apps[0].car._rate == pytest.approx(want)
+
+
+def test_the_bisection_finds_the_hotspot_share_for_16_times_the_mean(cfg: Config) -> None:
+    # Q30 on a small, short run (40 cars, 30 s): the found h gives z1 within 5 % of 1.6 x the mean.
+    from pcnme.experiments.calibrate import calibrate
+
+    got = calibrate(cfg, "low", 30.0, cfg.cars.calibration.seed, 40, steps=8)
+    assert got["z1_over_mean"] == pytest.approx(1.6, rel=0.05) and 0 < got["hotspot_h"] < 0.5
+
+
+def test_the_city_uses_the_calibrated_hotspot_share(cfg: Config) -> None:
+    c = City(cfg, "S5", "greedy", 2000, n_cars=40)  # S5: high mobility
+    assert c.h == cfg.cars.hotspot_h["high"] and sum(a.hotspot for a in c.apps) == round(0.175 * 40)
