@@ -9,8 +9,9 @@ upload's last bit, the upload is cut (9.7): the car keeps the frame and uploads 
 next with the same task id and its new B_car. It gives the frame up when the budget is gone (9.7.3): hard,
 below the fastest possible upload + run + return; soft, past D + L_max (a car-side drop, logged).
 
-The hotspot (18, QUESTIONS Q25): a share h of the cars stays on the roads between z1's intersections, the
-rest roam the whole grid; h is set so that z1 holds hotspot_share of the cars in coverage on average.
+The hotspot (18, QUESTIONS Q30): a share h of the cars stays on the roads between z1's intersections, the
+rest roam the whole grid; h comes from the map calibration run (experiments/calibrate.py), so that z1 holds
+hotspot_share of the covered load (1.6 x the mean).
 """
 
 from __future__ import annotations
@@ -72,25 +73,6 @@ def choose_zone(
     if serving is not None and dist[serving] <= radius and best == serving:
         return serving
     return best
-
-
-def hotspot_fraction(
-    grid: RoadGrid, centres: Mapping[str, tuple[float, float]], radius: float, share: float
-) -> float:
-    """Q25: h with (h + (1 - h) p1) / (h + (1 - h) p_cov) = share, where p1 and p_cov are the shares of road
-    length inside z1's circle and inside any circle (a roaming car is anywhere on the roads alike)."""
-    z1 = centres["z1"]
-    inside = covered = total = 0
-    step = 1.0  # m: a fine sampling of every road
-    for k in range(grid.nx + 1):
-        for along in range(int(grid.nx * grid.block / step) + 1):
-            for p in ((k * grid.block, along * step), (along * step, k * grid.block)):
-                total += 1
-                covered += any(math.dist(p, c) <= radius for c in centres.values())
-                inside += math.dist(p, z1) <= radius
-    p1, pc = inside / total, covered / total
-    h = (share * pc - p1) / (1 - p1 - share * (1 - pc))
-    return min(1.0, max(0.0, h))
 
 
 @dataclass
@@ -177,7 +159,7 @@ class City:
         self.grid = RoadGrid.from_area(lay.area_m, cfg.cars.grid.block_m)
         hot_nodes = self.grid.within(lay.zone_positions_m["z1"], lay.zone_radius_m)
         fleet = n_cars if n_cars is not None else cfg.cars.count[0]
-        self.h = hotspot_fraction(self.grid, self.centres, lay.zone_radius_m, cfg.cars.hotspot_share)
+        self.h = cfg.cars.hotspot_h[self.scenario.mobility]  # Q30: calibrated so z1 = 1.6 x the mean
         n_hot = round(self.h * fleet)
         speeds = cfg.cars.speed_low_mps if self.scenario.mobility == "low" else cfg.cars.speed_high_mps
         est = PathEstimates(cfg, StateStore("car", clock, 1.0, {}, 0.0))
