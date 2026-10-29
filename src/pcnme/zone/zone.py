@@ -35,6 +35,7 @@ from typing import Literal
 
 from pcnme.agent.inputs import Decision, Scales, build_inputs
 from pcnme.agent.reward import AttemptReward, RewardParams, dropped, settle
+from pcnme.agent.transitions import TransitionBuffer
 from pcnme.bus import topics
 from pcnme.bus.bus import Bus, Client, Delivery
 from pcnme.bus.calls import call
@@ -363,6 +364,7 @@ class Zone:
         self._mean_radio = sum(config.radio.uplink_delay) / 2
         self._scales = Scales.from_config(config)  # the fixed divisors of the 48 inputs (11.1)
         self.decisions: list[Decision] = []  # every decision with its inputs, masks and action (16.3, M4.1)
+        self.transitions = TransitionBuffer(zone_id)  # pending buffer -> replay (11.3, M4.3)
         self.mqtt.subscribe(topics.zone_state(CLOUD))
         for z in self.neighbours.positions:
             if z is not None:
@@ -623,6 +625,7 @@ class Zone:
                     action=OPTIONS.index(option),
                 )
             )
+            self.transitions.on_decision(self.decisions[-1])  # s' of this anchor's previous decision
         return option
 
     # --- placement and execution (6C) -----------------------------------------------------------------------
@@ -1212,5 +1215,6 @@ class Zone:
     def _settle(self, rec: TaskRecord) -> None:
         """6E.16, 11.3.3: every attempt gets its reward at close + G, with the energy reports in by then."""
         rec.rewards = settle(rec, self.zone_id, self._rewards, self._em)
+        self.transitions.on_rewards(rec.task.task_id, rec.rewards)  # 11.3.3: to the replay buffer
         if self.on_settle is not None:
             self.on_settle(rec)

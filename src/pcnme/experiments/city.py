@@ -429,10 +429,30 @@ class City:
                     **{f"masked_{o}": m or "" for o, m in zip(OPTIONS, d.masked, strict=True)},
                 )
 
+    def _transition_rows(self) -> None:
+        """One row per transition in the replay buffer (11.3, PLAN M4.3): its decision and the next one at the
+        same anchor (their inputs are in decisions.parquet), Δt, the reward and the truncation flag."""
+        for zone in self.zones.values():
+            for t in zone.transitions.replay:
+                self.log.add(
+                    "transitions",
+                    t.time,
+                    anchor=t.anchor,
+                    task_id=str(t.task_id),
+                    attempt=t.attempt,
+                    action=OPTIONS[t.a],
+                    reward=t.r,
+                    dt_s=t.dt,
+                    next_task_id="" if t.next_key is None else str(t.next_key[0]),
+                    next_attempt=None if t.next_key is None else t.next_key[1],
+                    truncated=t.truncated,
+                )
+
     def write(self, out_dir: Path) -> Path:
         """results/<run_id>/ (METRICS.md): the Parquet files, run.json, points.lp."""
         self._task_rows()
         self._decision_rows()
+        self._transition_rows()
         info = {
             "scenario": self.scenario.name,
             "seed": self.log.seed,
@@ -449,6 +469,8 @@ class City:
             app.car.start(until=seconds)
         self.seconds = seconds
         self.clock.run_until(seconds + DRAIN)
+        for zone in self.zones.values():
+            zone.transitions.end_episode()  # 11.3.4: the last transitions are truncated, not terminal
         for app in self.apps:  # frames still held at the end were given up (the budget is long gone)
             for task in app.held.values():
                 self.car_drops.append(CarDrop(task, self.clock.now))
