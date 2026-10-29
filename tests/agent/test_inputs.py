@@ -320,8 +320,8 @@ def test_next_zone_index() -> None:
     assert next_zone_index("z5", "z1", POSITIONS) is None
 
 
-def test_w_is_the_configs_stand_in(cfg: Config) -> None:
-    assert inputs(cfg, make_ctx(cfg, "T1"))["w"] == 0.5  # QUESTIONS Q32
+def test_w_is_the_configs_w(cfg: Config) -> None:
+    assert inputs(cfg, make_ctx(cfg, "T1"))["w"] == cfg.reward.w == 0.3904  # w* from M5.3
 
 
 # --- every value in its range (PLAN M4 acceptance) ----------------------------------------------------------
