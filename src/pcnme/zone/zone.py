@@ -495,7 +495,8 @@ class Zone:
         row = self.anchor.open(task, t_rx=now, d_a=rec.d_a)
         self._anchor_role(task.car_id, +1)  # 6A.4: register
         end = rec.d_a + (task.l_max if task.cls == "soft" else 0.0) + self._t_ack  # 9.5.5, QUESTIONS Q23
-        rec.end_timer = self._clock.schedule(end, lambda: self._no_ack(rec))
+        # an upload that took longer than the whole budget: its end is already past, it closes at once
+        rec.end_timer = self._clock.schedule(max(now, end), lambda: self._no_ack(rec))
         route = self._tof.classify(
             task.task_type,
             self._mode,
