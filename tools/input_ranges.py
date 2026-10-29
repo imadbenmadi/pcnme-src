@@ -84,9 +84,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     print("| # | input | min | mean | max | = 0 | at cap | flag |")
     print("| --- | --- | --- | --- | --- | --- | --- | --- |")
     for i, r in enumerate(table(xs), 1):
-        print(
-            f"| {i} | {r.name} | {r.lo:.4g} | {r.mean:.4g} | {r.hi:.4g} | {r.zero:.1%} | {r.at_cap:.1%} | {r.flag} |"
-        )
+        stats = f"{r.lo:.4g} | {r.mean:.4g} | {r.hi:.4g} | {r.zero:.1%} | {r.at_cap:.1%}"
+        print(f"| {i} | {r.name} | {stats} | {r.flag} |")
 
 
 if __name__ == "__main__":
