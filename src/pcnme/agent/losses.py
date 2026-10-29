@@ -80,6 +80,7 @@ class LossParts:
     margin: float
     l2: float
     td_errors: Tensor  # (B,) for the priorities
+    mean_q: float = 0.0  # mean Q(s, a) of the batch (16.3 curves)
 
 
 def double_target(online: nn.Module, target: nn.Module, s1: Tensor, valid1: Tensor) -> Tensor:
@@ -116,4 +117,4 @@ def dqfd_loss(online: nn.Module, target: nn.Module, b: Batch, cfg: Config) -> Lo
     with torch.no_grad():
         td = torch.where(b.has1, y1 - q_sa, torch.where(b.hasn, yn - q_sa, torch.zeros_like(q_sa))).abs()
     td_v, n_v, e_v, l2_v = (float(x.detach()) for x in (j_dq, j_n, j_e, l2))
-    return LossParts(total, td_v, n_v, e_v, l2_v, td)
+    return LossParts(total, td_v, n_v, e_v, l2_v, td, float(q_sa.detach().mean()))

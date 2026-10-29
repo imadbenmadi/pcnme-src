@@ -37,9 +37,8 @@ class Curve:
     """What M6.6 plots: per measurement, the update and the agreement; per update the loss parts."""
 
     agreement: list[tuple[int, float]] = field(default_factory=list)
-    losses: list[tuple[int, float, float, float, float]] = field(
-        default_factory=list
-    )  # update, td, n, E, total
+    # per update: the update, J_DQ, J_n, J_E, the total and the batch's mean Q
+    losses: list[tuple[int, float, float, float, float, float]] = field(default_factory=list)
     upsample: list[tuple[int, float]] = field(default_factory=list)
 
 
@@ -101,7 +100,9 @@ def pretrain(
         parts.total.backward()
         opt.step()
         replay.update(drawn.index, parts.td_errors.tolist())
-        curve.losses.append((u, parts.td, parts.n_step, parts.margin, float(parts.total.detach())))
+        curve.losses.append(
+            (u, parts.td, parts.n_step, parts.margin, float(parts.total.detach()), parts.mean_q)
+        )
         if u % cfg.rl.target_update_every == 0:
             target.load_state_dict(online.state_dict())
         if u % cfg.dqfd.eval_every == 0:

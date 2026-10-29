@@ -99,7 +99,7 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 - [~] **M6.3 Replay**: agent part (100 000) + expert part never overwritten; prioritized replay with ε_d, ε_a, α, β.
 - [~] **M6.4 Pretraining loop** with held-out expert agreement and early stop.
 - [~] **M6.5 Online learning** in every zone; neighbour order shuffled per episode in training (13.6).
-- [ ] **M6.6 Training curves** (TensorBoard or Grafana): loss, expert agreement, on-time rate and mean ê per episode.
+- [~] **M6.6 Training curves** (TensorBoard or Grafana): loss, expert agreement, on-time rate and mean ê per episode.
 - **M6 acceptance tests:** hand-computed n-step target; margin loss is zero on non-expert transitions; masked actions never chosen; learning sanity on a two-action toy problem.
 
 ## M7 — Baselines, experiments, statistics
