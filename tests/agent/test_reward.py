@@ -274,3 +274,23 @@ def test_the_anchor_counts_its_republishes() -> None:
     c.clock.run_until(c.clock.now + 0.25)
     (rec,) = z1.records.values()
     assert rec.republished and rec.republishes == 1
+
+
+def test_the_anchor_keeps_the_cars_result_topic_until_close_plus_g() -> None:
+    # 9.6, CHANGES C8 (QUESTIONS Q35): the car has moved to z2, so z1 only anchors it. Closing cancels the T4
+    # running at z2; the abort's report comes ~10 ms after the close and must still reach z1 (within G).
+    c = two(Fixed("n1"))
+    z1, z2 = c.zones["z1"], c.zones["z2"]
+    z1.upload(city_task(c, "T4"))
+    c.clock.run_until(T_RX + 0.010)
+    z2.attach(c.car, 200.0)  # z1 is no longer the serving zone
+    c.clock.run_until(T_RX + 0.020)
+    assert "c01" not in z1._cars
+    rec = next(iter(z1.records.values()))
+    z1._close(rec, "drop_test")
+    closed = c.clock.now
+    c.clock.run_until(closed + 0.499)
+    assert z1.mqtt.count("car/c01/result") == 1 and rec.attempts[1].report is not None
+    c.clock.run_until(closed + 0.501)
+    assert z1.mqtt.count("car/c01/result") == 0 and z1.mqtt.count("car/c01/ack") == 0
+    assert rec.rewards[1].energy > FWD_NB_T1  # the late report's execution energy is in

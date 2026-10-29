@@ -421,7 +421,8 @@ class Zone:
             self.registry.pop(car_id, None)  # 9.6: the registry follows the serving and anchor roles
 
     def _anchor_role(self, car_id: str, step: int) -> None:
-        """9.6: the anchor subscribes at its first open task of the car and unsubscribes at its last."""
+        """9.6: the anchor subscribes at its first open task of the car and unsubscribes G after its last one
+        closes (CHANGES C8: late energy reports, 11.3.3)."""
         n = self._anchored.get(car_id, 0) + step
         self._anchored[car_id] = n
         if (step, n) in ((1, 1), (-1, 0)):
@@ -1198,7 +1199,6 @@ class Zone:
         """6E.15: close; cancel any other live attempt; stop every timer."""
         now = self._clock.now
         self.anchor.close(rec.task.task_id, outcome, now)  # raises if closed twice
-        self._anchor_role(rec.task.car_id, -1)  # 9.6
         rec.copy = None  # 6E.15: the result copy is deleted
         if rec.end_timer is not None:
             self._clock.cancel(rec.end_timer)
@@ -1213,7 +1213,9 @@ class Zone:
             self._on_close(rec)
 
     def _settle(self, rec: TaskRecord) -> None:
-        """6E.16, 11.3.3: every attempt gets its reward at close + G, with the energy reports in by then."""
+        """6E.16, 11.3.3: every attempt gets its reward at close + G, with the energy reports in by then; the
+        anchor keeps its subscriptions for the car until then (9.6, CHANGES C8), so late reports reach it."""
+        self._anchor_role(rec.task.car_id, -1)  # 9.6, CHANGES C8: the anchor role ends at close + G
         rec.rewards = settle(rec, self.zone_id, self._rewards, self._em)
         self.transitions.on_rewards(rec.task.task_id, rec.rewards)  # 11.3.3: to the replay buffer
         if self.on_settle is not None:
