@@ -22,6 +22,7 @@ This is the one complete design of PCNME. It merges the PCNME Architecture doc, 
 | 29 Oct | 18, 14.3 | The car's encode time is a config value, `timing.encode` (M, placeholder 0); the upload starts after it, and B_car does not subtract it again | QUESTIONS Q14 |
 | 29 Oct | 15.2 | Every drawn time is rounded to whole nanoseconds and every radio rate to whole bit/s, so one seed gives the same run on every OS | web review of PR #20 |
 | 29 Oct | 16.2, 18 | λ_car is divided by the share of task creations with coverage, measured once per map by a positions-only calibration run (tag C); frames made in a gap are reported as uncovered | QUESTIONS Q29 |
+| 29 Oct | 9.3 | The upload timeout T_up starts when the zone's own send has finished; before that only the deadline cap applies, and reaching it drops the attempt with no re-send | CHANGES C7 (QUESTIONS Q31) |
 
 ## 1. What PCNME is
 
@@ -443,6 +444,8 @@ A refusal costs a waste penalty in the reward (section 11.4), which is what teac
 ```latex
 T_{up,k} = \min\big(\kappa_{up}\,(\hat{T}_{in,k} + \hat{\delta}_{reply,k}),\; d_A - t_s + \ell\big), \qquad \ell = 0 \text{ (hard)},\; L_{max} \text{ (soft)}
 ```
+
+An upload still being sent is not a failure (CHANGES C7): while the zone's own send is going (the input has not yet reached the executor), only the deadline cap d_A + ℓ applies, and reaching it drops the attempt with no re-send. T_up is counted from the end of that send; only a reply missing after it counts as "no reply" (9.1).
 
 - **Last will:** zone/{id}/status = offline, immediate.
 - **Watchdog**, started at the accept reply (t_acc), using the executor's own wait estimate Ŵ from that reply:
