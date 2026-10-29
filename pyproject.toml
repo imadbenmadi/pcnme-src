@@ -29,6 +29,9 @@ ml = [
   "torch>=2.3",           # on the desktop install the CUDA wheel, see README
   "pymoo>=0.6.1",
 ]
+nsga = [
+  "pymoo>=0.6.1",         # NSGA-II alone (M5), without torch: CI and cloud sessions need no 2.5 GB CUDA wheel
+]
 analysis = [
   "pandas>=2.1",
   "pyarrow>=14",          # Parquet result files
@@ -46,7 +49,7 @@ testbed = [
 maps = [
   "eclipse-sumo>=1.20",   # SUMO tools to export LuST FCD traces (final-design 16.2)
 ]
-all = ["pcnme[dev,ml,analysis,testbed,maps]"]
+all = ["pcnme[dev,ml,nsga,analysis,testbed,maps]"]
 
 [project.scripts]
 pcnme = "pcnme.experiments.cli:main"
