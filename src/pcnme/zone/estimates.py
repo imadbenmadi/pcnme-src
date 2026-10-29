@@ -52,6 +52,10 @@ class PathEstimates:
         wait = backhaul_wait + self._wan_wait.estimate()
         return wait + size_bits / self._cfg.derived.b_wan + self._bh + self._wan
 
+    def t_in_neighbour(self, size_bits: float, backhaul_wait: float) -> float:
+        """4.3: own backhaul wait (exact) + S / B_bh + δ̄_bh."""
+        return backhaul_wait + size_bits / self._cfg.links.backhaul_bw + self._bh
+
     def t_ret_fog(self) -> float:
         return self._bh + self._broker + self._bh + self._down
 

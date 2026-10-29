@@ -43,6 +43,18 @@ class OptionView:
 
 
 @dataclass(frozen=True, slots=True)
+class NeighbourView:
+    """What the anchor knows of the zone in one neighbour position (7.2, 7.5): None for an empty position."""
+
+    zone_id: str | None
+    hw: str = ""  # its hardware class, from the deployment configuration (QUESTIONS Q21)
+    slots: Mapping[SlotType, SlotState] | None = None  # its newest snapshot (None: none yet)
+    pending: Mapping[SlotType, tuple[Pending, ...]] = field(default_factory=lambda: _NO_PENDING)
+    offline: bool = False  # its last will said offline
+    stale: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class DecisionContext:
     """What the anchor knows when it places a pebble (6B): its own exact state, and the cloud's newest
     snapshot from its state store (None if it has none) with its own pending sends there (R1, 9.2)."""
@@ -57,6 +69,8 @@ class DecisionContext:
     here_hw: str = "F-GPU"  # this zone's hardware class
     cloud_pending: Mapping[SlotType, tuple[Pending, ...]] = field(default_factory=lambda: _NO_PENDING)
     cloud_stale: bool = False
+    cloud_offline: bool = False
+    neighbours: tuple[NeighbourView, ...] = ()  # the 4 positions in order; fewer = the rest empty
     views: tuple[OptionView, ...] = ()  # filled by the anchor from the masks, in OPTIONS order
 
     @property
