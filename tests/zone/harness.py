@@ -132,6 +132,7 @@ class City:
     cloud: Cloud
     zones: dict[str, Zone]
     closed: list[TaskRecord]
+    car: Car
 
 
 def city(
@@ -175,4 +176,43 @@ def city(
         )
         for z in zone_ids
     }
-    return City(cfg, clock, bus, cloud, zones, closed)
+    for zone in zones.values():
+        zone.peers = zones  # direct calls (5.3)
+    car = Car(
+        "c01", cfg, cfg.scenarios[scenario], streams, clock, (0.0, 0.0), zones[zone_ids[0]].upload, fleet=200
+    )
+    zones[zone_ids[0]].add_car(car, 300.0)  # one car in the first zone, 300 m from its access point
+    return City(cfg, clock, bus, cloud, zones, closed, car)
+
+
+class Seq:
+    """A placement that answers from a list, one per call (then None), and counts its calls."""
+
+    def __init__(self, *options: Option | None) -> None:
+        self.options = list(options)
+        self.calls = 0
+
+    def choose(self, ctx: DecisionContext) -> Option | None:
+        self.calls += 1
+        return self.options.pop(0) if self.options else None
+
+
+def city_task(c: City, kind: str, seq: int = 1, mode: str = "loose") -> Task:
+    """A task created now on the city's car (in the first zone)."""
+    from pcnme.ids import TaskId
+
+    t = c.cfg.task_types[kind]
+    task = Task(
+        TaskId("c01", 0, seq),
+        "c01",
+        kind,
+        t.cls,
+        t.deadline[mode],
+        t.l_max[mode],
+        t.input_bits,
+        t.result_bits,
+        c.clock.now,
+    )  # type: ignore[index]
+    c.car._tasks[task.task_id] = task
+    c.clock.schedule(task.created + task.deadline + task.l_max, lambda: c.car._forget(task.task_id))
+    return task

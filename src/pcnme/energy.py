@@ -73,10 +73,10 @@ class EnergyModel:
         return self.forwarding(destination, t.input_bits) + execution + self.ret(executor, t.result_bits)
 
     def of_record(self, rec: TaskRecord) -> AttemptEnergy:
-        """The energy of a task's attempt, by the 12.5 table. One attempt per task in M2 (no retries)."""
+        """The energy of a task's last attempt, by the 12.5 table (earlier refused attempts: `earlier`)."""
         if rec.option is None:
             return AttemptEnergy(0.0, 0.0, 0.0)  # dropped before any attempt: intake or all masked
-        destination: Destination = "cloud" if rec.option == "cloud" else "here"
+        destination = self.destination(rec.option)
         fwd = self.forwarding(destination, rec.task.input_bits)
         report = rec.report
         if rec.reply in ("full", "late") or report is None:
@@ -88,6 +88,14 @@ class EnergyModel:
             return AttemptEnergy(fwd, execution, 0.0)  # aborted / cancelled: forwarding + execution spent
         executor: Executor = "cloud" if rec.option == "cloud" else "fog"
         return AttemptEnergy(fwd, execution, self.ret(executor, rec.task.result_bits, rec.deliveries))
+
+    @staticmethod
+    def destination(option: str) -> Destination:
+        return "here" if option == "here" else ("cloud" if option == "cloud" else "neighbour")
+
+    def earlier(self, rec: TaskRecord) -> float:
+        """The task's earlier attempts, each refused: forwarding only (12.5)."""
+        return sum(self.forwarding(self.destination(e.option), rec.task.input_bits) for e in rec.earlier)
 
     def car_upload(self, rec: TaskRecord) -> float:
         """Reported only (12.1): the car's airtime, P_tx S / R_car."""
