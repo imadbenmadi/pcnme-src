@@ -39,7 +39,7 @@ from pcnme.sim.clock import EventClock
 from pcnme.sim.rng import RandomStreams
 from pcnme.zone.decision import OPTIONS
 from pcnme.zone.estimates import PathEstimates
-from pcnme.zone.layout import Site
+from pcnme.zone.layout import POSITIONS, Site
 from pcnme.zone.statestore import StateStore
 from pcnme.zone.zone import Cloud, Placement, TaskRecord, Zone
 
@@ -113,10 +113,14 @@ class City:
         *,
         usage: str = "training",
         logging: bool = True,
+        shuffle_neighbours: bool = False,
     ) -> None:
         """`usage`: the seed range (fast_mode.seed_split): training, or nsga2_and_demos for NSGA-II windows
         and demonstrations (16.3: never evaluation seeds). `logging`: the per-period rows (positions, zones,
-        pipes); off for NSGA-II evaluations, which read only the task records. Neither changes the run."""
+        pipes); off for NSGA-II evaluations, which read only the task records. Neither changes the run.
+        `shuffle_neighbours`: training (13.6): each zone's neighbour positions are permuted for this episode,
+        drawn from its neighbour_order stream. A placement with an `attach(zone)` method is attached to its
+        zone (the online learner, M6.5)."""
         self.cfg = cfg
         self._logging = logging
         self.scenario = cfg.scenarios[scenario]
@@ -157,6 +161,11 @@ class City:
                 hw_name=self.scenario.fog[z],
                 bus=bus,
                 start_sites=tuple(s for o, s in sites.items() if o != z),
+                neighbour_order=[
+                    int(i) for i in streams.generator("neighbour_order", z).permutation(POSITIONS)
+                ]
+                if shuffle_neighbours
+                else None,
                 fog_classes=self.scenario.fog,
                 ledger=ledger,
                 on_close=self.records.append,
@@ -165,6 +174,9 @@ class City:
         }
         for zone in self.zones.values():
             zone.peers = self.zones
+            attach = getattr(zone._placement, "attach", None)
+            if attach is not None:
+                attach(zone)
         self.grid = RoadGrid.from_area(lay.area_m, cfg.cars.grid.block_m)
         hot_nodes = self.grid.within(lay.zone_positions_m["z1"], lay.zone_radius_m)
         fleet = n_cars if n_cars is not None else cfg.cars.count[0]
@@ -495,6 +507,9 @@ class City:
         """The episode ends (11.3.4); frames the cars still hold were given up."""
         for zone in self.zones.values():
             zone.transitions.end_episode()  # 11.3.4: the last transitions are truncated, not terminal
+            end = getattr(zone._placement, "end_episode", None)
+            if end is not None:
+                end()  # the online learner's last samples of this episode
         for app in self.apps:  # frames still held at the end were given up (the budget is long gone)
             for task in app.held.values():
                 self.car_drops.append(CarDrop(task, self.clock.now))
