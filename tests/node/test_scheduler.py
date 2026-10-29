@@ -129,10 +129,53 @@ def test_the_promotion_check_list_schedules_the_hard_queue_on_all_slots(promotio
     assert n.started()[2:] == [s.key, h1.key, h2.key]
 
 
-def test_promotion_needs_an_explicit_estimate_choice() -> None:
-    # Q10 is open: there is no default.
+def test_promotion_uses_the_high_estimate_by_default() -> None:
+    # QUESTIONS Q10 (answered 28 Oct): "high" (p95) everywhere, because the check must prove every queued hard
+    # task still meets its deadline.
+    import inspect
+
+    from pcnme.node.executor import Executor
+
+    assert inspect.signature(Executor).parameters["promotion_estimate"].default == "high"
+    assert inspect.signature(Executor.from_config).parameters["promotion_estimate"].default == "high"
     with pytest.raises(ValueError, match="promotion"):
         tiny([row("x", "cpu", 0.01)], promotion="p99")
+
+
+def test_with_high_the_running_tasks_count_their_high_remaining_time() -> None:
+    # Two slots. At 250 ms slot 1 frees (S waited A_max); slot 2 runs b (mean 260 ms, high 338 ms). H (10 ms,
+    # high 13 ms) must end by 273.5 ms. High: S holds slot 1 until 263 ms and b holds slot 2 until 338 ms, so
+    # H ends at 263 + 13 = 276 ms > 273.5: no promotion. Counting b by its mean (free at 260 ms) would let H
+    # end at 273 ms and wrongly promote S.
+    rows = [row("a", "cpu", 0.250), row("b", "cpu", 0.260), row("S", "cpu", 0.010), row("H", "cpu", 0.010)]
+    n = tiny(rows, c_cpu=2)
+    n.submit("a", "hard", 10.0)
+    n.submit("b", "hard", 10.0)
+    n.submit("S", "soft", 10.0, l_max=10.0)
+    n.clock.run_until(0.245)
+    h = n.submit("H", "hard", 0.0285)
+    n.clock.run_until(5.0)
+    assert n.started()[2] == h.key
+
+
+def test_with_high_a_soft_task_is_not_promoted_when_only_the_mean_would_fit() -> None:
+    # The two estimates disagree here: H (mean 10 ms, high 13 ms) must end by 263 + 10 = 273 ms ... S on the
+    # slot for 13 ms from 250 ms; H then ends at 263 + 10 = 273 ms (mean) or 263 + 13 = 276 ms (high) against
+    # a deadline of 274 ms: the mean says "promote", the high says "no". The default (high) keeps H first.
+    n = tiny([row("long", "cpu", 0.250), row("S", "cpu", 0.010), row("H", "cpu", 0.010)])
+    n.submit("long", "hard", 10.0)
+    s = n.submit("S", "soft", 10.0, l_max=10.0)
+    n.clock.run_until(0.240)
+    h = n.submit("H", "hard", 0.034)  # d_k = 274 ms
+    n.clock.run_until(5.0)
+    assert n.started()[1:] == [h.key, s.key]
+    m = tiny([row("long", "cpu", 0.250), row("S", "cpu", 0.010), row("H", "cpu", 0.010)], promotion="mean")
+    m.submit("long", "hard", 10.0)
+    s2 = m.submit("S", "soft", 10.0, l_max=10.0)
+    m.clock.run_until(0.240)
+    h2 = m.submit("H", "hard", 0.034)
+    m.clock.run_until(5.0)
+    assert m.started()[1:] == [s2.key, h2.key]
 
 
 # --- S5: work stealing (8.4 step 5) -------------------------------------------------------------------------

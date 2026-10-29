@@ -13,6 +13,7 @@ from scipy import stats
 
 from pcnme.config import Config, ConfigError, config_from_mapping, load_config, load_yaml
 from pcnme.node.timetable import Deterministic, Exponential, RunTimeTable, deterministic, exponential
+from pcnme.sim.quantize import to_ns
 from pcnme.sim.rng import RandomStreams
 
 TASK = ("c03-047", 0, 1187)  # task_id = (car_id, epoch, seq), final-design 5.5
@@ -86,19 +87,20 @@ def test_a_draw_is_the_inverse_cdf_of_the_keyed_run_times_uniform(
     row = table.row("T1", "F-GPU", "gpu")
     assert row is not None
     u = streams.uniform("run_times", *TASK, 1)
-    assert table.draw(streams, row, TASK, attempt=1) == pytest.approx(-0.008 * math.log1p(-u), rel=1e-15)
+    assert table.draw(streams, row, TASK, attempt=1) == to_ns(-0.008 * math.log1p(-u))  # whole ns
 
 
 def test_a_task_keeps_its_quantile_on_every_node_and_slot_type(cfg: Config, streams: RandomStreams) -> None:
     # The same (task_id, attempt) gives the same u, so with one shape the run time scales with the row's mean:
-    # T1 on a CPU slot (90 ms) is exactly 90 / 8 times its GPU-slot draw, and the cloud GPU (4 ms) half of it.
+    # T1 on a CPU slot (90 ms) is 90 / 8 times its GPU-slot draw, and the cloud GPU (4 ms) half of it, to the
+    # half-nanosecond rounding of each draw (the GPU draw's error is scaled too).
     table = RunTimeTable.from_config(cfg, exponential)
     rows = {
         (hw, q): table.row("T1", hw, q) for hw, q in [("F-GPU", "gpu"), ("F-GPU", "cpu"), ("cloud", "gpu")]
     }
     runs = {k: table.draw(streams, r, TASK, 1) for k, r in rows.items() if r is not None}
-    assert runs[("F-GPU", "cpu")] == pytest.approx(runs[("F-GPU", "gpu")] * 90 / 8, rel=1e-12)
-    assert runs[("cloud", "gpu")] == pytest.approx(runs[("F-GPU", "gpu")] * 4 / 8, rel=1e-12)
+    assert runs[("F-GPU", "cpu")] == pytest.approx(runs[("F-GPU", "gpu")] * 90 / 8, abs=0.5e-9 * (1 + 90 / 8))
+    assert runs[("cloud", "gpu")] == pytest.approx(runs[("F-GPU", "gpu")] * 4 / 8, abs=0.5e-9 * (1 + 4 / 8))
 
 
 def test_a_retry_is_a_new_draw(cfg: Config, streams: RandomStreams) -> None:

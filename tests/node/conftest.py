@@ -66,7 +66,6 @@ def make_node(cfg: Config) -> Callable[..., Node]:
             cfg,
             hw,
             RunTimeTable.from_config(cfg, shape),  # type: ignore[arg-type]
-            promotion_estimate="mean",  # Q10 open; no current executor test depends on it
             on_report=reports.append,
             trace=trace.append,
         )
