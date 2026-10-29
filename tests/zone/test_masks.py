@@ -14,11 +14,11 @@ from pcnme.config import Config, load_config
 from pcnme.energy import EnergyModel
 from pcnme.ids import TaskId
 from pcnme.methods.simple import Greedy, Random, greedy_pick
-from pcnme.node.state import SlotState
+from pcnme.node.state import Pending, SlotState
 from pcnme.sim.rng import RandomStreams
+from pcnme.zone.decision import DecisionContext, NeighbourView
 from pcnme.zone.estimates import PathEstimates, ZeroWanWait
 from pcnme.zone.masks import OptionView, views
-from pcnme.zone.zone import DecisionContext
 from tests.zone.harness import fixed_delay_config, one_zone, task_now
 
 
@@ -228,3 +228,120 @@ def test_greedy_runs_a_zone_end_to_end() -> None:
     s.zone.upload(task_now(s, "T1"))
     s.clock.run_until(1.0)
     assert (s.closed[0].option, s.closed[0].outcome) == ("here", "on_time")
+
+
+# --- M3.4: the neighbour positions, offline and stale (7.2, 7.5, 4.3) -------------------------------------
+
+
+def nb(cfg: Config, zone: str = "z2", hw: str = "F-GPU", **kw: object) -> NeighbourView:
+    slots = kw.pop("slots", empty(cfg, hw))
+    return NeighbourView(zone, hw, slots, **kw)  # type: ignore[arg-type]
+
+
+def nctx(
+    cfg: Config, kind: str, neighbours: list[NeighbourView], time_left: float | None = None, **kw: object
+):  # type: ignore[no-untyped-def]
+    return replace(ctx(cfg, kind, time_left), neighbours=tuple(neighbours), **kw)
+
+
+def test_each_position_is_empty_offline_stale_or_open(cfg: Config) -> None:
+    v = by_option(
+        cfg,
+        nctx(
+            cfg, "T1", [nb(cfg), NeighbourView(None), nb(cfg, "z4", offline=True), nb(cfg, "z3", stale=True)]
+        ),
+    )
+    assert [v[o].masked for o in ("n1", "n2", "n3", "n4")] == [None, "empty", "offline", "stale"]
+    no_snapshot = by_option(cfg, nctx(cfg, "T1", [NeighbourView("z2", "F-GPU", None)]))
+    assert no_snapshot["n1"].masked == "stale"  # nothing received yet
+    assert no_snapshot["n2"].masked == "empty"  # fewer than 4 neighbours: the rest are empty
+
+
+def test_offline_comes_before_stale_and_the_cloud_can_be_offline(cfg: Config) -> None:
+    v = by_option(cfg, nctx(cfg, "T4", [nb(cfg, offline=True, stale=True)], cloud_offline=True))
+    assert (v["n1"].masked, v["cloud"].masked) == ("offline", "offline")
+
+
+def test_t_in_to_a_neighbour_by_hand(cfg: Config) -> None:
+    # 4.3: own backhaul wait 0 + 1.2 Mbit / 1 Gbps (1.2 ms) + 3 ms = 4.2 ms; T1 on its free GPU: + 8 + 10 ms
+    # (the fog result path, Q16) = 22.2 ms. Masked with 22 ms left, open with 22.2 ms (">" in 7.2).
+    v = by_option(cfg, nctx(cfg, "T1", [nb(cfg)], time_left=1.0))["n1"]
+    assert v.t_in == pytest.approx(0.0042) and v.finish == pytest.approx(0.0222)
+    assert by_option(cfg, nctx(cfg, "T1", [nb(cfg)], time_left=0.022))["n1"].masked == "cannot_meet"
+    assert by_option(cfg, nctx(cfg, "T1", [nb(cfg)], time_left=v.finish))["n1"].masked is None
+    busy = replace(ctx(cfg, "T1", 1.0), backhaul_wait=0.010)  # a busy own backhaul pipe adds its exact wait
+    assert by_option(cfg, replace(busy, neighbours=(nb(cfg),)))["n1"].t_in == pytest.approx(0.0142)
+
+
+def test_full_at_a_neighbour_uses_the_headroom_and_counts_pending_sends(cfg: Config) -> None:
+    # 7.2 R2: hard full at n >= Q - h = 30, soft at n >= Q - r - h = 26 (GPU, Q = 32). The anchor's pending
+    # sends count (R1). The CPU queue is full too, so only the GPU decides.
+    gpu, cpu = empty(cfg, "F-GPU")["gpu"], empty(cfg, "F-GPU")["cpu"]
+    full_cpu = replace(cpu, n_hard=16)
+    one = Pending("hard", 0.008)
+
+    def mask(kind: str, n: int, pending: int) -> str | None:
+        slots = {"gpu": replace(gpu, n_hard=n), "cpu": full_cpu}
+        view = nb(cfg, slots=slots, pending={"gpu": (one,) * pending})
+        return by_option(cfg, nctx(cfg, kind, [view], time_left=100.0))["n1"].masked
+
+    assert (mask("T1", 29, 0), mask("T1", 30, 0), mask("T1", 29, 1)) == (None, "full", "full")
+    assert (mask("T4", 25, 0), mask("T4", 26, 0), mask("T4", 25, 1)) == (None, "full", "full")
+
+
+def test_cannot_run_at_a_neighbour_without_a_gpu(cfg: Config) -> None:
+    # S6: an F-CPU zone has no GPU, and T2 is GPU only.
+    v = by_option(cfg, nctx(cfg, "T2", [nb(cfg, "z2", hw="F-CPU")]))
+    assert v["n1"].masked == "cannot_run"
+
+
+def test_q_star_at_a_neighbour_counts_the_anchors_pending_sends(cfg: Config) -> None:
+    # Both GPU slots busy for 5 ms, one pending hard T1 of this anchor (8 ms): Ŵ = water level of 8 ms over
+    # (5, 5) = (8 + 10) / 2 = 9 ms (8.5, C4), so F_gpu = 9 + 8 = 17 ms < F_cpu = 90 ms: q* = GPU.
+    gpu = replace(empty(cfg, "F-GPU")["gpu"], u=2, remaining=(0.005, 0.005))
+    slots = {"gpu": gpu, "cpu": empty(cfg, "F-GPU")["cpu"]}
+    v = by_option(
+        cfg, nctx(cfg, "T1", [nb(cfg, slots=slots, pending={"gpu": (Pending("hard", 0.008),)})], 1.0)
+    )
+    assert (v["n1"].slot, v["n1"].wait) == ("gpu", pytest.approx(0.009))
+    alone = by_option(cfg, nctx(cfg, "T1", [nb(cfg, slots=slots)], 1.0))["n1"]
+    assert alone.wait == pytest.approx(0.005)  # without it: the first slot frees at 5 ms
+
+
+def test_the_energy_of_a_neighbour_option_pays_the_backhaul(cfg: Config) -> None:
+    # 12.4: Ê = e_bh S (forwarding to a neighbour) + execution + return; here pays no forwarding.
+    em = EnergyModel(cfg)
+    v = by_option(cfg, nctx(cfg, "T1", [nb(cfg)], time_left=1.0))
+    assert v["n1"].energy - v["here"].energy == pytest.approx(em.forwarding("neighbour", 1.2e6))
+    assert em.forwarding("neighbour", 1.2e6) > 0
+
+
+def test_greedy_sends_to_a_quiet_neighbour_when_here_is_swamped(cfg: Config) -> None:
+    # 7.3 C4: here both GPU and CPU are busy 0.5 s; the neighbour is empty: 22.2 ms < everything else.
+    here = empty(cfg, "F-GPU")
+    swamped = {q: replace(here[q], u=2, remaining=(0.5, 0.5)) for q in ("gpu", "cpu")}
+    c = nctx(cfg, "T1", [NeighbourView(None), nb(cfg, "z3")], time_left=1.0)
+    assert Greedy(cfg).choose(replace(c, here=swamped)) == "n2"
+    assert Greedy(cfg).choose(c) == "here"  # equal finish? here 18 ms < 22.2 ms
+
+
+def test_the_anchor_sees_its_neighbours_through_its_table_and_store() -> None:
+    from tests.zone.harness import Fixed, city
+
+    c = city(fixed_delay_config(), lambda z: Fixed(None))
+    t = Task(TaskId("c01", 0, 1), "c01", "T1", "hard", 0.1, 0.1, 1.2e6, 3e3, 0.0)
+    z1 = c.zones["z1"]
+    early = z1._context(t, 0.0, 0.1)
+    assert [n.zone_id for n in early.neighbours] == ["z2", "z3", "z4", None]
+    assert [v.masked for v in early.views[1:5]] == ["stale", "stale", "stale", "empty"]  # nothing received
+    c.clock.run_until(0.05)  # states at 0 arrive at 7 ms
+    v = z1._context(t, c.clock.now, c.clock.now + 0.1).views
+    assert [x.masked for x in v[1:5]] == [None, None, None, "empty"]
+    c.bus.kill("z3")
+    c.clock.run_until(0.06)
+    v = z1._context(t, c.clock.now, c.clock.now + 0.1).views
+    assert [x.masked for x in v[1:5]] == [None, "offline", None, "empty"]
+    c.bus.faults.drop = lambda topic, key, sub: topic == "zone/z4/state"  # z4 alive but its states lost
+    c.clock.run_until(0.45)  # its last received was sent at 0.0: 450 ms old
+    v = z1._context(t, c.clock.now, c.clock.now + 0.1).views
+    assert [x.masked for x in v[1:5]] == [None, "offline", "stale", "empty"]

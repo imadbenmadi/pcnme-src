@@ -41,7 +41,7 @@ from pcnme.node.state import SlotState
 from pcnme.node.timetable import RunTimeTable
 from pcnme.sim.clock import EventClock
 from pcnme.sim.rng import RandomStreams
-from pcnme.zone.decision import DecisionContext, Option, OptionView, Placement
+from pcnme.zone.decision import DecisionContext, NeighbourView, Option, OptionView, Placement
 from pcnme.zone.estimates import PathEstimates
 from pcnme.zone.intake import AnchorRow, AnchorTable, anchor_deadline
 from pcnme.zone.layout import CLOUD, NeighbourTable, Site
@@ -202,11 +202,13 @@ class Zone:
         *,
         bus: Bus,
         start_sites: tuple[Site, ...] = (),
+        fog_classes: Mapping[str, str] | None = None,
         on_close: Callable[[TaskRecord], None] | None = None,
     ) -> None:
         """`start_sites`: the other zones active at start-up (deployment configuration, 7.5.2); none for a
         zone alone."""
         self.zone_id = zone_id
+        self._fog = dict(fog_classes or {})  # every zone's hardware class: deployment configuration (Q21)
         self._clock = clock
         self._streams = streams
         self._cfg = config
@@ -339,6 +341,21 @@ class Zone:
             return
         self._send(rec, row, option, next(v for v in ctx.views if v.option == option))
 
+    def _neighbour(self, zone_id: str | None) -> NeighbourView:
+        """One neighbour position as the anchor knows it (7.2): its newest snapshot, its own pending sends
+        there (R1), offline (its last will) and stale."""
+        if zone_id is None:
+            return NeighbourView(None)
+        snap = self.store.snapshot(zone_id)
+        return NeighbourView(
+            zone_id=zone_id,
+            hw=self._fog.get(zone_id, ""),
+            slots=None if snap is None else snap.slots,
+            pending={q: self.store.pending_on(zone_id, q) for q in ("gpu", "cpu")},
+            offline=self.neighbours.online.get(zone_id) is False,
+            stale=self.store.is_stale(zone_id),
+        )
+
     def _context(self, task: Task, now: float, d_a: float) -> DecisionContext:
         """What the anchor knows (6B.7): its own exact state; the cloud's newest snapshot and its own pending
         sends there (R1); the masks' views of the 6 options."""
@@ -355,6 +372,8 @@ class Zone:
             here_hw=self._hw_name,
             cloud_pending=pending,  # type: ignore[arg-type]
             cloud_stale=self.store.is_stale(CLOUD),
+            cloud_offline=self.neighbours.online.get(CLOUD) is False,
+            neighbours=tuple(self._neighbour(z) for z in self.neighbours.positions),
         )
         return replace(ctx, views=tuple(views(self._cfg, self._em, ctx)))
 
@@ -366,6 +385,8 @@ class Zone:
         attempt = self.anchor.next_attempt(task.task_id)
         key = AttemptKey(task.task_id, self.zone_id, attempt)
         rec.option, rec.t_send = option, now
+        if option not in ("here", "cloud"):
+            raise NotImplementedError("placement to a neighbour comes in M3.5")
         if option == "here":
             budget = rec.d_a - self._est.t_ret_fog() - now  # 6C.9: d_k = d_A - T̂_ret,here
             self._submit(rec, self.executor, TaskRequest(key, task.task_type, task.cls, task.l_max, budget))
