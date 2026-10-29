@@ -99,6 +99,7 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 - [ ] **M6.3 Replay**: agent part (100 000) + expert part never overwritten; prioritized replay with ε_d, ε_a, α, β.
 - [ ] **M6.4 Pretraining loop** with held-out expert agreement and early stop.
 - [ ] **M6.5 Online learning** in every zone; neighbour order shuffled per episode in training (13.6).
+- [ ] **M6.6 Training curves** (TensorBoard or Grafana): loss, expert agreement, on-time rate and mean ê per episode.
 - **M6 acceptance tests:** hand-computed n-step target; margin loss is zero on non-expert transitions; masked actions never chosen; learning sanity on a two-action toy problem.
 
 ## M7 — Baselines, experiments, statistics
@@ -121,3 +122,9 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
 ## C — Calibration (any time after M0, on the home desktop)
 
 - [ ] Measure YOLO run times and energy per run on the GTX 1070 (slot fixed to x16 first), JPEG sizes on BDD100K frames; write the time table; rerun `tools/calc_defaults.py`. Cloud rows from Ultralytics' A100 numbers plus measured pre- and post-processing.
+
+## V — Viewer (not research: it never changes a result)
+
+- [ ] **V1 Replay viewer** (after M3): reads one run's Parquet files (the Q28 schema: positions, events, attempts, zones) and draws the VFC grid, the zone circles, the cars and their tasks; play, pause and speed; click a car or a task to see it. The data source sits behind one interface, so V3 only adds another source.
+- [ ] **V2 LuST map** (when LuST is added): the road map drawn from the SUMO net file.
+- [ ] **V3 Live mode** (M9): the same viewer fed live from the MQTT broker over WebSocket.
