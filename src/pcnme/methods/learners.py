@@ -21,24 +21,27 @@ from __future__ import annotations
 import copy
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from pcnme.agent.budget import Budget
-from pcnme.agent.dqfd import Group, pretrain
-from pcnme.agent.network import make_network
 from pcnme.agent.nstep import Sample
-from pcnme.agent.online import Episode, OnlineAgent, train_online
 from pcnme.config import Config, EpsilonSchedule
 from pcnme.sim.rng import RandomStreams
+
+if TYPE_CHECKING:
+    from pcnme.agent.online import Episode, OnlineAgent
+
+# torch (extra ml) is imported only by the functions that train or deploy: the method names, Trained and the
+# seed rules serve the runner and the CLI without it (Greedy, Random and the report need no torch)
 
 D3QN_FAMILY = ("pcnme", "d3qn-scratch", "d3qn-greedy")
 LSTM_FAMILY = ("tang-wong", "qeco")
 LEARNING = (*D3QN_FAMILY, *LSTM_FAMILY, "vfc-ppo")
 RULES = ("greedy", "random")
 METHODS = (*LEARNING, *RULES, "knee-reference")  # docs/METRICS.md method tags (16.1)
-Demos = Sequence[tuple[Group, Sample]]
+Demos = Sequence[tuple[tuple[str, int], Sample]]  # (scenario, window) and the sample (agent.dqfd.Group)
 
 
 @dataclass
@@ -88,6 +91,10 @@ def train_d3qn(
     """PCNME, D3QN from scratch, or D3QN + greedy expert (16.1). 16.4 ablations: the expert data cleared
     after pretraining (ablation.expert clear), or pretraining only (ablation.online false: no online
     episode, the budget unused)."""
+    from pcnme.agent.dqfd import pretrain
+    from pcnme.agent.network import make_network
+    from pcnme.agent.online import OnlineAgent, train_online
+
     if method not in D3QN_FAMILY:
         raise ValueError(f"{method} is not a D3QN method")
     if not cfg.ablation.online and method == "d3qn-scratch":
@@ -127,6 +134,9 @@ def deployed_d3qn(cfg: Config, trained: Trained, zones: Sequence[str], seed: int
     """The trained agents deployed for one evaluation episode: each zone from its own weights, learning
     online with ε online and its expert data kept (13.5; QUESTIONS Q42 stand-in); frozen when pretraining
     only (16.4)."""
+    from pcnme.agent.network import make_network
+    from pcnme.agent.online import OnlineAgent
+
     out = {}
     for z in zones:
         net = make_network(cfg, 0)
