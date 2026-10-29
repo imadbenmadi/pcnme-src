@@ -66,9 +66,9 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 - [x] **M3.8 Mobility** (`mobility/`), section 10: VFC grid with lights and stops, speeds, hotspot, attach with hysteresis, GPS every 100 ms, coverage gaps, cut uploads (9.7), result follows the car (10.3).
 - [x] **M3.9 Predictor** (10.2): exit time (ray–circle formula), next zone at intersections.
 - [x] **M3.10 Logging** (16.3): Parquet files and InfluxDB points as in `docs/METRICS.md` (confirm or change that schema here); fix the Grafana dashboard queries in `docker/grafana/dashboards/` against real data.
-- **M3 acceptance tests:**
+- [x] **M3 acceptance tests:**
   - One scenario test per row of the failure table (9.1) and per case C1–C14 (7.4).
-  - S1–S3 with Greedy, 3 seeds: ρ_fog and TI_WAN measured from the run match the config targets within 5 %; z1 load ≈ 1.6 × the mean; the WAN congests in S3. If not, stop and debug the queueing before anything else.
+  - S1–S3 with Greedy, 3 seeds: ρ_fog and TI_WAN measured from the run match the config targets within 5 %; z1 load ≈ 1.6 × the mean; the system is overloaded: under Greedy the fog GPUs saturate (97–100 %); under cloud-only placement the WAN queue grows without limit (M2 test). If not, stop and debug the queueing before anything else.
   - Exit-time formula against hand calculations; infinity when stopped.
 
 ## M4 — Agent inputs and rewards (no learning yet)

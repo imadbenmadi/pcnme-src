@@ -24,6 +24,7 @@ This is the one complete design of PCNME. It merges the PCNME Architecture doc, 
 | 29 Oct | 16.2, 18 | λ_car is divided by the share of task creations with coverage, measured once per map by a positions-only calibration run (tag C); frames made in a gap are reported as uncovered | QUESTIONS Q29 |
 | 29 Oct | 16.2, 18 | The hotspot share h (cars on z1's roads) is set by the map calibration run so that z1 = 1.6 × the mean load | QUESTIONS Q30 |
 | 29 Oct | 9.3 | The upload timeout T_up starts when the zone's own send has finished; before that only the deadline cap applies, and reaching it drops the attempt with no re-send | CHANGES C7 (QUESTIONS Q31) |
+| 29 Oct | 16.2 | S3 shows an overloaded system: under Greedy the fog GPUs saturate (97–100 %); under cloud-only placement the WAN queue grows without limit (M2 test); it no longer says the WAN congests under every method | M3 acceptance runs after C7 |
 
 ## 1. What PCNME is
 
@@ -900,7 +901,7 @@ Designed by load, not by number of cars. Two exact definitions: ρ_fog = the cit
 | --- | --- | --- | --- | --- |
 | S1 Light | about 0.5 | Loose | Low | Sanity: every method works |
 | S2 Critical | about 0.9 | Loose | Low | Queues start to matter |
-| S3 Overload | 1.5 to 2 | Loose | Low | The WAN pipe congests, its queue grows without limit |
+| S3 Overload | 1.5 to 2 | Loose | Low | The system is overloaded: under Greedy the fog GPUs saturate (97–100 %); under cloud-only placement the WAN queue grows without limit (M2 test) |
 | S4 Tight deadlines | about 0.9 | Tight | Low | Feasibility separates methods |
 | S5 High mobility | about 0.9 | Tight | High | The mobility component earns its place |
 | S6 Mixed fog | about 0.9 | Tight | Low | Placement intelligence on unequal nodes (with and without GPUs) |
