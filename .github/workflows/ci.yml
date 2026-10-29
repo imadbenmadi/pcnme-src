@@ -25,7 +25,9 @@ jobs:
           python-version: ${{ matrix.python }}
           enable-cache: true
       - name: Install (exactly uv.lock; fails if the lock is out of date, PLAN M0.4)
-        run: uv sync --locked --extra dev --extra analysis --extra nsga
+        # Linux adds `ml` (torch's CPU build, M6); on Windows the lock's torch is the 2.5 GB CUDA build, so the
+        # torch tests skip there (pytest.importorskip) and run on Linux and on the desktop
+        run: uv sync --locked --extra dev --extra analysis --extra nsga ${{ matrix.os == 'ubuntu-latest' && '--extra ml' || '' }}
       - name: Lint
         run: uv run --no-sync ruff check src tests tools && uv run --no-sync ruff format --check src tests tools
       - name: Types
@@ -46,7 +48,7 @@ jobs:
           version: "0.13.6"
           python-version: "3.12"
           enable-cache: true
-      - run: uv sync --locked --extra dev --extra analysis --extra nsga
+      - run: uv sync --locked --extra dev --extra analysis --extra nsga --extra ml
       - name: Slow tests (exit code 5 = none collected yet, allowed until M1)
         shell: bash
         run: |
