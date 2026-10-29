@@ -470,4 +470,4 @@ def test_every_task_type_needs_a_row_on_the_strongest_class(raw: dict[str, Any])
 
 def test_the_knee_weight_is_read_from_the_config(cfg: Config) -> None:
     # 13.3: w* from the small M5.3 NSGA-II runs (it replaced the Q32 stand-in 0.5); the full runs redo it.
-    assert cfg.reward.w == 0.3904
+    assert cfg.reward.w == 0.0788
