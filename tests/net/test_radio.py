@@ -14,7 +14,8 @@ from pcnme.config import Config, load_config
 from pcnme.ids import TaskId
 from pcnme.net import hops
 from pcnme.net.pipe import FifoPipe
-from pcnme.net.radio import RadioUplink, shannon_rate
+from pcnme.net.radio import RadioTransfer, RadioUplink, shannon_rate
+from pcnme.sim.clock import EventClock
 from pcnme.sim.rng import RandomStreams
 
 
@@ -48,17 +49,110 @@ def test_very_short_distances_count_as_1_m(cfg: Config) -> None:
     assert shannon_rate(0.0, cfg.radio) == shannon_rate(1.0, cfg.radio) == shannon_rate(0.4, cfg.radio)
 
 
-def test_one_uplink_per_zone_pushes_one_car_at_a_time_at_its_own_rate(cfg: Config) -> None:
-    # A 150 KB frame (1.2 Mbit): the far car (300 m, 539 Mbps) pushes in 2.226 ms; the near one (10 m, 931
-    # Mbps) arrives during that push and waits for it, then pushes in 1.289 ms.
-    up = RadioUplink()
-    far, near = shannon_rate(300.0, cfg.radio), shannon_rate(10.0, cfg.radio)
-    a = up.send(now=0.0, size_bits=1.2e6, rate=far, delay=0.003)
-    b = up.send(now=0.001, size_bits=1.2e6, rate=near, delay=0.001)
-    assert a.push == pytest.approx(1.2e6 / far) == pytest.approx(0.002226, rel=1e-3)
-    assert b.wait == pytest.approx(1.2e6 / far - 0.001)
-    assert b.push == pytest.approx(1.2e6 / near)
-    assert b.delivery == pytest.approx(1.2e6 / far + 1.2e6 / near + 0.001)
+def uplink() -> tuple[EventClock, RadioUplink, dict[str, RadioTransfer]]:
+    clock = EventClock()
+    return clock, RadioUplink(clock), {}
+
+
+def send_at(
+    clock: EventClock,
+    up: RadioUplink,
+    done: dict[str, RadioTransfer],
+    t: float,
+    name: str,
+    bits: float,
+    rate: float,
+    delay: float = 0.0,
+) -> None:
+    clock.schedule(t, lambda: up.send(bits, rate, delay, lambda tr: done.__setitem__(name, tr)))
+
+
+def test_a_car_alone_pushes_at_its_own_rate(cfg: Config) -> None:
+    # 150 KB (1.2 Mbit) at 300 m (539.1 Mbps): 2.226 ms, no wait; delivered after the 3 ms radio delay.
+    clock, up, done = uplink()
+    far = shannon_rate(300.0, cfg.radio)
+    send_at(clock, up, done, 0.0, "a", 1.2e6, far, delay=0.003)
+    clock.run_until(1.0)
+    a = done["a"]
+    assert (a.push, a.wait) == (pytest.approx(0.002226, rel=1e-3), 0.0)
+    assert a.push_end == pytest.approx(1.2e6 / far, rel=1e-12)
+    assert a.delivery == pytest.approx(1.2e6 / far + 0.003, rel=1e-12)
+
+
+def test_a_t1_behind_a_t2_shares_the_air_instead_of_waiting(cfg: Config) -> None:
+    """CHANGES C6, by hand. Both cars at 300 m, R = 539.1 Mbps. A T2 (72 Mbit) starts at 0, a T1 (1.2 Mbit) at
+    10 ms. While both are on the air each advances at R / 2, so the T1 needs 2 x 2.226 = 4.452 ms and ends at
+    14.452 ms (W_radio = 2.226 ms; one car at a time it would wait 123.6 ms). The T2 lost 2.226 ms of airtime
+    and ends at 133.56 + 2.226 = 135.79 ms: the air is busy as long as before (72 + 1.2 Mbit) / R."""
+    clock, up, done = uplink()
+    r = shannon_rate(300.0, cfg.radio)
+    send_at(clock, up, done, 0.0, "T2", 72e6, r)
+    send_at(clock, up, done, 0.010, "T1", 1.2e6, r)
+    clock.run_until(1.0)
+    t1, t2 = done["T1"], done["T2"]
+    assert t1.push_end == pytest.approx(0.010 + 2 * 1.2e6 / r, rel=1e-12)
+    assert t1.wait == pytest.approx(1.2e6 / r, rel=1e-9) == pytest.approx(0.002226, rel=1e-3)
+    assert t2.push_end == pytest.approx((72e6 + 1.2e6) / r, rel=1e-12)
+    assert t2.wait == pytest.approx(1.2e6 / r, rel=1e-9)
+
+
+def test_cars_at_different_rates_get_equal_airtime_not_equal_bits(cfg: Config) -> None:
+    """Same 1.2 Mbit at 0 from 10 m (931 Mbps, 1.289 ms alone) and 300 m (539 Mbps, 2.226 ms alone). Half the
+    airtime each: the near car ends at 2 x 1.289 = 2.578 ms, the far one at 1.289 + 2.226 = 3.515 ms; both
+    waited 1.289 ms."""
+    clock, up, done = uplink()
+    near, far = shannon_rate(10.0, cfg.radio), shannon_rate(300.0, cfg.radio)
+    send_at(clock, up, done, 0.0, "near", 1.2e6, near)
+    send_at(clock, up, done, 0.0, "far", 1.2e6, far)
+    clock.run_until(1.0)
+    assert done["near"].push_end == pytest.approx(2 * 1.2e6 / near, rel=1e-12)
+    assert done["far"].push_end == pytest.approx(1.2e6 / near + 1.2e6 / far, rel=1e-12)
+    assert done["near"].wait == pytest.approx(done["far"].wait, rel=1e-9) == pytest.approx(1.2e6 / near)
+
+
+def test_equal_uploads_started_together_end_together(cfg: Config) -> None:
+    clock, up, done = uplink()
+    r = shannon_rate(100.0, cfg.radio)
+    for name in ("a", "b", "c"):
+        send_at(clock, up, done, 0.0, name, 1.2e6, r)
+    clock.run_until(1.0)
+    ends = {done[n].push_end for n in "abc"}
+    assert len(ends) == 1 and ends.pop() == pytest.approx(3 * 1.2e6 / r, rel=1e-12)  # one event, one time
+    assert up.in_progress == 0
+
+
+def test_the_air_is_busy_exactly_when_one_car_at_a_time_would_be(cfg: Config) -> None:
+    # Both are work-conserving in airtime, so their busy periods match: compare the instants the air goes idle
+    # over 2 000 random uploads (T1 and T2 sizes, cars at 10-300 m, Poisson starts at radio TI about 0.6).
+    rng = np.random.default_rng(7)
+    starts = np.cumsum(rng.exponential(1 / 40.0, 2000))
+    bits = np.where(rng.random(2000) < 0.03, 72e6, 1.2e6)
+    rates = [shannon_rate(float(d), cfg.radio) for d in rng.uniform(10.0, 300.0, 2000)]
+    fifo_idle, free = [], 0.0
+    for k, (s, b, r) in enumerate(zip(starts, bits, rates, strict=True)):
+        free = max(s, free) + b / r
+        if k == len(starts) - 1 or starts[k + 1] > free:
+            fifo_idle.append(free)
+    clock = EventClock()
+    up = RadioUplink(clock)
+    idle: list[float] = []
+
+    def done(tr: RadioTransfer) -> None:
+        if up.in_progress == 0:
+            idle.append(tr.push_end)
+
+    for s, b, r in zip(starts, bits, rates, strict=True):
+        clock.schedule(float(s), lambda b=b, r=r: up.send(float(b), r, 0.0, done))
+    clock.run_until(float(starts[-1]) + 10.0)
+    assert len(idle) == len(fifo_idle) > 100
+    assert idle == pytest.approx(fifo_idle, rel=1e-9)
+
+
+def test_the_uplink_rejects_bad_arguments(cfg: Config) -> None:
+    _, up, _ = uplink()
+    for bits, rate, delay in ((0.0, 1e9, 0.0), (1e6, 0.0, 0.0), (1e6, 1e9, -1.0), (math.inf, 1e9, 0.0)):
+        with pytest.raises(ValueError):
+            up.send(bits, rate, delay, lambda tr: None)
 
 
 def test_the_fifo_pipe_takes_a_per_transfer_rate() -> None:
