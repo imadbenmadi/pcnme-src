@@ -537,6 +537,7 @@ class FastMode:
     eval_seeds: int
     testbed_seeds: int
     train_decisions: int  # the learning methods' training budget in decisions (16.1; QUESTIONS Q41)
+    early_decisions: int  # N of early-stage performance (16.3; QUESTIONS Q46)
     seed_split: Mapping[str, range]
 
 
@@ -1142,6 +1143,7 @@ def _fast_mode(n: _Node) -> FastMode:
             eval_seeds=n.integer("eval_seeds", ge=1),
             testbed_seeds=n.integer("testbed_seeds", ge=1),
             train_decisions=n.integer("train_decisions", ge=1),
+            early_decisions=n.integer("early_decisions", ge=1),
             seed_split=_frozen(split),
         )
 

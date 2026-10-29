@@ -2,6 +2,7 @@
 milestone.
 
     pcnme run --scenario S2 --method greedy --seeds 3000-3004 [--seconds 60] [--cars 200] [--out results]
+    pcnme report results [more run directories] [--out results/report]
 """
 
 from __future__ import annotations
@@ -13,7 +14,6 @@ from pathlib import Path
 
 # Each subcommand not built yet names the PLAN.md milestone that implements it.
 _PENDING: dict[str, str] = {
-    "report": "M7: metrics and confidence intervals over run directories",
     "plan": "M5: NSGA-II plans and demonstrations (tools/nsga_runs.py, tools/make_demos.py for now)",
     "pretrain": "M6: DQfD pretraining (tools/pretrain.py for now)",
     "calibrate": "C: measure the time table on the GPU",
@@ -80,15 +80,42 @@ def _run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _report_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    p = sub.add_parser("report", help="M7: results tables and plots from run directories (Parquet only)")
+    p.add_argument("runs", type=Path, nargs="+", help="run directories, or directories of runs")
+    p.add_argument("--config", type=Path, default=None, help="config file (default config/default.yaml)")
+    p.add_argument("--out", type=Path, default=None, help="report directory (default <results>/report)")
+    p.add_argument("--early", type=int, default=None, help="N of early-stage performance (fast_mode)")
+    p.add_argument("--no-plots", action="store_true")
+
+
+def _report(args: argparse.Namespace) -> int:
+    from pcnme.config import DEFAULT_CONFIG_PATH, load_config
+    from pcnme.metrics.report import report
+
+    early = args.early or load_config(args.config or DEFAULT_CONFIG_PATH).fast_mode.early_decisions
+    try:
+        files = report(args.runs, args.out or _results() / "report", early, plots=not args.no_plots)
+    except (ValueError, FileNotFoundError) as e:
+        print(f"pcnme report: {e}", file=sys.stderr)
+        return 2
+    for f in files:
+        print(f)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pcnme", description="PCNME experiments")
     sub = parser.add_subparsers(dest="command", required=True)
     _run_parser(sub)
+    _report_parser(sub)
     for name, help_text in _PENDING.items():
         sub.add_parser(name, help=help_text)
     args = parser.parse_args(argv)
     if args.command == "run":
         return _run(args)
+    if args.command == "report":
+        return _report(args)
     print(f"'{args.command}' is not implemented yet ({_PENDING[args.command]}).", file=sys.stderr)
     return 2
 

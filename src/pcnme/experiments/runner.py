@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from pcnme.config import Config, config_from_mapping
+from pcnme.config import CLOUD, Config, config_from_mapping
 from pcnme.experiments.city import City
 from pcnme.methods.learners import D3QN_FAMILY, LEARNING, LSTM_FAMILY, METHODS, RULES, Demos, Trained
 from pcnme.sim.rng import RandomStreams, SeedError
@@ -281,6 +281,23 @@ def _window_check(cfg: Config, city: City, ref: KneeReference) -> dict[str, Any]
     return {**ref.plan, "replayed": [obj.f1, obj.f2], "applied": applied}
 
 
+def report_constants(cfg: Config, scenario: str) -> dict[str, Any]:
+    """What the report needs besides the logs (metrics/stats.py): the idle power of the scenario's nodes for
+    the total energy (12: every active fog node and one cloud server, Q46) and the 13.2.4 cost constants for
+    the window objectives."""
+    hw = cfg.hardware
+    fog = cfg.scenarios[scenario].fog
+    return {
+        "idle_w": sum(hw[fog[z]].p_idle_w for z in cfg.layout.active_zones) + hw[CLOUD].p_idle_w,
+        "objective": {
+            "w3": cfg.reward.w3,
+            "c_drop": cfg.reward.c_drop,
+            "e_bar": cfg.derived.e_bar,
+            "e_ref": dict(cfg.derived.e_ref),
+        },
+    }
+
+
 # --- running ------------------------------------------------------------------------------------------------
 
 
@@ -301,6 +318,7 @@ def run(source: Mapping[str, object], spec: RunSpec, out: Path) -> RunResult:
             "usage": "evaluation",
             "reward_w": cfg.reward.w,
             "training": tinfo,
+            **report_constants(cfg, spec.scenario),
         }
         ref = None
         method: str | Factory
