@@ -139,8 +139,10 @@ reward:
   P: 2.0
   w3: 1.0
   C_drop: 5.0                    # 1 + (1 + w3) L_max/D + P
-  w: 0.5                         # C STAND-IN (QUESTIONS Q32): w* = the median knee weight over training windows
-                                 # (13.3), computed in M5; until then 0.5. Input 48 and the reward (11.4) use it
+  w: 0.3904                      # C: w* = the median knee weight (13.3) of the small M5.3 runs (S2, windows
+                                 # 1100-1105, population 10 x 5 generations; 5 of 6 windows had a knee).
+                                 # Placeholder quality: the full runs (18: 100 x 100, 20 windows) recompute it.
+                                 # Input 48 and the reward (11.4) use it (was the Q32 stand-in 0.5)
 
 rl:
   gamma_per_tau: 0.9             # P: Tang & Wong, QECO (0.9 per 0.1 s)

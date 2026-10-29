@@ -133,7 +133,8 @@ def test_transition_timing_two_tasks_at_one_anchor_by_hand() -> None:
     assert rec.closed_at == pytest.approx(t_rx_a + CLOSE, abs=1e-8)
     assert t.task_id == a.task_id and t.dt == pytest.approx(0.05, abs=1e-12)
     assert t.s == d_a.inputs and t.s_next == d_b.inputs and t.a == 0
-    assert t.r == rec.rewards[1].reward == pytest.approx(1 - 0.5 * 0.023226 / 0.1 - 0.5, abs=1e-5)
+    w = c.cfg.reward.w  # E = E_ref here: ê = 1
+    assert t.r == rec.rewards[1].reward == pytest.approx(1 - w * 0.023226 / 0.1 - (1 - w), abs=1e-5)
     c.clock.run_until(3.0)
     c.zones["z1"].transitions.end_episode()  # B: the last decision, truncated with no s'
     assert [(x.task_id, x.truncated, x.s_next) for x in z1.transitions.replay][1] == (b.task_id, True, None)
