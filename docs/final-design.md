@@ -19,6 +19,8 @@ This is the one complete design of PCNME. It merges the PCNME Architecture doc, 
 | 28 Oct | 8.5, 5.2 | The wait estimate is water-filling over each slot's remaining time r_i (published per slot instead of their sum R): Σ max(0, Ŵ − r_i) = B; still 0 while a slot is free; for c_q = 1 the same as before | CHANGES C4 |
 | 28 Oct | 14.4, 18 | Run times are lognormal, fitted to each row's mean and p95; the placeholder p5 factor is 0.75 (was 0.9); measured rows report the fitted p5 next to the measured one | CHANGES C5 (QUESTIONS Q7) |
 | 29 Oct | 4.1, 4.2, 6A.3, 15.3, 17 | The radio uplink shares its airtime equally among the cars uploading at once (each advances at R_car ÷ n) instead of one car at a time; W_radio is the extra push time from sharing, still known exactly at t_rx | CHANGES C6 (QUESTIONS Q18) |
+| 29 Oct | 18, 14.3 | The car's encode time is a config value, `timing.encode` (M, placeholder 0); the upload starts after it, and B_car does not subtract it again | QUESTIONS Q14 |
+| 29 Oct | 15.2 | Every drawn time is rounded to whole nanoseconds and every radio rate to whole bit/s, so one seed gives the same run on every OS | web review of PR #20 |
 
 ## 1. What PCNME is
 
@@ -813,7 +815,7 @@ The zone service, the car app and the cloud service are written once in Python (
 | Clock and timers | Discrete-event simulated clock (one event queue, no waiting) | Real clock |
 | Links | The link-model formulas in code | tc netem delays and rate limits; the radio pipe in software |
 
-Every random draw comes from seeded generators, one per purpose (arrivals, run times, link delays, mobility), so the same seed gives the same run. Fast mode is used for NSGA-II, pretraining, baseline training and sweeps; the testbed for the final evaluation of every method. Training on the testbed alone is impossible: about 240 real-time runs (6 scenarios × 8 methods × 5 seeds) plus training and thousands of NSGA-II evaluations would take weeks.
+Every random draw comes from seeded generators, one per purpose (arrivals, run times, link delays, mobility), so the same seed gives the same run. Every drawn time (run times, link delays, arrival gaps) is rounded to whole nanoseconds, and every radio rate to whole bit/s, where it is made: log, exp, sin and cos may differ in the last bit between operating systems, and one bit can flip a scheduling decision, so without it the same seed could give different runs on Windows and Linux. No quantity in the design is near 1 ns or 1 bit/s. Fast mode is used for NSGA-II, pretraining, baseline training and sweeps; the testbed for the final evaluation of every method. Training on the testbed alone is impossible: about 240 real-time runs (6 scenarios × 8 methods × 5 seeds) plus training and thousands of NSGA-II evaluations would take weeks.
 
 ### 15.3 What comes from the VFC code
 
@@ -994,6 +996,7 @@ Every number now has a default; together they form config/default.yaml. Tag: **P
 | Nodes | Q_q; r; h | Q_GPU = 32, Q_CPU = 16; r = 4; h = 2 | R | 32 queued T1 = 128 ms of work, more than D, so "late" binds before "full" for hard tasks. Soft tasks are admitted below 28 (GPU), and masked at 26 |
 | Scheduler | A_max; T_probe; T_keep | 200 ms; 50 ms (fog), 300 ms (cloud); 10 s | R | A_max = 2 × the loose hard D. T_probe covers about 10 backhaul round trips, or the WAN round-trip maximum plus margin. T_keep ≥ longest D + L_max = 6 s |
 | Timing | κ_up; m_wd; quantiles; λ; T_ack; T_leave; GPS expiry | 2; 20 ms (fog), 50 ms (cloud); 5 % and 95 %; 0.2; 200 ms; 300 ms; 1 s | R | T_ack ≫ result + radio + confirm (about 20 ms) |
+| Timing | Encode time (the car's JPEG encode, 14.3) | 0 s (placeholder) | M | `timing.encode`. Inside L: the upload starts at creation + encode, and B_car = D − time since creation already holds it, so it is not subtracted again (QUESTIONS Q14) |
 | State | State period; staleness | 100 ms; 300 ms | P | Section 9.2 |
 | Reward | B, P, w3, C_drop; w; G; ē | 1, 2, 1, 5; median knee weight; G = 500 ms; ē computed from the time table | P / C / R | G > the slowest status report (cloud one way 100 ms + broker) + d_abort. Placeholder ē ≈ 11.7 (T1 on a CPU slot at p95) |
 | RL | γ per τ; τ | 0.9 per 100 ms | P | Tang & Wong and QECO (0.9 per 0.1 s slot). At S2 an anchor decides every 13.5 ms, so the per-step factor is 0.986 and the horizon about 70 decisions |
