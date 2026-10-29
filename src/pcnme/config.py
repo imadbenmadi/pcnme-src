@@ -442,12 +442,14 @@ class Tof:
 
 @dataclass(frozen=True, slots=True)
 class Reward:
-    """Reward constants (final-design 11.4). w comes from the knee point (13.3), not from the config."""
+    """Reward constants (final-design 11.4). w = w1, the time weight (w2 = 1 - w): the median knee weight
+    w* (13.3) once M5 computes it; until then a stand-in from the config (QUESTIONS Q32)."""
 
     b: float
     p: float
     w3: float
     c_drop: float
+    w: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -1020,12 +1022,12 @@ def _tof(n: _Node, hardware: Mapping[str, HardwareClass]) -> Tof:
 
 def _reward(n: _Node) -> Reward:
     with n:
-        n.marker("w", "from_knee")  # final-design 13.3: the median knee weight
         return Reward(
             b=n.number("B", gt=0.0),
             p=n.number("P", ge=0.0),
             w3=n.number("w3", ge=0.0),
             c_drop=n.number("C_drop", gt=0.0),
+            w=n.number("w", gt=0.0, le=1.0),  # 11.4: w in (0, 1]; STAND-IN until M5 (QUESTIONS Q32)
         )
 
 

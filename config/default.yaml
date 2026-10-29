@@ -139,7 +139,8 @@ reward:
   P: 2.0
   w3: 1.0
   C_drop: 5.0                    # 1 + (1 + w3) L_max/D + P
-  w: from_knee                   # median knee weight over training windows
+  w: 0.5                         # C STAND-IN (QUESTIONS Q32): w* = the median knee weight over training windows
+                                 # (13.3), computed in M5; until then 0.5. Input 48 and the reward (11.4) use it
 
 rl:
   gamma_per_tau: 0.9             # P: Tang & Wong, QECO (0.9 per 0.1 s)
