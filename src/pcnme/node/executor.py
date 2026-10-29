@@ -149,6 +149,7 @@ class Executor:
         self._running: dict[SlotType, list[_Running]] = {q: [] for q in hw.slot_types}
         self._live: dict[AttemptKey, _Queued | _Running] = {}
         self._kept: dict[AttemptKey, tuple[Outcome, float]] = {}  # (outcome, time) for T_keep (8.6, 5.5)
+        self.refused = 0  # refusals so far (logs: the refusal rate, 9.2)
 
     @classmethod
     def from_config(
@@ -256,6 +257,7 @@ class Executor:
 
     def _refuse(self, req: TaskRequest, reason: Literal["full", "late"]) -> Refused:
         self._log("refuse", req.key, reason)
+        self.refused += 1
         return Refused(reason=reason)
 
     def _enqueue(self, task: _Queued) -> None:

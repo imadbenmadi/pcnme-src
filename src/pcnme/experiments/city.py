@@ -19,13 +19,16 @@ import functools
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Protocol
 
 from pcnme.bus.bus import Bus
 from pcnme.car.car import Car, Task
 from pcnme.config import Config
+from pcnme.energy import EnergyModel
 from pcnme.ids import TaskId
 from pcnme.methods.simple import Greedy, Random
+from pcnme.metrics.runlog import RunLog
 from pcnme.mobility.grid import RoadGrid, Walker
 from pcnme.net.pipe import FifoPipe
 from pcnme.net.radio import MIN_DISTANCE, shannon_rate
@@ -123,6 +126,7 @@ class City:
     ) -> None:
         self.cfg = cfg
         self.scenario = cfg.scenarios[scenario]
+        self.log = RunLog(scenario, method if isinstance(method, str) else "custom", seed)
         self.clock = clock = EventClock()
         self.streams = streams = RandomStreams.from_config(cfg, seed, "training")
         self.bus = bus = Bus(clock, streams, cfg.links.broker_extra_delay)
@@ -203,6 +207,9 @@ class City:
             self.apps.append(app)
         self._period = cfg.cars.gps_period
         clock.schedule(clock.now, self._tick)
+        self._bits = {"wan": 0.0, **{f"backhaul-{z}": 0.0 for z in self.zones}}
+        self._refused = {z: 0 for z in self.zones}
+        clock.schedule(clock.now, self._sample)
 
     # --- the GPS period: move, attach, GPS ------------------------------------------------------------------
 
@@ -216,8 +223,20 @@ class City:
             if z != app.serving:
                 self._switch(app, z)
             self._give_up(app, now)
+            vx, vy = app.mover.velocity(now)
+            speed = math.hypot(vx, vy)
+            self.log.add(
+                "positions",
+                now,
+                car_id=app.car.car_id,
+                x_m=pos[0],
+                y_m=pos[1],
+                speed_mps=speed,
+                heading_x=vx / speed if speed else 0.0,
+                heading_y=vy / speed if speed else 0.0,
+                zone=app.serving or "",
+            )
             if app.serving is not None:
-                vx, vy = app.mover.velocity(now)
                 self.zones[app.serving].gps(app.car.car_id, pos[0], pos[1], vx, vy, now)
         self.clock.schedule(now + self._period, self._tick)
 
@@ -228,6 +247,16 @@ class City:
         """A handover or a gap: uploads in flight to the old zone are cut (9.7) and held; the new zone gets
         the attach and the held frames."""
         old = app.serving
+        kind = "attach" if old is None else ("gap" if new is None else "handover")
+        self.log.add(
+            "events",
+            self.clock.now,
+            car_id=app.car.car_id,
+            kind=kind,
+            zone_from=old or "",
+            zone_to=new or "",
+            task_id="",
+        )
         if old is not None:
             for tid, zone in list(app.uploading.items()):
                 if zone != old:
@@ -235,6 +264,15 @@ class City:
                 del app.uploading[tid]
                 if self.zones[old].cut_upload(tid):
                     app.held[tid] = app.car._tasks[tid]  # cut: the car keeps the frame (9.7.2)
+                    self.log.add(
+                        "events",
+                        self.clock.now,
+                        car_id=app.car.car_id,
+                        kind="upload_cut",
+                        zone_from=old,
+                        zone_to=new or "",
+                        task_id=str(tid),
+                    )
                 # else: its last bit was sent, it arrives there and that zone is its anchor
         app.serving = new
         if new is not None:
@@ -253,7 +291,7 @@ class City:
 
     def _upload(self, app: CarApp, task: Task) -> None:
         if self._hopeless(app, task, self.clock.now):
-            self.car_drops.append(CarDrop(task, self.clock.now))
+            self._car_drop(app, task, self.clock.now)
             return
         assert app.serving is not None
         app.uploading[task.task_id] = app.serving
@@ -270,7 +308,123 @@ class City:
         for tid, task in list(app.held.items()):
             if self._hopeless(app, task, now):
                 del app.held[tid]
-                self.car_drops.append(CarDrop(task, now))
+                self._car_drop(app, task, now)
+
+    def _car_drop(self, app: CarApp, task: Task, now: float) -> None:
+        self.car_drops.append(CarDrop(task, now))
+        self.log.add(
+            "events",
+            now,
+            car_id=app.car.car_id,
+            kind="car_drop",
+            zone_from=app.serving or "",
+            zone_to="",
+            task_id=str(task.task_id),
+        )
+
+    # --- logs (16.3, METRICS.md, Q28) ----------------------------------------------------------------------
+
+    def _sample(self) -> None:
+        """Every state period: per zone and slot type (queues, busy slots, refusals, ŵ_WAN) and per pipe
+        (wait, bits pushed, TI over the period)."""
+        now, period = self.clock.now, self.cfg.stateplane.state_period
+        for z, zone in self.zones.items():
+            refused = zone.executor.refused - self._refused[z]
+            self._refused[z] = zone.executor.refused
+            for q, s in zone.executor.snapshot().items():
+                self.log.add(
+                    "zones",
+                    now,
+                    zone=z,
+                    slot_type=q,
+                    rho=s.u / s.c,
+                    queue_hard=s.n_hard,
+                    queue_soft=s.n_soft,
+                    busy=s.u,
+                    refusals=refused,
+                    wan_wait_est_s=zone.store.estimate(),
+                )
+        pipes = {"wan": self.wan, **{f"backhaul-{z}": zone.backhaul for z, zone in self.zones.items()}}
+        for name, pipe in pipes.items():
+            bits = pipe.bits_sent - self._bits[name]
+            self._bits[name] = pipe.bits_sent
+            assert pipe.bandwidth is not None
+            self.log.add(
+                "pipes",
+                now,
+                pipe=name,
+                wait_s=pipe.wait_at(now),
+                bits=bits,
+                ti=bits / pipe.bandwidth / period,
+            )
+        self.clock.schedule(now + period, self._sample)
+
+    def _task_rows(self) -> None:
+        em = EnergyModel(self.cfg)
+        for r in self.records:
+            p = r.parts
+            self.log.add(
+                "tasks",
+                r.task.created,
+                anchor=r.anchor,
+                type=r.task.task_type,
+                cls=r.task.cls,
+                outcome=r.outcome,
+                boulder=r.route == "cloud",
+                latency_s=r.confirm.latency if r.confirm else None,
+                deadline_s=r.task.deadline,
+                attempts=len(r.attempts),
+                energy_j=em.of_record(r).total + em.earlier(r),
+                energy_wasted_j=em.earlier(r),
+                upload_s=p.get("upload"),
+                forward_s=p.get("input"),
+                wait_s=p.get("queue"),
+                run_s=p.get("run"),
+                return_s=p.get("return"),
+                zone_changed=int(r.delivered_by is not None and r.delivered_by != r.anchor),
+            )
+            for a, i in sorted(r.attempts.items()):
+                last = a == max(r.attempts)
+                if a == r.result_attempt:
+                    result = "delivered"
+                elif not last:
+                    e = next((x for x in r.earlier if x.attempt == a), None)
+                    result = (
+                        f"refused_{e.reply}"
+                        if e and e.reply in ("full", "late")
+                        else (e.reply if e else "lost")
+                    )
+                else:
+                    result = r.reply if r.reply in ("lost", "no_reply") else (r.outcome or "")
+                rep_ = r.report if r.report is not None and r.report.key.attempt == a else None
+                self.log.add(
+                    "attempts",
+                    i.t_send,
+                    anchor=r.anchor,
+                    executor=i.executor,
+                    slot_type=rep_.slot if rep_ else "",
+                    result=result,
+                    option=i.option,
+                    attempt=a,
+                    task_id=str(r.task.task_id),
+                    t_send_s=i.t_send,
+                    t_at_executor_s=i.t_at_executor,
+                    t_start_s=rep_.start if rep_ else None,
+                    t_finish_s=rep_.finish if rep_ else None,
+                    t_result_at_car_s=r.result_at_car if a == r.result_attempt else None,
+                )
+
+    def write(self, out_dir: Path) -> Path:
+        """results/<run_id>/ (METRICS.md): the Parquet files, run.json, points.lp."""
+        self._task_rows()
+        info = {
+            "scenario": self.scenario.name,
+            "seed": self.log.seed,
+            "seconds": self.seconds,
+            "fleet": len(self.apps),
+            "hotspot_share_h": self.h,
+        }
+        return self.log.write(out_dir, info)
 
     # --- running --------------------------------------------------------------------------------------------
 

@@ -45,6 +45,7 @@ class FifoPipe:
         self._bandwidth = None if bandwidth is None else _positive(bandwidth, "the bandwidth")
         self._t_free = 0.0  # when the pipe is next free (4.1)
         self._last_now = -math.inf
+        self.bits_sent = 0.0  # bits pushed so far (logs: TI per period)
 
     @property
     def bandwidth(self) -> float | None:
@@ -74,6 +75,7 @@ class FifoPipe:
         push_end = max(now, self._t_free) + push  # t_free <- max(t_now, t_free) + S / B (4.1)
         self._t_free = push_end
         self._last_now = now
+        self.bits_sent += size_bits
         return Transfer(
             start=now, wait=wait, push=push, delay=delay, push_end=push_end, delivery=push_end + delay
         )
