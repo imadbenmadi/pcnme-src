@@ -114,6 +114,8 @@ class PlanPlacement:
     cfg: Config
     zone_id: str
     genes: Mapping[TaskId, Option]
+    rule: Callable[[DecisionContext], Option | None] | None = None  # first decisions of `ruled` tasks
+    ruled: frozenset[TaskId] = frozenset()
     greedy: Greedy = field(init=False)
     first: dict[TaskId, Option | None] = field(default_factory=dict)  # every task's first decision
     applied: set[TaskId] = field(default_factory=set)  # window tasks that took their gene
@@ -133,7 +135,10 @@ class PlanPlacement:
         else:
             if gene is not None:
                 self.replaced.add(tid)
-            option = self.greedy.choose(ctx)
+            if first and self.rule is not None and tid in self.ruled:
+                option = self.rule(ctx)
+            else:
+                option = self.greedy.choose(ctx)
         if first:
             self.first[tid] = option
         return option
@@ -165,13 +170,17 @@ def simulate(
     *,
     logging: bool = False,
     stop: Callable[[Run], bool] | None = None,
+    rule: Callable[[DecisionContext], Option | None] | None = None,
+    ruled: Iterable[Key] = (),
 ) -> Run:
     """Run the scenario with the plan's genes until `stop` says so after a step, or to the horizon. The cars
     make tasks until the horizon in every plan."""
     placements: dict[str, PlanPlacement] = {}
+    ruled_keys = tuple(ruled)
 
     def factory(c: Config, streams: RandomStreams, z: str) -> PlanPlacement:
-        p = PlanPlacement(c, z, {tid: o for (a, tid), o in genes.items() if a == z})
+        mine = frozenset(tid for a, tid in ruled_keys if a == z)
+        p = PlanPlacement(c, z, {tid: o for (a, tid), o in genes.items() if a == z}, rule, mine)
         placements[z] = p
         return p
 
@@ -259,3 +268,30 @@ def evaluate(cfg: Config, window: Window, genome: Sequence[int]) -> tuple[Object
     if not all(k in run.settled for k in keys):
         raise RuntimeError(f"window {window.spec}: not every window task settled by the horizon")
     return objectives(cfg, run.records(keys)), run
+
+
+def energy_greedy(ctx: DecisionContext) -> Option | None:
+    """The energy-greedy choice (CHANGES C9): the open option with the lowest Ê (12.4), i.e. the cheapest
+    one that meets the deadline; ties by the earlier finish, then option order."""
+    free = [v for v in ctx.views if v.masked is None]
+    if not free:
+        return None
+    pick = min(free, key=lambda v: (v.energy, v.finish, OPTIONS.index(v.option)))
+    return pick.option  # type: ignore[return-value]
+
+
+def plan_of(
+    cfg: Config, window: Window, rule: Callable[[DecisionContext], Option | None]
+) -> tuple[tuple[int, ...], Objectives]:
+    """The genome of a rule and its objectives: the window tasks' first decisions made by `rule`, every other
+    one by greedy (as in any plan); a task with every option masked gets gene 0 (unused). Evaluating the
+    genome gives the same objectives."""
+    keys = [t.key for t in window.tasks]
+    run = simulate(
+        cfg, window.spec, {}, stop=lambda r: all(k in r.settled for k in keys), rule=rule, ruled=keys
+    )
+    genome = []
+    for t in window.tasks:
+        choice = run.placements[t.anchor].first.get(t.task_id)
+        genome.append(t.options.index(choice) if choice in t.options else 0)
+    return tuple(genome), objectives(cfg, run.records(keys))
