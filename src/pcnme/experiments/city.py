@@ -114,17 +114,19 @@ class City:
         usage: str = "training",
         logging: bool = True,
         shuffle_neighbours: bool = False,
+        method_name: str | None = None,
     ) -> None:
         """`usage`: the seed range (fast_mode.seed_split): training, or nsga2_and_demos for NSGA-II windows
         and demonstrations (16.3: never evaluation seeds). `logging`: the per-period rows (positions, zones,
         pipes); off for NSGA-II evaluations, which read only the task records. Neither changes the run.
         `shuffle_neighbours`: training (13.6): each zone's neighbour positions are permuted for this episode,
         drawn from its neighbour_order stream. A placement with an `attach(zone)` method is attached to its
-        zone (the online learner, M6.5)."""
+        zone (the online learner, M6.5). `method_name`: the method tag of the logs (METRICS.md) when `method`
+        is a factory."""
         self.cfg = cfg
         self._logging = logging
         self.scenario = cfg.scenarios[scenario]
-        self.log = RunLog(scenario, method if isinstance(method, str) else "custom", seed)
+        self.log = RunLog(scenario, method_name or (method if isinstance(method, str) else "custom"), seed)
         self.clock = clock = EventClock()
         self.streams = streams = RandomStreams.from_config(cfg, seed, usage)
         self.bus = bus = Bus(clock, streams, cfg.links.broker_extra_delay)
@@ -474,8 +476,8 @@ class City:
                     truncated=t.truncated,
                 )
 
-    def write(self, out_dir: Path) -> Path:
-        """results/<run_id>/ (METRICS.md): the Parquet files, run.json, points.lp."""
+    def write(self, out_dir: Path, extra: Mapping[str, Any] | None = None) -> Path:
+        """results/<run_id>/ (METRICS.md): the Parquet files, run.json (with `extra`), points.lp."""
         self._task_rows()
         self._decision_rows()
         self._transition_rows()
@@ -485,6 +487,7 @@ class City:
             "seconds": self.seconds,
             "fleet": len(self.apps),
             "hotspot_share_h": self.h,
+            **(extra or {}),
         }
         return self.log.write(out_dir, info)
 

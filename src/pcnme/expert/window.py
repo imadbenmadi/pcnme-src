@@ -54,6 +54,7 @@ class WindowSpec:
     seed: int
     index: int
     n_cars: int | None = None  # the fleet; None = the config's smallest (as City)
+    usage: str = USAGE  # the seed range; "evaluation" only for the knee reference (16.1; QUESTIONS Q45)
 
 
 def window_seed(cfg: Config, scenario: str, index: int) -> int:
@@ -188,7 +189,7 @@ def start(
         placements[z] = p
         return p
 
-    city = City(cfg, spec.scenario, factory, spec.seed, spec.n_cars, usage=USAGE, logging=logging)
+    city = City(cfg, spec.scenario, factory, spec.seed, spec.n_cars, usage=spec.usage, logging=logging)
     run = Run(city, placements)
     for z, zone in city.zones.items():
         zone.on_settle = lambda rec, z=z: run.settled.add((z, rec.task.task_id))

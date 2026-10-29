@@ -36,7 +36,6 @@ from pymoo.optimize import minimize
 from pcnme.config import Config, config_from_mapping
 from pcnme.expert.window import (
     FORK,
-    USAGE,
     Objectives,
     WarmStart,
     Window,
@@ -123,7 +122,7 @@ def nsga_seed(cfg: Config, window: Window) -> int:
     """pymoo's seed: the first draw of the "nsga" stream of the window's seed, keyed by scenario and
     window."""
     s = window.spec
-    g = RandomStreams.from_config(cfg, s.seed, USAGE).generator("nsga", s.scenario, s.index)
+    g = RandomStreams.from_config(cfg, s.seed, s.usage).generator("nsga", s.scenario, s.index)
     return int(g.integers(2**31 - 1))
 
 
@@ -133,7 +132,7 @@ def initial_population(
     """CHANGES C9: the greedy and energy-greedy plans, distinct mutated copies of them (alternating) up to
     half the population, then random valid plans; all distinct. Drawn from the window's "nsga" stream."""
     s = window.spec
-    rng = RandomStreams.from_config(cfg, s.seed, USAGE).generator("nsga", s.scenario, s.index, "seed_pop")
+    rng = RandomStreams.from_config(cfg, s.seed, s.usage).generator("nsga", s.scenario, s.index, "seed_pop")
     rows: list[tuple[int, ...]] = []
 
     def add(row: Sequence[int]) -> bool:
