@@ -1,8 +1,8 @@
 """Demonstrations from saved NSGA-II fronts (PLAN M5.4; final-design 13.4).
 
 Reads the fronts tools/nsga_runs.py wrote (<nsga>/<scenario>-w<k>.json), replays every distinct front plan
-with its own w_p (13.4.4), checks each replay gives its saved objectives exactly, and writes one Parquet file per
-window to <out>/<scenario>-w<k>.parquet.
+with its own w_p (13.4.4), checks each replay gives its saved objectives exactly, and writes one Parquet file
+per window to <out>/<scenario>-w<k>.parquet.
 
     python tools/make_demos.py [--nsga results/nsga] [--out results/demos]
 """
