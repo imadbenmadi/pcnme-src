@@ -510,6 +510,9 @@ class Dqfd:
     margin: float
     per: Per
     pretrain_updates: int
+    eval_every: int  # held-out expert agreement every this many updates (M6.4)
+    patience: int  # early stop after this many measurements without a rise
+    holdout_share: float  # share of the demonstration windows held out
 
 
 @dataclass(frozen=True, slots=True)
@@ -1088,6 +1091,9 @@ def _dqfd(n: _Node) -> Dqfd:
             margin=n.number("margin", ge=0.0),
             per=per,
             pretrain_updates=n.integer("pretrain_updates", ge=1),
+            eval_every=n.integer("eval_every", ge=1),
+            patience=n.integer("patience", ge=1),
+            holdout_share=n.number("holdout_share", gt=0.0, le=0.5),
         )
 
 

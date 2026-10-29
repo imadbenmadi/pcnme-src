@@ -170,6 +170,9 @@ dqfd:                            # P: Hester et al. 2018
   margin: 0.8
   per: {alpha: 0.4, beta0: 0.6, beta_final: 1.0, eps_demo: 1.0, eps_agent: 0.001}
   pretrain_updates: 200000       # R: scaled from 750k; stop early when held-out expert agreement stops rising
+  eval_every: 1000               # R: held-out expert agreement measured every 1 000 updates (M6.4)
+  patience: 5                    # R: stop when it has not risen for 5 measurements in a row
+  holdout_share: 0.2             # R: share of the demonstration windows held out for the agreement
 
 nsga2:
   population: 100                # P: Mokni & Yassa

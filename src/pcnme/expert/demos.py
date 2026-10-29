@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from pcnme.agent.inputs import INPUT_NAMES
+from pcnme.agent.nstep import Sample, anchor_samples
 from pcnme.agent.transitions import Transition
 from pcnme.config import Config
 from pcnme.expert.knee import knee, weights
@@ -31,6 +32,7 @@ from pcnme.zone.decision import OPTIONS
 class DemoTransition:
     transition: Transition
     expert: bool
+    sample: Sample  # the learner's view: the 1-step and n-step parts over the anchor's whole chain (13.5)
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,12 +69,23 @@ def replay(
     run = simulate(cw, window.spec, window.genes(genome))
     run.city.end()
     keys = {t.key for t in window.tasks}
+    rl = cw.rl
     out = []
     for z, zone in run.city.zones.items():
         applied = run.placements[z].applied
+        # the n-step chain runs over every decision of the anchor, window task or not (13.5)
+        order = [(d.task_id, d.attempt) for d in zone.decisions]
+        samples = anchor_samples(
+            zone.transitions.replay,
+            order,
+            cw.dqfd.n_step,
+            rl.gamma_per_tau,
+            rl.tau,
+            lambda t, applied=applied: is_expert(t, applied),  # type: ignore[misc]
+        )
         for t in zone.transitions.replay:
             if (z, t.task_id) in keys:
-                out.append(DemoTransition(t, is_expert(t, applied)))
+                out.append(DemoTransition(t, is_expert(t, applied), samples[(t.task_id, t.attempt)]))
     out.sort(key=lambda d: (d.transition.time, d.transition.anchor))
     obj = objectives(cw, run.records(t.key for t in window.tasks))
     return Demonstration(window, plan, tuple(genome), w, obj, tuple(out), is_knee)
@@ -96,7 +109,8 @@ def demonstrate_front(
 
 def rows(demos: Sequence[Demonstration]) -> list[dict[str, Any]]:
     """One row per transition: the window, the plan and its w, the transition and its expert flag; s as
-    x_<input>, s' as xn_<input> (empty when truncated with no s'), the valid actions of s and s'."""
+    x_<input>, s' as xn_<input> (empty when truncated with no s'), the valid actions of s and s'; the n-step
+    part (13.5): has1, g1, hasn, m, rn, gn, s_m as xm_<input> and its valid actions as valid_m_<option>."""
     out = []
     for d in demos:
         spec = d.window.spec
@@ -126,6 +140,14 @@ def rows(demos: Sequence[Demonstration]) -> list[dict[str, Any]]:
             row.update({f"valid_{o}": v for o, v in zip(OPTIONS, t.valid, strict=True)})
             vn = t.valid_next if t.valid_next is not None else (None,) * len(OPTIONS)
             row.update({f"valid_next_{o}": v for o, v in zip(OPTIONS, vn, strict=True)})
+            smp = dt.sample
+            row.update(
+                {"has1": smp.has1, "g1": smp.g1, "hasn": smp.hasn, "m": smp.m, "rn": smp.rn, "gn": smp.gn}
+            )
+            sn = smp.sn if smp.sn is not None else (None,) * len(INPUT_NAMES)
+            row.update({f"xm_{n}": v for n, v in zip(INPUT_NAMES, sn, strict=True)})
+            vm = smp.validn if smp.validn is not None else (None,) * len(OPTIONS)
+            row.update({f"valid_m_{o}": v for o, v in zip(OPTIONS, vm, strict=True)})
             out.append(row)
     return out
 
@@ -138,3 +160,36 @@ def write(path: Path, demos: Sequence[Demonstration]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(pa.Table.from_pylist(rows(demos)), path)
     return path
+
+
+def load_samples(paths: Sequence[Path]) -> list[tuple[tuple[str, int], Sample]]:
+    """The demonstrations as the learner's samples, each with its (scenario, window) for the held-out
+    split."""
+    import pyarrow.parquet as pq
+
+    def opt(row: dict[str, Any], prefix: str, names: Sequence[str]) -> tuple[Any, ...] | None:
+        vals = tuple(row[f"{prefix}{n}"] for n in names)
+        return None if vals[0] is None else vals
+
+    out = []
+    for path in paths:
+        for row in pq.read_table(path).to_pylist():
+            smp = Sample(
+                s=tuple(row[f"x_{n}"] for n in INPUT_NAMES),
+                a=row["a"],
+                r=row["reward"],
+                valid=tuple(row[f"valid_{o}"] for o in OPTIONS),
+                expert=row["expert"],
+                has1=row["has1"],
+                s1=opt(row, "xn_", INPUT_NAMES),
+                valid1=opt(row, "valid_next_", OPTIONS),
+                g1=row["g1"],
+                hasn=row["hasn"],
+                m=row["m"],
+                rn=row["rn"],
+                sn=opt(row, "xm_", INPUT_NAMES),
+                validn=opt(row, "valid_m_", OPTIONS),
+                gn=row["gn"],
+            )
+            out.append(((row["scenario"], row["window"]), smp))
+    return out

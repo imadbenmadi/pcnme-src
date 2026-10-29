@@ -14,7 +14,7 @@ chain the n-step part uses the m < n steps that still have an s' (m = 0: no n-st
 from __future__ import annotations
 
 import itertools
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from pcnme.agent.transitions import Transition
@@ -89,4 +89,38 @@ def build(
                 gn=discount(t_m - t.time, gamma_per_tau, tau) if m else 0.0,
             )
         )
+    return out
+
+
+def anchor_samples(
+    transitions: Sequence[Transition],
+    order: Sequence[tuple[object, int]],
+    n: int,
+    gamma_per_tau: float,
+    tau: float,
+    expert: Callable[[Transition], bool] = lambda t: False,
+) -> dict[tuple[object, int], Sample]:
+    """The samples of one anchor's transitions, keyed by (task id, attempt). `order` is the anchor's decisions
+    in decision order; a decision whose transition is missing (discarded at an episode end) splits the chain,
+    and the n-step part of the one before it stops there (it still bootstraps from its own s')."""
+    by_key = {(t.task_id, t.attempt): t for t in transitions}
+    out: dict[tuple[object, int], Sample] = {}
+    segment: list[Transition] = []
+
+    def flush() -> None:
+        for t, smp in zip(
+            segment, build(segment, n, gamma_per_tau, tau, [expert(t) for t in segment]), strict=True
+        ):
+            out[(t.task_id, t.attempt)] = smp
+        segment.clear()
+
+    for key in order:
+        t = by_key.get(key)
+        if t is None:
+            flush()
+            continue
+        if segment and segment[-1].next_key != key:
+            flush()
+        segment.append(t)
+    flush()
     return out

@@ -159,10 +159,25 @@ def test_a_re_decision_of_a_planned_task_is_not_expert(demo: Demonstration) -> N
 def test_a_truncated_transition_has_an_empty_s_prime_row(demo: Demonstration) -> None:
     from dataclasses import replace
 
+    from pcnme.agent.nstep import build
     from pcnme.expert.demos import DemoTransition
 
     t = replace(demo.transitions[0].transition, s_next=None, valid_next=None, dt=None, truncated=True)
-    d = replace(demo, transitions=(DemoTransition(t, False),))
+    (smp,) = build([t], 10, 0.9, 0.1)
+    d = replace(demo, transitions=(DemoTransition(t, False, smp),))
     (row,) = rows([d])
     assert row["truncated"] and row["dt_s"] is None
     assert all(row[f"xn_{n}"] is None for n in INPUT_NAMES) and row["valid_next_here"] is None
+    assert (row["has1"], row["hasn"], row["m"], row["xm_w"]) == (False, False, 0, None)
+
+
+def test_the_stored_samples_load_back_as_they_were(demo: Demonstration, tmp_path: Path) -> None:
+    # 13.5: the n-step part is computed over the anchor's whole chain at replay and read back for training.
+    from pcnme.expert.demos import load_samples
+
+    path = write(tmp_path / "S2-w0.parquet", [demo])
+    loaded = load_samples([path])
+    assert [s for _, s in loaded] == [d.sample for d in demo.transitions]
+    assert {g for g, _ in loaded} == {("S2", 0)}
+    assert any(s.hasn and s.m == 10 for _, s in loaded)  # full 10-step chains
+    assert all(s.expert == d.expert for (_, s), d in zip(loaded, demo.transitions, strict=True))
