@@ -27,7 +27,7 @@ from pcnme.energy import EnergyModel
 from pcnme.node.state import Pending, SlotState, wait_estimate
 from pcnme.zone.decision import OPTIONS, DecisionContext, NeighbourView, OptionView, Reason
 
-__all__ = ["OPTIONS", "OptionView", "Reason", "views"]
+__all__ = ["OPTIONS", "OptionView", "Reason", "option_view", "views"]
 
 
 def _has_place(
@@ -39,7 +39,7 @@ def _has_place(
     return n < state.capacity - headroom if cls == "hard" else n < state.capacity - reserve - headroom
 
 
-def _view(
+def option_view(
     cfg: Config,
     em: EnergyModel,
     ctx: DecisionContext,
@@ -50,7 +50,11 @@ def _view(
     headroom: int,
     t_in: float,
     t_ret: float,
+    *,
+    ignore_room: bool = False,
 ) -> OptionView:
+    """One option on a node whose state the anchor holds. `ignore_room`: q* over every slot type that can run
+    the task, room or not; only for the numbers of an option masked full (11.1, QUESTIONS Q33)."""
     task = ctx.task
     node = cfg.hardware[hw]
     rows = {
@@ -62,7 +66,8 @@ def _view(
     usable = {
         q: r
         for q, r in rows.items()
-        if _has_place(states[q], task.cls, headroom, reserve, node.is_cloud, len(pending.get(q, ())))
+        if ignore_room
+        or _has_place(states[q], task.cls, headroom, reserve, node.is_cloud, len(pending.get(q, ())))
     }
     if not usable:
         return OptionView(option, "full")
@@ -89,13 +94,13 @@ def _neighbour(
     est = ctx.estimates
     t_in = est.t_in_neighbour(ctx.task.input_bits, ctx.backhaul_wait)
     h = cfg.scheduler.headroom_h
-    return _view(cfg, em, ctx, option, n.hw, n.slots, n.pending, h, t_in, est.t_ret_fog())
+    return option_view(cfg, em, ctx, option, n.hw, n.slots, n.pending, h, t_in, est.t_ret_fog())
 
 
 def views(cfg: Config, em: EnergyModel, ctx: DecisionContext) -> list[OptionView]:
     """The 6 options in OPTIONS order (11.2)."""
     est = ctx.estimates
-    here = _view(cfg, em, ctx, "here", ctx.here_hw, ctx.here, {}, 0, est.t_in_here(), est.t_ret_fog())
+    here = option_view(cfg, em, ctx, "here", ctx.here_hw, ctx.here, {}, 0, est.t_in_here(), est.t_ret_fog())
     if ctx.cloud_offline:
         cloud = OptionView("cloud", "offline")
     elif ctx.cloud is None or ctx.cloud_stale:
@@ -103,7 +108,7 @@ def views(cfg: Config, em: EnergyModel, ctx: DecisionContext) -> list[OptionView
     else:
         cloud_t_in = est.t_in_cloud(ctx.task.input_bits, ctx.backhaul_wait)
         h = cfg.scheduler.headroom_h
-        cloud = _view(
+        cloud = option_view(
             cfg, em, ctx, "cloud", "cloud", ctx.cloud, ctx.cloud_pending, h, cloud_t_in, est.t_ret_cloud()
         )
     slots = list(ctx.neighbours) + [NeighbourView(None)] * (4 - len(ctx.neighbours))

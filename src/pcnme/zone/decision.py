@@ -43,6 +43,19 @@ class OptionView:
 
 
 @dataclass(frozen=True, slots=True)
+class Mobility:
+    """The predictor's output for one car (10.2), as the anchor holds it.
+
+    t_exit: seconds until the car leaves its current zone going straight (infinite when stopped).
+    target: the zone the car is predicted to be in next: the next zone when it moves, its current zone when
+    stopped (QUESTIONS Q34 reading).
+    """
+
+    t_exit: float
+    target: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class NeighbourView:
     """What the anchor knows of the zone in one neighbour position (7.2, 7.5): None for an empty position."""
 
@@ -52,6 +65,7 @@ class NeighbourView:
     pending: Mapping[SlotType, tuple[Pending, ...]] = field(default_factory=lambda: _NO_PENDING)
     offline: bool = False  # its last will said offline
     stale: bool = False
+    age: float | None = None  # its snapshot's age on the anchor's clock (5.4), None if none held
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,7 +85,10 @@ class DecisionContext:
     cloud_stale: bool = False
     cloud_offline: bool = False
     neighbours: tuple[NeighbourView, ...] = ()  # the 4 positions in order; fewer = the rest empty
+    cloud_age: float | None = None  # the cloud snapshot's age (5.4), None if none held
+    mobility: Mobility | None = None  # the predictor's output for the task's car, None without a GPS sample
     views: tuple[OptionView, ...] = ()  # filled by the anchor from the masks, in OPTIONS order
+    inputs: tuple[float, ...] = ()  # the agent's 48 inputs (11.1), filled by the anchor after the views
 
     @property
     def time_left(self) -> float:

@@ -33,6 +33,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Literal
 
+from pcnme.agent.inputs import Decision, Scales, build_inputs
 from pcnme.bus import topics
 from pcnme.bus.bus import Bus, Client, Delivery
 from pcnme.bus.calls import call
@@ -50,7 +51,15 @@ from pcnme.node.state import SlotState
 from pcnme.node.timetable import RunTimeTable
 from pcnme.sim.clock import EventClock, EventHandle
 from pcnme.sim.rng import RandomStreams
-from pcnme.zone.decision import DecisionContext, NeighbourView, Option, OptionView, Placement
+from pcnme.zone.decision import (
+    OPTIONS,
+    DecisionContext,
+    Mobility,
+    NeighbourView,
+    Option,
+    OptionView,
+    Placement,
+)
 from pcnme.zone.estimates import PathEstimates
 from pcnme.zone.intake import AnchorRow, AnchorTable, anchor_deadline
 from pcnme.zone.layout import CLOUD, NeighbourTable, Site
@@ -337,10 +346,13 @@ class Zone:
         self._attaches = 0
         self._uploads: dict[object, int] = {}  # task id -> its radio upload in flight (9.7)
         self._leave: dict[str, EventHandle] = {}  # T_leave timers of the served cars (9.6)
-        self.registry: dict[str, GpsMessage] = {}  # the car registry: last GPS of the cars it anchors (3)
+        # the car registry (2, 3): last GPS of the cars it serves (from the car) or anchors (car/{id}/gps)
+        self.registry: dict[str, GpsMessage] = {}
         self._gps_seq = 0
         self._on_close = on_close
         self._mean_radio = sum(config.radio.uplink_delay) / 2
+        self._scales = Scales.from_config(config)  # the fixed divisors of the 48 inputs (11.1)
+        self.decisions: list[Decision] = []  # every decision with its inputs, masks and action (16.3, M4.1)
         self.mqtt.subscribe(topics.zone_state(CLOUD))
         for z in self.neighbours.positions:
             if z is not None:
@@ -393,6 +405,8 @@ class Zone:
             self._clock.cancel(timer)
         for topic in (topics.car_result(car_id), topics.car_attach(car_id)):
             self.mqtt.unsubscribe(topic)
+        if car_id not in self._anchored:
+            self.registry.pop(car_id, None)  # 9.6: the registry follows the serving and anchor roles
 
     def _anchor_role(self, car_id: str, step: int) -> None:
         """9.6: the anchor subscribes at its first open task of the car and unsubscribes at its last."""
@@ -408,7 +422,8 @@ class Zone:
                 (self.mqtt.subscribe if step > 0 else self.mqtt.unsubscribe)(topic)
         if n == 0:
             del self._anchored[car_id]
-            self.registry.pop(car_id, None)  # 9.6: the anchor drops the car's predictor state
+            if car_id not in self._cars:
+                self.registry.pop(car_id, None)  # 9.6: the anchor drops the car's predictor state
 
     def upload(self, task: Task, rate: float | None = None) -> None:
         """The car uploads its task over the zone's radio, sharing its airtime with the other uploads in
@@ -454,6 +469,7 @@ class Zone:
             return
         self._gps_seq += 1
         msg = GpsMessage(car_id, x, y, vx, vy, self.zone_id, car_time)
+        self._remember(msg)  # the serving zone's own registry entry (2: the cars it serves)
         tm = self._cfg.timing
         self.mqtt.publish(
             topics.car_gps(car_id),
@@ -480,6 +496,22 @@ class Zone:
             return None
         p, v = (g.x, g.y), (g.vx, g.vy)
         return exit_time(p, v, centres[g.zone_id], r), next_zone(p, v, g.zone_id, centres, r)
+
+    def mobility(self, car_id: str) -> Mobility | None:
+        """The predictor's output for the agent's inputs (11.1): T_exit, and the zone the car is heading to
+        (its current zone when stopped, QUESTIONS Q34). None without a GPS sample."""
+        p = self.predict(car_id)
+        if p is None:
+            return None
+        t_exit, nxt = p
+        return Mobility(t_exit, nxt if nxt is not None else self.registry[car_id].zone_id)
+
+    def _remember(self, g: GpsMessage) -> None:
+        """Keep the newest sample of the car (car_time is the car's own clock: only its own samples are
+        compared, 5.4); the same sample comes back on car/{id}/gps when this zone also anchors the car."""
+        old = self.registry.get(g.car_id)
+        if old is None or g.car_time >= old.car_time:
+            self.registry[g.car_id] = g
 
     def _left(self, car_id: str) -> None:
         """9.6: no GPS for T_leave: the car left (a gap): the serving role ends."""
@@ -515,7 +547,7 @@ class Zone:
             self._send(rec, row, "cloud", None)  # a boulder: no decision (7.1.3)
             return
         ctx = self._context(task, now, rec.d_a)
-        option = self._placement.choose(ctx)
+        option = self._decide(ctx, "first")
         if option is None:
             self._close(rec, "drop_masked")  # 7.3: every option masked
             return
@@ -534,11 +566,13 @@ class Zone:
             pending={q: self.store.pending_on(zone_id, q) for q in ("gpu", "cpu")},
             offline=self.neighbours.online.get(zone_id) is False,
             stale=self.store.is_stale(zone_id),
+            age=self.store.age(zone_id),
         )
 
     def _context(self, task: Task, now: float, d_a: float) -> DecisionContext:
-        """What the anchor knows (6B.7): its own exact state; the cloud's newest snapshot and its own pending
-        sends there (R1); the masks' views of the 6 options."""
+        """What the anchor knows (6B.6-7): its own exact state; the cloud's newest snapshot and its own
+        pending sends there (R1); the prediction for the car; the masks' views of the 6 options; the agent's
+        48 inputs (11.1), all from its own memory."""
         cloud = self.store.snapshot(CLOUD)
         pending = {q: self.store.pending_on(CLOUD, q) for q in ("gpu", "cpu")}
         ctx = DecisionContext(
@@ -554,8 +588,32 @@ class Zone:
             cloud_stale=self.store.is_stale(CLOUD),
             cloud_offline=self.neighbours.online.get(CLOUD) is False,
             neighbours=tuple(self._neighbour(z) for z in self.neighbours.positions),
+            cloud_age=self.store.age(CLOUD),
+            mobility=self.mobility(task.car_id),
         )
-        return replace(ctx, views=tuple(views(self._cfg, self._em, ctx)))
+        ctx = replace(ctx, views=tuple(views(self._cfg, self._em, ctx)))
+        inputs = build_inputs(self._cfg, self._em, ctx, self._scales, self.zone_id, self.neighbours.positions)
+        return replace(ctx, inputs=inputs)
+
+    def _decide(self, ctx: DecisionContext, kind: str) -> Option | None:
+        """6B.8: the placement method picks an option; a pick is a decision (11.3.1), kept with its inputs,
+        masks and action. Every option masked: no decision (7.3)."""
+        option = self._placement.choose(ctx)
+        if option is not None:
+            task_id = ctx.task.task_id
+            self.decisions.append(
+                Decision(
+                    time=ctx.now,
+                    anchor=self.zone_id,
+                    task_id=task_id,
+                    attempt=self.anchor.row(task_id).attempts + 1,  # the attempt it is about to send (5.5)
+                    kind=kind,
+                    inputs=ctx.inputs,
+                    masked=tuple(v.masked for v in ctx.views),
+                    action=OPTIONS.index(option),
+                )
+            )
+        return option
 
     # --- placement and execution (6C) -----------------------------------------------------------------------
 
@@ -720,7 +778,7 @@ class Zone:
         if rec.route == "agent" and not rec.redecided:
             rec.redecided = True
             ctx = self._context(task, self._clock.now, rec.d_a)
-            option = self._placement.choose(ctx)
+            option = self._decide(ctx, "redecision")
             if option is not None:
                 self._send(rec, row, option, next(v for v in ctx.views if v.option == option))
                 return
@@ -910,7 +968,7 @@ class Zone:
             return
         rec.retries += 1
         ctx = self._context(rec.task, self._clock.now, rec.d_a)
-        option = self._placement.choose(ctx)
+        option = self._decide(ctx, "retry")
         if option is None:
             self._close(rec, "drop_lost")
             return
@@ -992,7 +1050,7 @@ class Zone:
         elif kind == "gps":
             g = d.payload
             assert isinstance(g, GpsMessage)
-            self.registry[g.car_id] = g  # 10.1: the anchor always knows the car's current zone
+            self._remember(g)  # 10.1: the anchor always knows the car's current zone
         elif kind == "attach":
             payload = d.payload
             assert isinstance(payload, tuple)
