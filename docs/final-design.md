@@ -25,6 +25,7 @@ This is the one complete design of PCNME. It merges the PCNME Architecture doc, 
 | 29 Oct | 16.2, 18 | The hotspot share h (cars on z1's roads) is set by the map calibration run so that z1 = 1.6 × the mean load | QUESTIONS Q30 |
 | 29 Oct | 9.3 | The upload timeout T_up starts when the zone's own send has finished; before that only the deadline cap applies, and reaching it drops the attempt with no re-send | CHANGES C7 (QUESTIONS Q31) |
 | 29 Oct | 16.2 | S3 shows an overloaded system: under Greedy the fog GPUs saturate (97–100 %); under cloud-only placement the WAN queue grows without limit (M2 test); it no longer says the WAN congests under every method | M3 acceptance runs after C7 |
+| 29 Oct | 9.6, 6E.15 | The anchor keeps its subscriptions for a car until G after its last task of the car closes (not at the close), so the energy reports G waits for still reach it | CHANGES C8 (QUESTIONS Q35) |
 
 ## 1. What PCNME is
 
@@ -272,7 +273,7 @@ The anchor records the send as pending. The executor sets its local deadline d_k
 
 ### E. Close and learn
 
-15. **Close.** On the ack, or on a drop, the anchor closes the task: cancels any other live attempt, lowers its subscription counts, deletes the input and result copy.
+15. **Close.** On the ack, or on a drop, the anchor closes the task: cancels any other live attempt, deletes the input and result copy, and lowers its subscription counts G later, so late energy reports still reach it (step 16; CHANGES C8).
 16. **Reward.** Every attempt gets its reward when the task is closed plus a grace period G (section 11.4); its transition moves from the pending buffer to the replay buffer.
 
 ## 7. The decision maker
@@ -482,7 +483,7 @@ Duplicates come from two finished attempts, a republish after an attach, and QoS
 | Role | Subscribes to | When | Unsubscribes when |
 | --- | --- | --- | --- |
 | Serving zone | car/{id}/result, car/{id}/attach | The car attaches | Another zone announces an attach for the car, or no GPS for T_leave |
-| Anchor | car/{id}/attach, gps, result, ack | Its first open task for the car | Its last task for the car closes |
+| Anchor | car/{id}/attach, gps, result, ack | Its first open task for the car | G after its last task for the car closes (late energy reports, 11.3.3; CHANGES C8) |
 | Executor | Nothing | — | — |
 
 - **One reference count per (zone, topic)**, because one MQTT client serves all roles: subscribe at 0 → 1, unsubscribe at 1 → 0.
