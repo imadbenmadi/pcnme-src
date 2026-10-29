@@ -28,9 +28,10 @@ def streams(seed: int = 2000, usage: str = "training") -> RandomStreams:
 
 
 def test_the_six_purposes_of_plan_m0_3() -> None:
-    # Q6: these never depend on decisions; random_method (the Random baseline, 16.1) added by name in M2.8
+    # Q6: these never depend on decisions; random_method (the Random baseline, 16.1) added in M2.8, agent and
+    # neighbour_order in M6 (Q4: added by name, so the others never change)
     # (Q4)
-    assert set(SEQUENTIAL) == {"arrivals", "mobility", "nsga", "random_method"}
+    assert set(SEQUENTIAL) == {"arrivals", "mobility", "nsga", "random_method", "agent", "neighbour_order"}
     assert set(KEYED) == {"run_times", "link_delays", "radio"}  # Q5: radio = radio up/downlink delays
     assert set(PURPOSES) == set(SEQUENTIAL) | set(KEYED)
 
