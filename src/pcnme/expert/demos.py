@@ -14,7 +14,7 @@ Boulders make no transition (13.4.5). Replaying a plan gives the objectives its 
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -46,7 +46,7 @@ class Demonstration:
     is_knee: bool = False
 
 
-def is_expert(t: Transition, applied: set[object]) -> bool:
+def is_expert(t: Transition, applied: Collection[object]) -> bool:
     """13.4.3: the plan's own action: a window task's first decision that took its gene."""
     return t.attempt == 1 and t.task_id in applied
 
