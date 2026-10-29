@@ -100,7 +100,7 @@ def test_task_rows_follow_metrics_md(run_dir: Path) -> None:
 
 
 def test_the_points_file_has_one_line_per_row(run_dir: Path) -> None:
-    names = ("tasks", "attempts", "zones", "pipes", "positions", "events", "decisions")
+    names = ("tasks", "attempts", "zones", "pipes", "positions", "events", "decisions", "transitions")
     n_rows = sum(len(table(run_dir, n)) for n in names)
     lines = (run_dir / "points.lp").read_text(encoding="utf-8").splitlines()
     assert len(lines) == n_rows
