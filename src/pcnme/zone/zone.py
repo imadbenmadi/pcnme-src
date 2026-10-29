@@ -280,6 +280,7 @@ class Zone:
         *,
         bus: Bus,
         start_sites: tuple[Site, ...] = (),
+        neighbour_order: list[int] | None = None,
         fog_classes: Mapping[str, str] | None = None,
         ledger: dict[tuple[str, object], TaskRecord] | None = None,
         on_close: Callable[[TaskRecord], None] | None = None,
@@ -302,6 +303,8 @@ class Zone:
         x, y = config.layout.zone_positions_m[zone_id]
         self.site = Site(zone_id, x, y, config.layout.zone_radius_m)
         self.neighbours = NeighbourTable.at_start(self.site, list(start_sites), config.layout.d_nb_m)  # 7.5
+        if neighbour_order is not None:
+            self.neighbours.permute(neighbour_order)  # 13.6: this episode's order, in training
         offline = ZoneStatus(zone_id, "offline", x, y, self.site.radius)
         self.mqtt = bus.connect(
             zone_id,
