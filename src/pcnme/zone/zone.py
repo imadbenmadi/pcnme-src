@@ -121,6 +121,7 @@ class TaskRecord:
     result_attempt: int | None = None  # the attempt whose result reached the anchor first (9.4.3)
     end_timer: EventHandle | None = None  # no ack by the end: a drop (9.5.5)
     copy: ResultMessage | None = None  # the anchor's copy of the result, until close (6D.12)
+    delivered_by: str | None = None  # the serving zone that pushed the copy the car kept (logs)
     republished: bool = False  # the one republish after T_ack without an ack (9.5.4)
 
 
@@ -1022,6 +1023,7 @@ class Zone:
             if rec.result_at_car is None and info is not None and msg.report.start is not None:
                 # the latency parts of the copy that reached the car first (the one it keeps, 9.5.1)
                 rec.result_at_car = now
+                rec.delivered_by = self.zone_id
                 rec.parts["before_send"] = info.t_send - rec.t_rx
                 rec.parts.pop("input", None)
                 if info.input:
