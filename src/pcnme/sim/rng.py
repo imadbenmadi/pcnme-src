@@ -32,7 +32,9 @@ if TYPE_CHECKING:
 KeyPart = int | str
 Kind = Literal["sequential", "keyed"]
 
-SEQUENTIAL: tuple[str, ...] = ("arrivals", "mobility", "nsga", "random_method")  # random_method: M2.8
+# random_method: M2.8; agent: the network's initial weights, ε-exploration and replay sampling, keyed per
+# zone and use (M6); neighbour_order: the per-episode permutation of the neighbour positions (13.6, M6.5)
+SEQUENTIAL: tuple[str, ...] = ("arrivals", "mobility", "nsga", "random_method", "agent", "neighbour_order")
 KEYED: tuple[str, ...] = ("run_times", "link_delays", "radio")  # radio = radio up/downlink delays (Q5)
 PURPOSES: Mapping[str, Kind] = {
     **dict.fromkeys(SEQUENTIAL, "sequential"),
