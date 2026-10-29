@@ -230,11 +230,13 @@ def test_the_reply_snapshot_is_held_the_moment_it_arrives() -> None:
 
 
 def test_a_cloud_that_stops_publishing_goes_stale() -> None:
-    # Its last state (sent at 0.1 s) is received at 166.5 ms; older than 300 ms from 0.4 s on.
+    # Its state messages are lost from 0.17 s on (a dead cloud would be masked "offline" by its will,
+    # M3.4). The last one routed was sent at 0.1 s (at the broker at 163.5 ms, received at 166.5 ms): older
+    # than 300 ms from 0.4 s on.
     s = one_zone(fixed_delay_config(), Fixed("here"))
     t = task_now(s, "T4")
-    s.clock.run_until(0.15)
-    s.bus.kill("cloud")
+    s.clock.run_until(0.17)
+    s.bus.faults.drop = lambda topic, key, sub: topic == "zone/cloud/state"
     s.clock.run_until(0.39)
     assert s.zone._context(t, s.clock.now, 1.0).views[-1].masked is None
     s.clock.run_until(0.41)
