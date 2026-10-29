@@ -203,3 +203,30 @@ def test_closing_a_task_cancels_its_live_attempt() -> None:
     z1._close(rec, "drop_test")
     c.clock.run_until(T_RX + 0.0131)
     assert c.zones["z2"].executor.status(z2_key(rec, 1)) == "cancelled"
+
+
+def test_a_task_whose_whole_budget_went_on_the_upload_is_dropped_without_a_crash() -> None:
+    # Under a heavy radio (S3) a hard frame can arrive after d_A + T_ack: no time left, nothing to schedule
+    # in the past. It is dropped at its arrival.
+    from pcnme.car.car import Task
+    from pcnme.ids import TaskId
+
+    c = two(Fixed("here"))
+    t = c.cfg.task_types["T1"]
+    old = Task(
+        TaskId("c01", 0, 7),
+        "c01",
+        "T1",
+        t.cls,
+        t.deadline["loose"],
+        t.l_max["loose"],
+        t.input_bits,
+        t.result_bits,
+        c.clock.now - 1.0,
+    )  # type: ignore[index]  # made 1 s ago: B_car = -0.9 s
+    c.car._tasks[old.task_id] = old
+    c.zones["z1"].upload(old)
+    c.clock.run_until(1.0)
+    (rec,) = c.closed
+    # dropped at its arrival (a fixed placement ignores the masks, so here it is refused late instead)
+    assert rec.outcome.startswith("drop_") and rec.closed_at == pytest.approx(rec.t_rx)
