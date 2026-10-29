@@ -212,3 +212,21 @@ def test_a_hop_delay_is_uniform_on_its_interval_and_keyed_by_task_attempt_hop(cf
 def test_the_upload_uses_attempt_0(cfg: Config) -> None:
     # Q17: the upload comes before any attempt (attempts count from 1).
     assert hops.UPLOAD_ATTEMPT == 0
+
+
+def test_a_cut_upload_leaves_the_air_to_the_others(cfg: Config) -> None:
+    # 9.7. A 9 Mbit upload (16.69 ms alone at 539.1 Mbps) shares the air with a T2 from 0; the T2 is cut at
+    # 10 ms (a handover). In those 10 ms the small one got half the air: 5 ms of its push, 11.69 ms left,
+    # now alone: it ends at 21.69 ms. The cut T2 never arrives.
+    clock, up, done = uplink()
+    r = shannon_rate(300.0, cfg.radio)
+    ids: dict[str, int] = {}
+    clock.schedule(
+        0.0, lambda: ids.__setitem__("big", up.send(72e6, r, 0.0, lambda tr: done.__setitem__("big", tr)))
+    )
+    send_at(clock, up, done, 0.0, "small", 9e6, r)
+    clock.run_until(0.010)
+    assert up.cancel(ids["big"]) and not up.cancel(ids["big"])  # twice: nothing left to cut
+    clock.run_until(1.0)
+    assert "big" not in done
+    assert done["small"].push_end == pytest.approx(0.010 + (9e6 / r - 0.005), rel=1e-9)

@@ -22,8 +22,9 @@ session; the anchor republishes its copy on every new attach until the ack, and 
 T_ack; subscriptions are counted per role (serving: result and attach while the car is attached; anchor:
 attach, gps, result and ack while it has an open task of the car).
 
-M3 PLACEHOLDERS, each the simplest correct thing behind a small interface:
-- Cars do not move: the anchor is always the serving zone (M3.8).
+Mobility (M3.8, 10): the serving zone gets each car's GPS every 100 ms and publishes it on car/{id}/gps
+(retained, with an expiry) to the car's anchors; with no GPS for T_leave it ends the serving role. An upload
+starts at the car's current rate and can be cut by a handover or a gap (9.7): nothing is left behind.
 """
 
 from __future__ import annotations
@@ -149,6 +150,20 @@ class ZoneStatus:
     @property
     def site(self) -> Site:
         return Site(self.zone_id, self.x, self.y, self.radius)
+
+
+@dataclass(frozen=True, slots=True)
+class GpsMessage:
+    """car/{id}/gps (5.2): position, speed, heading and serving zone; car_time is the car's own clock (only
+    differences between its own samples are used, 5.4)."""
+
+    car_id: str
+    x: float
+    y: float
+    vx: float
+    vy: float
+    zone_id: str
+    car_time: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -317,6 +332,10 @@ class Zone:
         self._confirmed: dict[str, set[object]] = {}  # per served car: task ids confirmed this radio session
         self._anchored: dict[str, int] = {}  # per car: this zone's open tasks of it (the anchor role)
         self._attaches = 0
+        self._uploads: dict[object, int] = {}  # task id -> its radio upload in flight (9.7)
+        self._leave: dict[str, EventHandle] = {}  # T_leave timers of the served cars (9.6)
+        self.registry: dict[str, GpsMessage] = {}  # the car registry: last GPS of the cars it anchors (3)
+        self._gps_seq = 0
         self._on_close = on_close
         self._mean_radio = sum(config.radio.uplink_delay) / 2
         self.mqtt.subscribe(topics.zone_state(CLOUD))
@@ -366,6 +385,9 @@ class Zone:
         if self._cars.pop(car_id, None) is None:
             return
         self._confirmed.pop(car_id, None)
+        timer = self._leave.pop(car_id, None)
+        if timer is not None:
+            self._clock.cancel(timer)
         for topic in (topics.car_result(car_id), topics.car_attach(car_id)):
             self.mqtt.unsubscribe(topic)
 
@@ -383,11 +405,14 @@ class Zone:
                 (self.mqtt.subscribe if step > 0 else self.mqtt.unsubscribe)(topic)
         if n == 0:
             del self._anchored[car_id]
+            self.registry.pop(car_id, None)  # 9.6: the anchor drops the car's predictor state
 
-    def upload(self, task: Task) -> None:
+    def upload(self, task: Task, rate: float | None = None) -> None:
         """The car uploads its task over the zone's radio, sharing its airtime with the other uploads in
-        progress (6A.2, CHANGES C6); the task exists at t_rx."""
-        car, rate = self._cars[task.car_id]
+        progress (6A.2, CHANGES C6), at its current rate (`rate`, from its distance now; by default the rate
+        at its attach); the task exists at t_rx."""
+        car, attach_rate = self._cars[task.car_id]
+        rate = attach_rate if rate is None else rate
         now = self._clock.now
         b_car = car.budget(task, now)
         d = hops.delay(
@@ -398,11 +423,52 @@ class Zone:
         self.ledger[(self.zone_id, task.task_id)] = rec
 
         def arrived(tr: RadioTransfer) -> None:
+            self._uploads.pop(task.task_id, None)
             rec.w_radio = tr.wait  # known exactly at t_rx: the zone runs its uplink (6A.3)
             rec.parts["upload"] = tr.duration
             self._intake(rec, b_car)
 
-        self.uplink.send(size_bits=task.input_bits, rate=rate, delay=d, on_delivered=arrived)
+        self._uploads[task.task_id] = self.uplink.send(
+            size_bits=task.input_bits, rate=rate, delay=d, on_delivered=arrived
+        )
+
+    def cut_upload(self, task_id: object) -> bool:
+        """9.7: the car's connection ended before the upload's last bit: no task exists here, nothing is left
+        behind. False if the last bit was already sent (it arrives, and this zone is the anchor)."""
+        up = self._uploads.pop(task_id, None)
+        if up is None or not self.uplink.cancel(up):
+            return False
+        del self.records[task_id]
+        del self.ledger[(self.zone_id, task_id)]
+        return True
+
+    # --- GPS (10.1, 9.6) ------------------------------------------------------------------------------------
+
+    def gps(self, car_id: str, x: float, y: float, vx: float, vy: float, car_time: float) -> None:
+        """The serving zone gets the car's GPS (every 100 ms) and publishes it to the car's anchors: QoS 0,
+        retained with an MQTT 5 expiry (5.2, 9.6). It restarts the car's T_leave timer."""
+        if car_id not in self._cars:
+            return
+        self._gps_seq += 1
+        msg = GpsMessage(car_id, x, y, vx, vy, self.zone_id, car_time)
+        tm = self._cfg.timing
+        self.mqtt.publish(
+            topics.car_gps(car_id),
+            msg,
+            qos=0,
+            key=(car_id, "gps", self.zone_id, self._gps_seq),
+            retained=True,
+            expiry=tm.gps_expiry,
+        )
+        old = self._leave.pop(car_id, None)
+        if old is not None:
+            self._clock.cancel(old)
+        self._leave[car_id] = self._clock.schedule(self._clock.now + tm.t_leave, lambda: self._left(car_id))
+
+    def _left(self, car_id: str) -> None:
+        """9.6: no GPS for T_leave: the car left (a gap): the serving role ends."""
+        self._leave.pop(car_id, None)
+        self.detach(car_id)
 
     def _intake(self, rec: TaskRecord, b_car: float) -> None:
         now = self._clock.now
@@ -881,6 +947,10 @@ class Zone:
             ack = d.payload
             assert isinstance(ack, AckMessage)
             self._anchor_ack(ack)
+        elif kind == "gps":
+            g = d.payload
+            assert isinstance(g, GpsMessage)
+            self.registry[g.car_id] = g  # 10.1: the anchor always knows the car's current zone
         elif kind == "attach":
             payload = d.payload
             assert isinstance(payload, tuple)

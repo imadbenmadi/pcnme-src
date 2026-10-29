@@ -108,3 +108,14 @@ def test_the_complex_grid_waits_at_red_lights_and_random_stops(cfg: Config) -> N
     simple_clock, simple = walker(cfg, speeds=(10.0,))
     simple_clock.run_until(simple._arrive)
     assert simple._depart == simple_clock.now  # the simple grid never waits
+
+
+def test_red_lights_alone_hold_a_car_up_to_half_a_cycle(cfg: Config) -> None:
+    # Q24 stand-in with stops off: a car arriving on red waits until its axis turns green, at most 30 s.
+    lights_only = replace(cfg.cars.grid, complex=True, stop_probability=0.0)
+    clock, w = walker(cfg, grid=lights_only, speeds=(10.0,))
+    waits = []
+    for _ in range(500):
+        clock.run_until(w._arrive)
+        waits.append(w._depart - clock.now)
+    assert any(x > 0 for x in waits) and max(waits) <= 30.0 + 1e-9
