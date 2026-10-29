@@ -25,6 +25,10 @@ L - D)/D if delivered, C_drop if dropped); f2 = mean ê (min(E/E_ref, ē) with E
 
 from __future__ import annotations
 
+import math
+import os
+import pickle
+import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
@@ -151,6 +155,7 @@ class Run:
     city: City
     placements: dict[str, PlanPlacement]
     settled: set[Key] = field(default_factory=set)
+    t: float = 0.0  # how far the clock has run
 
     def records(self, keys: Iterable[Key]) -> list[TaskRecord]:
         return [self.city.zones[a].records[tid] for a, tid in keys]
@@ -163,6 +168,45 @@ def horizon(cfg: Config) -> float:
     return nsga.t_warmup + nsga.t_win + longest + tm.t_ack + tm.reward_grace_g
 
 
+def start(
+    cfg: Config,
+    spec: WindowSpec,
+    genes: Mapping[Key, Option],
+    *,
+    logging: bool = False,
+    rule: Callable[[DecisionContext], Option | None] | None = None,
+    ruled: Iterable[Key] = (),
+) -> Run:
+    """Build the scenario with the plan's genes at time 0; the cars make tasks until the horizon in every
+    plan."""
+    placements: dict[str, PlanPlacement] = {}
+    ruled_keys = tuple(ruled)
+
+    def factory(c: Config, streams: RandomStreams, z: str) -> PlanPlacement:
+        mine = frozenset(tid for a, tid in ruled_keys if a == z)
+        p = PlanPlacement(c, z, {tid: o for (a, tid), o in genes.items() if a == z}, rule, mine)
+        placements[z] = p
+        return p
+
+    city = City(cfg, spec.scenario, factory, spec.seed, spec.n_cars, usage=USAGE, logging=logging)
+    run = Run(city, placements)
+    for z, zone in city.zones.items():
+        zone.on_settle = lambda rec, z=z: run.settled.add((z, rec.task.task_id))
+    city.start(horizon(cfg))
+    return run
+
+
+def advance(run: Run, end: float, stop: Callable[[Run], bool] | None = None) -> Run:
+    """Run the clock in steps of STEP until `stop` says so after a step, or to `end`. Where the steps fall
+    never changes the events (the clock runs them in order)."""
+    while run.t < end:
+        run.t = min(run.t + STEP, end)
+        run.city.clock.run_until(run.t)
+        if stop is not None and stop(run):
+            break
+    return run
+
+
 def simulate(
     cfg: Config,
     spec: WindowSpec,
@@ -173,30 +217,9 @@ def simulate(
     rule: Callable[[DecisionContext], Option | None] | None = None,
     ruled: Iterable[Key] = (),
 ) -> Run:
-    """Run the scenario with the plan's genes until `stop` says so after a step, or to the horizon. The cars
-    make tasks until the horizon in every plan."""
-    placements: dict[str, PlanPlacement] = {}
-    ruled_keys = tuple(ruled)
-
-    def factory(c: Config, streams: RandomStreams, z: str) -> PlanPlacement:
-        mine = frozenset(tid for a, tid in ruled_keys if a == z)
-        p = PlanPlacement(c, z, {tid: o for (a, tid), o in genes.items() if a == z}, rule, mine)
-        placements[z] = p
-        return p
-
-    end = horizon(cfg)
-    city = City(cfg, spec.scenario, factory, spec.seed, spec.n_cars, usage=USAGE, logging=logging)
-    run = Run(city, placements)
-    for z, zone in city.zones.items():
-        zone.on_settle = lambda rec, z=z: run.settled.add((z, rec.task.task_id))
-    city.start(end)
-    t = 0.0
-    while t < end:
-        t = min(t + STEP, end)
-        city.clock.run_until(t)
-        if stop is not None and stop(run):
-            break
-    return run
+    """Run the scenario with the plan's genes until `stop` says so after a step, or to the horizon."""
+    run = start(cfg, spec, genes, logging=logging, rule=rule, ruled=ruled)
+    return advance(run, horizon(cfg), stop)
 
 
 def window_tasks(cfg: Config, run: Run) -> list[WindowTask]:
@@ -295,3 +318,56 @@ def plan_of(
         choice = run.placements[t.anchor].first.get(t.task_id)
         genome.append(t.options.index(choice) if choice in t.options else 0)
     return tuple(genome), objectives(cfg, run.records(keys))
+
+
+FORK = sys.platform.startswith("linux")  # warm-up reuse by fork: Linux and WSL only (Windows has no fork)
+
+
+class WarmStart:
+    """Speed-up that changes no result: the warm-up before T_warmup is the same in every plan of a window
+    (greedy decisions, decision-free arrivals, keyed draws), so it is simulated once; each evaluation forks
+    the warmed-up process, sets the plan's genes and runs on (copy-on-write, exact). Linux only."""
+
+    def __init__(self, cfg: Config, window: Window) -> None:
+        if not FORK:
+            raise RuntimeError("WarmStart needs fork (Linux or WSL)")
+        self.cfg, self.window = cfg, window
+        self.keys = [t.key for t in window.tasks]
+        self.run = start(cfg, window.spec, {})
+        # every event strictly before T_warmup: no window task has a decision yet (its t_rx >= T_warmup)
+        self.run.t = math.nextafter(cfg.nsga2.t_warmup, 0.0)
+        self.run.city.clock.run_until(self.run.t)
+
+    def _finish(self, genome: Sequence[int]) -> Objectives:
+        genes = self.window.genes(genome)
+        for z, p in self.run.placements.items():
+            p.genes = {tid: o for (a, tid), o in genes.items() if a == z}
+        keys = self.keys
+        advance(self.run, horizon(self.cfg), lambda r: all(k in r.settled for k in keys))
+        if not all(k in self.run.settled for k in keys):
+            raise RuntimeError(f"window {self.window.spec}: not every window task settled by the horizon")
+        return objectives(self.cfg, self.run.records(keys))
+
+    def evaluate(self, genome: Sequence[int]) -> Objectives:
+        """13.2.3 from the shared warm-up: the same objectives as evaluate(), exactly."""
+        if sys.platform == "win32":  # no fork (and mypy checks this file for Windows too)
+            raise RuntimeError("WarmStart needs fork (Linux or WSL)")
+        read, write = os.pipe()
+        pid = os.fork()
+        if pid == 0:  # the child: finish this plan, send the objectives, leave without cleanup
+            code = 1
+            try:
+                os.close(read)
+                with os.fdopen(write, "wb") as out:
+                    pickle.dump(self._finish(genome), out)
+                code = 0
+            finally:
+                os._exit(code)
+        os.close(write)
+        with os.fdopen(read, "rb") as inp:
+            data = inp.read()
+        _, status = os.waitpid(pid, 0)
+        if status != 0 or not data:
+            raise RuntimeError(f"the evaluation of a plan of {self.window.spec} failed in its fork")
+        result: Objectives = pickle.loads(data)
+        return result
