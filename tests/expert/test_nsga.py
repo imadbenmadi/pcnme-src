@@ -23,7 +23,7 @@ from pcnme.expert.nsga import (
     run_nsga,
     sort_front,
 )
-from pcnme.expert.window import Window, WindowSpec, discover, window_seed
+from pcnme.expert.window import Window, WindowSpec, discover, evaluate, window_seed
 from tests.zone.harness import CONFIG
 
 
@@ -136,3 +136,65 @@ def test_the_front_is_sorted_by_f1_then_f2() -> None:
     genomes, points = sort_front(X, F)
     assert points == ((0.2, 1.5), (0.2, 2.0), (0.5, 1.0), (0.9, 0.1))
     assert genomes == ((4, 4), (2, 2), (1, 1), (3, 3))
+
+
+# --- the seeded initial population (CHANGES C9) -------------------------------------------------------------
+
+
+def test_energy_greedy_takes_the_cheapest_open_option(cfg: Config) -> None:
+    from dataclasses import replace
+
+    from pcnme.expert.window import energy_greedy
+    from tests.agent.test_inputs import make_ctx
+
+    ctx = make_ctx(cfg, "T4")  # here, empty: Ê_here = E_ref is the cheapest; the cloud costs more
+    assert energy_greedy(ctx) == "here"
+    views = list(ctx.views)
+    views[0] = replace(views[0], masked="full")
+    assert energy_greedy(replace(ctx, views=tuple(views))) == "cloud"  # the only other open option
+    closed = tuple(replace(v, masked=v.masked or "full") for v in ctx.views)
+    assert energy_greedy(replace(ctx, views=closed)) is None
+
+
+def test_the_energy_greedy_plan_is_taken_by_its_window_tasks(cfg: Config, window: Window) -> None:
+    from pcnme.expert.window import energy_greedy, plan_of
+
+    g, planned = plan_of(cfg, window, energy_greedy)
+    assert len(g) == len(window.tasks) and g != window.greedy_genome
+    o, run = evaluate(cfg, window, g)
+    assert o == planned  # the rule's own run: greedy before, after and at re-decisions, as in any plan
+    # the evaluation is the rule's own run: every gene is taken, except where every option was masked
+    for p in run.placements.values():
+        assert all(p.first[tid] is None for tid in p.replaced)
+    assert sum(len(p.applied) for p in run.placements.values()) > 0.9 * len(window.tasks)
+    assert o == evaluate(cfg, window, g)[0]
+
+
+def test_the_initial_population_holds_both_plans_their_mutants_and_random_plans(
+    cfg: Config, window: Window
+) -> None:
+    from pcnme.expert.nsga import initial_population
+
+    pr = WindowProblem(window, None)
+    energy = tuple((g + 1) % len(t.options) for g, t in zip(window.greedy_genome, window.tasks, strict=True))
+    X = initial_population(cfg, window, pr, 10, energy)
+    rows = [tuple(r) for r in X]
+    assert len(rows) == len(set(rows)) == 10
+    assert rows[0] == window.greedy_genome and rows[1] == energy
+    assert ((pr.xl <= X) & (pr.xu >= X)).all()
+    near = lambda r, b: sum(x != y for x, y in zip(r, b, strict=True))  # noqa: E731
+    # rows 2-4 are mutated copies (alternating greedy, energy): a few genes away from their base
+    assert all(0 < near(rows[i], (window.greedy_genome, energy)[i % 2]) <= 5 for i in (2, 3, 4))
+    # rows 5-9 are random: far from both
+    assert all(near(rows[i], window.greedy_genome) > len(rows[0]) // 3 for i in range(5, 10))
+    assert (initial_population(cfg, window, pr, 10, energy) == X).all()  # seeded
+    assert (X[5:] == pr.xu).any() and (X[5:] == 0).any()  # random rows use every option
+    same = initial_population(cfg, window, pr, 6, window.greedy_genome)  # both plans equal: kept once
+    assert len({tuple(r) for r in same}) == 6 and tuple(same[1]) != window.greedy_genome
+
+
+def test_no_front_point_is_dominated_by_the_greedy_plan(source: dict[str, Any], window: Window) -> None:
+    # C9 + elitism: the greedy plan is in the first population.
+    g = (window.greedy.f1, window.greedy.f2)
+    f = run_nsga(source, window, population=4, generations=2)
+    assert not any(g[0] <= p[0] and g[1] <= p[1] and g != p for p in f.F)

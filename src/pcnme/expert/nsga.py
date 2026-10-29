@@ -3,9 +3,12 @@ fronts become the expert's demonstrations (13.4).
 
 Plain NSGA-II (pymoo's NSGA2): binary tournament selection on rank and crowding, uniform crossover on the
 genes with probability 0.9, and a mutation that moves a task to another of its valid options, with
-probability 1 / the number of genes per gene (no arithmetic on node ids, 13.2.6). The initial population is
-random over the valid options; duplicates are removed (pymoo's default). No constraint: drops are in the
-objectives (13.2.5).
+probability 1 / the number of genes per gene (no arithmetic on node ids, 13.2.6). Duplicates are removed
+(pymoo's default). No constraint: drops are in the objectives (13.2.5).
+
+Initial population (CHANGES C9): the greedy plan, the energy-greedy plan (the lowest-Ê open option), and
+mutated copies of both (the same mutation operator) fill half of it; the rest are random valid plans. NSGA-II
+is elitist, so no point of the final front is dominated by the greedy plan.
 
 pymoo draws from its own generator, seeded from the "nsga" stream of the window's seed (QUESTIONS Q4), so a
 window gives the same front on every run. The evaluations of a generation run in parallel on a spawn-started
@@ -31,7 +34,7 @@ from pymoo.operators.sampling.rnd import IntegerRandomSampling
 from pymoo.optimize import minimize
 
 from pcnme.config import Config, config_from_mapping
-from pcnme.expert.window import USAGE, Objectives, Window, evaluate
+from pcnme.expert.window import USAGE, Objectives, Window, energy_greedy, evaluate, plan_of
 from pcnme.sim.rng import RandomStreams
 
 ConfigSource = Mapping[str, Any]  # the raw config/default.yaml mapping (picklable)
@@ -109,6 +112,38 @@ def nsga_seed(cfg: Config, window: Window) -> int:
     return int(g.integers(2**31 - 1))
 
 
+def initial_population(
+    cfg: Config, window: Window, problem: WindowProblem, population: int, energy: Sequence[int]
+) -> np.ndarray:
+    """CHANGES C9: the greedy and energy-greedy plans, distinct mutated copies of them (alternating) up to
+    half the population, then random valid plans; all distinct. Drawn from the window's "nsga" stream."""
+    s = window.spec
+    rng = RandomStreams.from_config(cfg, s.seed, USAGE).generator("nsga", s.scenario, s.index, "seed_pop")
+    rows: list[tuple[int, ...]] = []
+
+    def add(row: Sequence[int]) -> bool:
+        r = tuple(int(g) for g in row)
+        if r in rows:
+            return False
+        rows.append(r)
+        return True
+
+    bases = [tuple(window.greedy_genome), tuple(energy)]
+    for b in bases:
+        add(b)
+    mutation = ValidOptionMutation()
+    k, tries = 0, 0
+    while len(rows) < max(population // 2, len(bases)) and tries < 50 * population:
+        base = np.array([bases[k % 2]])
+        add(mutation._do(problem, base, random_state=rng)[0])
+        k, tries = k + 1, tries + 1
+    lo, hi = problem.xl.astype(int), problem.xu.astype(int)
+    while len(rows) < population and tries < 100 * population:
+        add(rng.integers(lo, hi + 1))
+        tries += 1
+    return np.array(rows[:population], dtype=int)
+
+
 def run_nsga(
     source: ConfigSource,
     window: Window,
@@ -116,12 +151,17 @@ def run_nsga(
     population: int | None = None,
     generations: int | None = None,
     workers: int = 1,
+    energy_genome: Sequence[int] | None = None,
 ) -> Front:
-    """NSGA-II on one window. Population and generations default to the config (18: 100 x 100)."""
+    """NSGA-II on one window. Population and generations default to the config (18: 100 x 100). The
+    energy-greedy plan is found by one run of the window unless given."""
     cfg = config_from_mapping(source)
     pop = population if population is not None else cfg.nsga2.population
     gens = generations if generations is not None else cfg.nsga2.generations
-    algorithm = make_algorithm(cfg, pop)
+    energy = energy_genome if energy_genome is not None else plan_of(cfg, window, energy_greedy)[0]
+    algorithm = make_algorithm(
+        cfg, pop, initial_population(cfg, window, WindowProblem(window, None), pop, energy)
+    )
     start = time.perf_counter()
     if workers > 1:
         ctx = multiprocessing.get_context("spawn")
@@ -137,12 +177,12 @@ def run_nsga(
     return Front(window, genomes, points, int(res.algorithm.evaluator.n_eval), seconds)
 
 
-def make_algorithm(cfg: Config, population: int) -> NSGA2:
+def make_algorithm(cfg: Config, population: int, initial: np.ndarray | None = None) -> NSGA2:
     """13.2.6, 18: tournament selection (NSGA2's default), uniform crossover with the config's probability,
-    the valid-option mutation, random valid initial plans, no duplicates."""
+    the valid-option mutation, no duplicates; the initial plans given (C9), else random valid plans."""
     return NSGA2(
         pop_size=population,
-        sampling=IntegerRandomSampling(),
+        sampling=initial if initial is not None else IntegerRandomSampling(),
         crossover=UniformCrossover(prob=cfg.nsga2.crossover_prob),
         mutation=ValidOptionMutation(),
         eliminate_duplicates=True,

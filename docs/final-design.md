@@ -26,6 +26,7 @@ This is the one complete design of PCNME. It merges the PCNME Architecture doc, 
 | 29 Oct | 9.3 | The upload timeout T_up starts when the zone's own send has finished; before that only the deadline cap applies, and reaching it drops the attempt with no re-send | CHANGES C7 (QUESTIONS Q31) |
 | 29 Oct | 16.2 | S3 shows an overloaded system: under Greedy the fog GPUs saturate (97–100 %); under cloud-only placement the WAN queue grows without limit (M2 test); it no longer says the WAN congests under every method | M3 acceptance runs after C7 |
 | 29 Oct | 9.6, 6E.15 | The anchor keeps its subscriptions for a car until G after its last task of the car closes (not at the close), so the energy reports G waits for still reach it | CHANGES C8 (QUESTIONS Q35) |
+| 29 Oct | 13.2 | The initial NSGA-II population holds the greedy plan, an energy-greedy plan and mutated copies of both (half the population), the rest random; so no front point is dominated by greedy | CHANGES C9 (QUESTIONS Q38) |
 
 ## 1. What PCNME is
 
@@ -711,7 +712,7 @@ f_1 = \frac{1}{N}\sum_{i} c^{time}_i, \qquad f_2 = \frac{1}{N}\sum_{i} \hat e_i
 c^time = L/D + w3 · max(0, L − D)/D for a delivered task; for a dropped task c^time = C_drop = 1 + (1 + w3) · L_max/D + P, the worst delivery plus P. ê_i = min(E_i/E_ref,i, ē) for a delivered task, with E_i over all its attempts; ê_i = ē for a dropped task. So a drop is worse than any delivery in both objectives, the front cannot end in a "make everything fail cheaply" plan, and the reward (11.4) uses the same per-task cost.
 
 5. **No hard constraint:** under overload drops are unavoidable, and a feasibility constraint would collapse the front onto the fewest-drop plans. The drop cost keeps "any drop is worse than any delivery", as in the reward.
-6. **Operators:** tournament selection, crossover, and a mutation that moves a task to another valid option (no arithmetic on node ids). Plain NSGA-II in pymoo. MMDE / DE mutation (used in Paper 1) is not used: it builds new genes by arithmetic, V = X₁ + F · (X₂ − X₃), which needs genes on a numeric scale, while PCNME's genes are categorical actions relative to each task's anchor, so a difference such as "N3 − N1" has no meaning.
+6. **Operators:** tournament selection, crossover, and a mutation that moves a task to another valid option (no arithmetic on node ids). Plain NSGA-II in pymoo. **Initial population** (CHANGES C9): the greedy plan, an energy-greedy plan (each window task's first decision takes the open option with the lowest Ê, 12.4, i.e. the cheapest that meets the deadline), and mutated copies of both (the same mutation operator) fill half of it; the rest are random valid plans. NSGA-II is elitist, so no point of the final front is dominated by the greedy plan. MMDE / DE mutation (used in Paper 1) is not used: it builds new genes by arithmetic, V = X₁ + F · (X₂ − X₃), which needs genes on a numeric scale, while PCNME's genes are categorical actions relative to each task's anchor, so a difference such as "N3 − N1" has no meaning.
 
 ### 13.3 The knee point and the weight w
 
