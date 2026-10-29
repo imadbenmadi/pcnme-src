@@ -56,16 +56,16 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 
 ## M3 — Many zones, mobility, failures (fast mode complete, Greedy)
 
-- [ ] **M3.1 Bus and calls in fast mode** (`bus/`), sections 5.1–5.3, 15.2: in-process topic table with modelled broker delay; QoS 1 may deliver twice; retained messages; last will. Direct calls after the modelled transfer time.
-- [ ] **M3.2 Layout and neighbours**, sections 7.5 and 18: 5 zone positions, R_z, d_nb, neighbour positions fixed at start, the join rule.
-- [ ] **M3.3 Zone state plane**, sections 5.2, 9.2: state every 100 ms, snapshot versions, newest wins, staleness, R1 pending sends, the WAN-wait estimate (4.3).
-- [ ] **M3.4 Masks** (section 7.2) and q*.
-- [ ] **M3.5 Placement to neighbours and cloud**, refusals and the one re-decision (9.1, 9.2).
-- [ ] **M3.6 Loss detection, retry, cancel** (9.3, 9.4): upload timeout, last will, watchdog, status probe, retry mask, cancel, first result wins.
-- [ ] **M3.7 Duplicates, subscriptions, cleanup** (9.5, 9.6).
-- [ ] **M3.8 Mobility** (`mobility/`), section 10: VFC grid with lights and stops, speeds, hotspot, attach with hysteresis, GPS every 100 ms, coverage gaps, cut uploads (9.7), result follows the car (10.3).
-- [ ] **M3.9 Predictor** (10.2): exit time (ray–circle formula), next zone at intersections.
-- [ ] **M3.10 Logging** (16.3): Parquet files and InfluxDB points as in `docs/METRICS.md` (confirm or change that schema here); fix the Grafana dashboard queries in `docker/grafana/dashboards/` against real data.
+- [x] **M3.1 Bus and calls in fast mode** (`bus/`), sections 5.1–5.3, 15.2: in-process topic table with modelled broker delay; QoS 1 may deliver twice; retained messages; last will. Direct calls after the modelled transfer time.
+- [x] **M3.2 Layout and neighbours**, sections 7.5 and 18: 5 zone positions, R_z, d_nb, neighbour positions fixed at start, the join rule.
+- [x] **M3.3 Zone state plane**, sections 5.2, 9.2: state every 100 ms, snapshot versions, newest wins, staleness, R1 pending sends, the WAN-wait estimate (4.3).
+- [x] **M3.4 Masks** (section 7.2) and q*.
+- [x] **M3.5 Placement to neighbours and cloud**, refusals and the one re-decision (9.1, 9.2).
+- [x] **M3.6 Loss detection, retry, cancel** (9.3, 9.4): upload timeout, last will, watchdog, status probe, retry mask, cancel, first result wins.
+- [x] **M3.7 Duplicates, subscriptions, cleanup** (9.5, 9.6).
+- [x] **M3.8 Mobility** (`mobility/`), section 10: VFC grid with lights and stops, speeds, hotspot, attach with hysteresis, GPS every 100 ms, coverage gaps, cut uploads (9.7), result follows the car (10.3).
+- [x] **M3.9 Predictor** (10.2): exit time (ray–circle formula), next zone at intersections.
+- [x] **M3.10 Logging** (16.3): Parquet files and InfluxDB points as in `docs/METRICS.md` (confirm or change that schema here); fix the Grafana dashboard queries in `docker/grafana/dashboards/` against real data.
 - **M3 acceptance tests:**
   - One scenario test per row of the failure table (9.1) and per case C1–C14 (7.4).
   - S1–S3 with Greedy, 3 seeds: ρ_fog and TI_WAN measured from the run match the config targets within 5 %; z1 load ≈ 1.6 × the mean; the WAN congests in S3. If not, stop and debug the queueing before anything else.
