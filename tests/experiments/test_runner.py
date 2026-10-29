@@ -187,3 +187,19 @@ def test_pcnme_run_on_the_command_line(tmp_path: Path, capsys: pytest.CaptureFix
         == 2
     )
     assert "outside the evaluation range" in capsys.readouterr().err
+
+
+def test_the_runner_and_the_cli_need_no_torch_for_a_rule(tmp_path: Path) -> None:
+    # Windows CI and a machine without the ml extra: rules, the report and the CLI import no torch
+    import subprocess
+    import sys
+
+    code = (
+        "import sys; sys.modules['torch'] = None\n"
+        "from pcnme.experiments.cli import main\n"
+        f"raise SystemExit(main(['run', '--scenario', 'S1', '--method', 'greedy', '--seeds', '3000', "
+        f"'--seconds', '1', '--cars', '10', '--out', {str(tmp_path)!r}]))"
+    )
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    assert (tmp_path / "S1-greedy-3000-fast" / "tasks.parquet").exists()
