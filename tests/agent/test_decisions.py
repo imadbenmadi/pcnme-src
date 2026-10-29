@@ -187,3 +187,15 @@ def test_every_attempt_row_carries_its_reward(run_dir: Path) -> None:
     decisions = pq.read_table(run_dir / "decisions.parquet").to_pylist()
     made = {(r["anchor"], r["task_id"], r["attempt"]) for r in decisions}
     assert {(r["anchor"], r["task_id"], r["attempt"]) for r in rows if r["decided"]} == made
+
+
+def test_every_decision_becomes_one_transition(run_dir: Path) -> None:
+    # 11.3: with the drain every reward is final; the last decision of each anchor is truncated (11.3.4).
+    decisions = pq.read_table(run_dir / "decisions.parquet").to_pylist()
+    transitions = pq.read_table(run_dir / "transitions.parquet").to_pylist()
+    key = lambda r: (r["anchor"], r["task_id"], r["attempt"])  # noqa: E731
+    assert sorted(map(key, transitions)) == sorted(map(key, decisions))
+    truncated = [r for r in transitions if r["truncated"]]
+    assert len(truncated) == len({r["anchor"] for r in decisions})
+    assert all(r["dt_s"] is None and r["next_task_id"] == "" for r in truncated)
+    assert all(r["dt_s"] >= 0 for r in transitions if not r["truncated"])
