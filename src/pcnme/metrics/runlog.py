@@ -19,7 +19,18 @@ from pathlib import Path
 from typing import Any
 
 EPOCH_NS = 1_767_225_600_000_000_000  # 2026-01-01T00:00:00Z in ns
-TABLES = ("tasks", "attempts", "zones", "pipes", "positions", "events", "decisions", "transitions")
+TABLES = (
+    "tasks",
+    "attempts",
+    "zones",
+    "pipes",
+    "positions",
+    "events",
+    "decisions",
+    "transitions",
+    "learning",
+    "episodes",
+)
 MEASUREMENT = {
     "tasks": "task",
     "attempts": "attempt",
@@ -29,6 +40,8 @@ MEASUREMENT = {
     "events": "event",
     "decisions": "decision",
     "transitions": "transition",
+    "learning": "learning",
+    "episodes": "episode",
 }
 TAGS = {
     "tasks": ("anchor", "type", "cls", "outcome"),
@@ -39,6 +52,8 @@ TAGS = {
     "events": ("car_id", "kind"),
     "decisions": ("anchor", "kind", "action"),
     "transitions": ("anchor", "action"),
+    "learning": ("zone", "phase"),
+    "episodes": (),
 }
 
 

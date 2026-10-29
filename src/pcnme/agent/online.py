@@ -91,7 +91,7 @@ class OnlineAgent:
     epsilon: float | None = None  # default: rl.epsilon_online
     updates: int = 0
     new_samples: int = 0
-    losses: list[tuple[int, float, float, float, float]] = field(default_factory=list)
+    losses: list[tuple[int, float, float, float, float, float]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         deterministic()
@@ -153,7 +153,9 @@ class OnlineAgent:
         self.opt.step()
         self.replay.update(drawn.index, parts.td_errors.tolist())
         self.updates += 1
-        self.losses.append((self.updates, parts.td, parts.n_step, parts.margin, float(parts.total.detach())))
+        self.losses.append(
+            (self.updates, parts.td, parts.n_step, parts.margin, float(parts.total.detach()), parts.mean_q)
+        )
         if self.updates % rl.target_update_every == 0:
             self.target.load_state_dict(self.online.state_dict())
 
