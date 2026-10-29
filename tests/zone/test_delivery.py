@@ -222,9 +222,15 @@ def test_a_status_message_reaches_the_anchor_but_never_the_car() -> None:
 
 
 def test_the_zone_counts_its_subscriptions_per_role() -> None:
-    # 9.6: the serving role (result, attach) and the anchor role (attach, gps, result, ack) share one client.
+    # 9.6: one client for every role. Serving (the car attached): result, attach. Anchor (an open task of
+    # the car): attach, gps, result, ack, from the first open task to the last close.
     s = one_zone(fixed_delay_config(), Fixed("here"))
     m = s.zone.mqtt
-    assert [m.count(f"car/c01/{k}") for k in ("result", "attach", "gps", "ack")] == [2, 2, 1, 1]
-    s.clock.run_until(0.1)
-    assert s.bus.subscribers("car/c01/result") == ("z1",)
+    counts = lambda: [m.count(f"car/c01/{k}") for k in ("result", "attach", "gps", "ack")]  # noqa: E731
+    assert counts() == [1, 1, 0, 0]
+    s.zone.upload(task_now(s, "T1"))
+    s.clock.run_until(0.006)  # t_rx: the task is open
+    assert counts() == [2, 2, 1, 1]
+    s.clock.run_until(1.0)
+    assert s.closed[0].outcome == "on_time" and counts() == [1, 1, 0, 0]
+    assert s.bus.subscribers("car/c01/gps") == ()
