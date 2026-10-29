@@ -22,7 +22,8 @@ from pathlib import Path
 
 import pytest
 
-from pcnme.config import Config, load_config
+from pcnme.config import Config, config_from_mapping, load_config, load_yaml
+from pcnme.energy import AttemptEnergy, EnergyModel
 from pcnme.experiments.one_zone import check_invariants, run_one_zone, summarise
 from pcnme.net.radio import shannon_rate
 from tests.zone.harness import Fixed, fixed_delay_config, one_zone, task_now
@@ -166,6 +167,26 @@ def test_check_invariants_catches_each_violation(cfg: Config) -> None:
     assert any("closed with no outcome" in v for v in check_invariants(run))
     r.outcome = saved[0]
     assert check_invariants(run) == []
+
+
+def test_check_invariants_catches_negative_energy(cfg: Config, monkeypatch: pytest.MonkeyPatch) -> None:
+    run = run_one_zone(cfg, "S1", "greedy", 1.0, 2000)
+    assert check_invariants(run) == []
+    for part in ("forwarding", "execution", "ret"):
+        bad = dict.fromkeys(("forwarding", "execution", "ret"), 0.0) | {part: -1e-12}
+        monkeypatch.setattr(EnergyModel, "of_record", lambda self, rec, bad=bad: AttemptEnergy(**bad))
+        assert any("negative energy" in v for v in check_invariants(run)), part
+
+
+def test_with_an_encode_time_l_holds_it_and_the_invariants_still_hold(default_config_path: Path) -> None:
+    # 14.3, Q14: L = encode + upload + input + queue + run + return; the upload starts after the encode.
+    data = load_yaml(default_config_path)
+    data["timing"]["encode"] = 0.004
+    cfg4 = config_from_mapping(data)
+    run = run_one_zone(cfg4, "S1", "greedy", 2.0, 2000)
+    assert check_invariants(run) == []
+    done = [r for r in run.records if r.confirm is not None]
+    assert done and all(r.upload_start == pytest.approx(r.task.created + 0.004, abs=1e-12) for r in done)
 
 
 @pytest.mark.parametrize("n_cars", [50, 250])
