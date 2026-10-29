@@ -21,6 +21,8 @@ RADIO_DOWN = "radio_down"  # access point -> car: a result
 BH_OUT = "bh_out"  # a zone's outgoing backhaul: to a neighbour, or the first part of a cloud transfer
 WAN_IN = "wan_in"  # metro-edge router -> cloud: the WAN part of a cloud transfer
 ACK_UP = "ack_up"  # car -> serving zone: the car's confirm (radio)
+REPLY_BH = "reply_bh"  # an executor's HTTP reply to the anchor over the backhaul (5.3)
+REPLY_WAN = "reply_wan"  # the cloud's HTTP reply over the WAN, before its backhaul part (5.3)
 
 STREAM: Mapping[str, str] = MappingProxyType(
     {
@@ -29,6 +31,8 @@ STREAM: Mapping[str, str] = MappingProxyType(
         BH_OUT: "link_delays",
         WAN_IN: "link_delays",
         ACK_UP: "radio",
+        REPLY_BH: "link_delays",
+        REPLY_WAN: "link_delays",
     }
 )
 
