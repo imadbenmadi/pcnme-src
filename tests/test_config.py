@@ -280,7 +280,7 @@ def test_derived_values_equal_calc_defaults_output(cfg: Config, repo_root: Path)
 def test_placeholder_rows_use_the_factors(cfg: Config) -> None:
     row = cfg.time_table.row("T1", "F-GPU", "cpu")
     assert row is not None
-    assert (row.mean, row.p5, row.p95, row.longest_step) == pytest.approx((0.090, 0.081, 0.117, 0.045))
+    assert (row.mean, row.p5, row.p95, row.longest_step) == pytest.approx((0.090, 0.0675, 0.117, 0.045))
 
 
 def test_measured_values_win_over_the_factors(raw: dict[str, Any]) -> None:
@@ -289,7 +289,7 @@ def test_measured_values_win_over_the_factors(raw: dict[str, Any]) -> None:
     row = cfg.time_table.row("T1", "F-GPU", "cpu")
     assert row is not None
     assert (row.mean, row.p95, row.longest_step) == (0.090, 0.200, 0.030)
-    assert row.p5 == pytest.approx(0.9 * 0.090)  # not measured: the factor fills it
+    assert row.p5 == pytest.approx(0.75 * 0.090)  # not measured: the factor fills it (C5)
     # e_bar follows the measured p95 (12.3)
     expected = (1.5 * 20 * 0.200 + E_BH * 150 * 8000 + E_RET_HERE_SMALL) / E_REF["T1"]
     assert cfg.derived.e_bar == pytest.approx(expected, rel=1e-12)

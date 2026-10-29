@@ -22,7 +22,7 @@ import pytest
 
 from pcnme.config import Config, load_config
 from pcnme.node.executor import AttemptKey, Executor, Report, TaskRequest, TraceEntry
-from pcnme.node.timetable import RunTimeTable, exponential
+from pcnme.node.timetable import RunTimeTable
 from pcnme.sim.clock import EventClock
 from pcnme.sim.quantize import to_ns
 from pcnme.sim.rng import RandomStreams
@@ -117,7 +117,7 @@ def test_every_rule_of_8_4_and_8_6_has_a_test(rule: str, repo_root: Path) -> Non
 
 def event_log_hash(cfg: Config, seed: int, seconds: float = 5.0) -> str:
     """A realistic run on the config's F-GPU node: the task mix at S2's per-zone rate (74 tasks/s), loose
-    deadlines, exponential run times (a test shape; Q7 is open). The hash covers every trace entry and every
+    deadlines, lognormal run times (CHANGES C5). The hash covers every trace entry and every
     report, floats by their exact repr."""
     clock = EventClock()
     streams = RandomStreams.from_config(cfg, seed, "training")
@@ -128,7 +128,7 @@ def event_log_hash(cfg: Config, seed: int, seconds: float = 5.0) -> str:
         streams,
         cfg,
         "F-GPU",
-        RunTimeTable.from_config(cfg, exponential),
+        RunTimeTable.from_config(cfg),  # lognormal (CHANGES C5)
         on_report=reports.append,
         trace=trace.append,
     )
@@ -176,7 +176,7 @@ def test_the_event_log_hash_is_pinned(cfg: Config) -> None:
     assert event_log_hash(cfg, 2000) == GOLDEN_HASH
 
 
-# 29 Oct, Windows; re-pinned for Q10 ("high" is the promotion default), C4 (water-filling Ŵ) and
-# whole-nanosecond draws (sim/quantize.py: the earlier pin differed on Linux, where exp / log1p differ in the
-# last bit).
-GOLDEN_HASH = "cc60a3b4ea4211401c7d96582b01e390920833a00ae201bf9ecc13d994d0264f"
+# 29 Oct, Windows; re-pinned for Q10 ("high" is the promotion default), C4 (water-filling Ŵ), C5
+# (lognormal run times) and whole-nanosecond draws (sim/quantize.py: the earlier pin differed on Linux, where
+# exp / log1p differ in the last bit).
+GOLDEN_HASH = "df5bc798d565373ed2febf801aee885eb7ed37112724757f7674b1bc50ba91f3"
