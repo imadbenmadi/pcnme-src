@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from pcnme.agent.inputs import INPUT_NAMES
 from pcnme.bus.bus import Bus
 from pcnme.car.car import Car, Task
 from pcnme.config import Config
@@ -36,6 +37,7 @@ from pcnme.net.radio import MIN_DISTANCE, shannon_rate
 from pcnme.node.timetable import RunTimeTable, lognormal
 from pcnme.sim.clock import EventClock
 from pcnme.sim.rng import RandomStreams
+from pcnme.zone.decision import OPTIONS
 from pcnme.zone.estimates import PathEstimates
 from pcnme.zone.layout import Site
 from pcnme.zone.statestore import StateStore
@@ -402,9 +404,28 @@ class City:
                     t_result_at_car_s=r.result_at_car if a == r.result_attempt else None,
                 )
 
+    def _decision_rows(self) -> None:
+        """One row per decision (16.3, PLAN M4.1): x_<input> for the 48 inputs in the order of 11.1,
+        masked_<option> (the mask's reason, empty when open) and the action, for M5's demonstrations and the
+        viewer."""
+        for zone in self.zones.values():
+            for d in zone.decisions:
+                self.log.add(
+                    "decisions",
+                    d.time,
+                    anchor=d.anchor,
+                    task_id=str(d.task_id),
+                    attempt=d.attempt,
+                    kind=d.kind,
+                    action=OPTIONS[d.action],
+                    **{f"x_{n}": x for n, x in zip(INPUT_NAMES, d.inputs, strict=True)},
+                    **{f"masked_{o}": m or "" for o, m in zip(OPTIONS, d.masked, strict=True)},
+                )
+
     def write(self, out_dir: Path) -> Path:
         """results/<run_id>/ (METRICS.md): the Parquet files, run.json, points.lp."""
         self._task_rows()
+        self._decision_rows()
         info = {
             "scenario": self.scenario.name,
             "seed": self.log.seed,

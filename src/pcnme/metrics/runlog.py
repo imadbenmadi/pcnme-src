@@ -2,7 +2,8 @@
 
 Rows are collected during a run and written once at the end: Parquet files under results/<run_id>/ (the
 source of every reported number) and the same rows as InfluxDB line protocol (points.lp, for Grafana only).
-Tables: tasks, attempts, zones, pipes (METRICS.md) and, for a map replay, positions and events (Q28). Every
+Tables: tasks, attempts, zones, pipes (METRICS.md), for a map replay positions and events (Q28), and every
+placement decision with its 48 inputs, masks and action (decisions, PLAN M4.1). Every
 row carries the common tags run_id, scenario, method, seed, mode. Times are simulated seconds; the Influx
 points are stamped 2026-01-01T00:00:00Z + the simulated time (METRICS.md).
 """
@@ -17,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 EPOCH_NS = 1_767_225_600_000_000_000  # 2026-01-01T00:00:00Z in ns
-TABLES = ("tasks", "attempts", "zones", "pipes", "positions", "events")
+TABLES = ("tasks", "attempts", "zones", "pipes", "positions", "events", "decisions")
 MEASUREMENT = {
     "tasks": "task",
     "attempts": "attempt",
@@ -25,6 +26,7 @@ MEASUREMENT = {
     "pipes": "pipe",
     "positions": "position",
     "events": "event",
+    "decisions": "decision",
 }
 TAGS = {
     "tasks": ("anchor", "type", "cls", "outcome"),
@@ -33,6 +35,7 @@ TAGS = {
     "pipes": ("pipe",),
     "positions": ("car_id", "zone"),
     "events": ("car_id", "kind"),
+    "decisions": ("anchor", "kind", "action"),
 }
 
 

@@ -445,6 +445,9 @@ def test_an_unknown_key_is_refused(raw: dict[str, Any], key: str) -> None:
         ("layout.joining_zones", ["z9"]),
         ("time_table_placeholder.T1.F-CPU", {"gpu": 0.008}),  # F-CPU has no GPU slot
         ("timing.quantiles", {"low": 0.95, "high": 0.05}),
+        ("reward.w", 0.0),  # 11.4: w in (0, 1]
+        ("reward.w", 1.2),
+        ("reward.w", "from_knee"),  # a number now (QUESTIONS Q32 stand-in)
     ],
 )
 def test_a_bad_value_raises_an_error_naming_its_key(raw: dict[str, Any], key: str, value: object) -> None:
@@ -463,3 +466,8 @@ def test_every_task_type_needs_a_row_on_the_strongest_class(raw: dict[str, Any])
     with pytest.raises(ConfigError) as err:
         edited(raw, delete("time_table_placeholder.T4.F-GPU"))
     assert err.value.key == "time_table_placeholder.T4.F-GPU"
+
+
+def test_the_knee_weight_stand_in_is_read_from_the_config(cfg: Config) -> None:
+    # QUESTIONS Q32: w* comes from NSGA-II in M5; until then the config's stand-in, 0.5.
+    assert cfg.reward.w == 0.5
