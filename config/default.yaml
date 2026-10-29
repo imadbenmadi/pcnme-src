@@ -117,6 +117,7 @@ timing:
   T_leave: 0.300                 # final doc
   gps_expiry: 1.0                # final doc
   reward_grace_G: 0.500          # R: > the slowest status report (cloud one way 100 ms + broker) + d_abort
+  encode: 0.0                    # M: the car's JPEG encode time (14.3), from the calibration run; placeholder 0 (Q14)
 
 tof:
   alpha: 0.8
