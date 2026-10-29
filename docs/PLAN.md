@@ -73,10 +73,10 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 
 ## M4 — Agent inputs and rewards (no learning yet)
 
-- [~] **M4.1 The 48 inputs** (11.1), caps (times ≤ 2, energy ≤ ē), masked options still get numbers.
-- [~] **M4.2 Rewards** (11.4) for every attempt outcome; C_drop = 5.
-- [~] **M4.3 Transitions** (11.3): s, a, s', Δt at the same anchor, pending buffer keyed by (task_id, attempt), moved to replay at close + G, no transition for boulders and all-masked drops.
-- **M4 acceptance tests:**
+- [x] **M4.1 The 48 inputs** (11.1), caps (times ≤ 2, energy ≤ ē), masked options still get numbers.
+- [x] **M4.2 Rewards** (11.4) for every attempt outcome; C_drop = 5.
+- [x] **M4.3 Transitions** (11.3): s, a, s', Δt at the same anchor, pending buffer keyed by (task_id, attempt), moved to replay at close + G, no transition for boulders and all-masked drops.
+- [x] **M4 acceptance tests:**
   - Input vector length 48, every value in its range, order as in 11.1.
   - Property test: for random w in (0, 1] and random energies, every drop reward is lower than every delivery reward (N18).
   - Transition timing on a scripted scenario.
@@ -95,7 +95,7 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 ## M6 — D3QN with DQfD, online learning
 
 - [ ] **M6.1 Network**: 48 → 256 → 256 → dueling heads, masked argmax (11.2, 11.3).
-- [ ] **M6.2 Losses** (13.5): 1-step double-DQN, n-step with the time-based discount, margin loss on expert transitions only, L2.
+- [ ] **M6.2 Losses** (13.5): 1-step double-DQN, n-step with the time-based discount, margin loss on expert transitions only, L2. The last transition of each anchor per episode has no s' (truncated, QUESTIONS Q36): leave it out of the bootstrapped targets (1-step and n-step).
 - [ ] **M6.3 Replay**: agent part (100 000) + expert part never overwritten; prioritized replay with ε_d, ε_a, α, β.
 - [ ] **M6.4 Pretraining loop** with held-out expert agreement and early stop.
 - [ ] **M6.5 Online learning** in every zone; neighbour order shuffled per episode in training (13.6).
