@@ -12,7 +12,7 @@ from scipy import stats
 
 from pcnme.car.car import Car, Confirm, Result, Task
 from pcnme.car.placement import standin_uniform_disk
-from pcnme.config import Config, load_config
+from pcnme.config import Config, config_from_mapping, load_config, load_yaml
 from pcnme.ids import TaskId
 from pcnme.sim.clock import EventClock
 from pcnme.sim.rng import RandomStreams
@@ -24,13 +24,20 @@ def cfg(default_config_path: Path) -> Config:
 
 
 def make_car(
-    cfg: Config, scenario: str = "S2", car_id: str = "c01", seed: int = 2000
+    cfg: Config, scenario: str = "S2", car_id: str = "c01", seed: int = 2000, fleet: int | None = None
 ) -> tuple[Car, list[Task]]:
     clock = EventClock()
     tasks: list[Task] = []
     streams = RandomStreams.from_config(cfg, seed, "training")
     car = Car(
-        car_id, cfg, cfg.scenarios[scenario], streams, clock, position=(300.0, 300.0), on_task=tasks.append
+        car_id,
+        cfg,
+        cfg.scenarios[scenario],
+        streams,
+        clock,
+        position=(300.0, 300.0),
+        on_task=tasks.append,
+        fleet=cfg.cars.count[0] if fleet is None else fleet,
     )
     return car, tasks
 
@@ -87,6 +94,51 @@ def test_arrivals_are_poisson_at_lambda_car_standin(cfg: Config) -> None:
     gaps = np.diff([0.0] + [t.created for t in tasks])
     assert len(tasks) / 4000.0 == pytest.approx(lam, rel=0.03)
     assert stats.kstest(gaps, "expon", args=(0, 1 / lam)).pvalue > 1e-3
+
+
+@pytest.mark.parametrize("fleet", [200, 1000])
+def test_the_rate_comes_from_the_runs_fleet_so_a_zone_gets_the_same_load(cfg: Config, fleet: int) -> None:
+    # 18 (Workload): lambda_car = per-zone rate / cars per zone. A zone's share of a 1000-car city (250 cars)
+    # makes as many tasks per second as its share of a 200-car city (50 cars): 74.26 /s in S2.
+    per_zone = cfg.derived.arrival_rate_per_zone["S2"]
+    clock = EventClock()
+    streams = RandomStreams.from_config(cfg, 2000, "training")
+    tasks: list[Task] = []
+    seconds = 100.0
+    for i in range(fleet // len(cfg.layout.active_zones)):
+        car = Car(
+            f"c{i:03d}", cfg, cfg.scenarios["S2"], streams, clock, (0.0, 0.0), tasks.append, fleet=fleet
+        )
+        car.start(until=seconds)
+    clock.run_until(seconds)
+    assert len(tasks) / seconds == pytest.approx(per_zone, rel=0.03)  # 7 426 tasks: sd 1.2 %
+
+
+def test_arrival_gaps_are_whole_nanoseconds(cfg: Config) -> None:
+    created = [t.created for t in run_car(cfg, "S2", 50.0)]
+    assert all(round(c * 1e9) == pytest.approx(c * 1e9, abs=1e-3) for c in created)
+
+
+def test_the_upload_starts_after_the_encode_time_and_counts_it_once(default_config_path: Path) -> None:
+    # 14.3, QUESTIONS Q14: L holds the encode time. The upload starts at creation + encode, and B_car = D -
+    # time since creation then already holds it: with encode 4 ms, B_car = D - 4 ms (not D - 8 ms).
+    data = load_yaml(default_config_path)
+    data["timing"]["encode"] = 0.004
+    cfg4 = config_from_mapping(data)
+    clock = EventClock()
+    uploads: list[tuple[float, float]] = []
+    car: Car
+
+    def on_task(task: Task) -> None:
+        uploads.append((clock.now - task.created, car.budget(task, clock.now) - task.deadline))
+
+    streams = RandomStreams.from_config(cfg4, 2000, "training")
+    car = Car("c01", cfg4, cfg4.scenarios["S2"], streams, clock, (0.0, 0.0), on_task, fleet=200)
+    car.start(until=5.0)
+    clock.run_until(6.0)
+    assert uploads
+    assert all(wait == pytest.approx(0.004, abs=1e-12) for wait, _ in uploads)
+    assert all(b == pytest.approx(-0.004, abs=1e-12) for _, b in uploads)
 
 
 def test_task_ids_count_up_per_car(cfg: Config) -> None:
