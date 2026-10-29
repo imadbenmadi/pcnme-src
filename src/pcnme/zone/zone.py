@@ -9,13 +9,13 @@ Messages go over the bus (bus/bus.py, M3.1): the executor publishes each result 
 car/{id}/result; the serving zone pushes results (never status messages) to the car, and the anchor keeps a
 copy; the car's confirm reaches the serving zone, which publishes car/{id}/ack for the anchor (6D, 10.3).
 
-M3 PLACEHOLDERS, each the simplest correct thing behind a small interface:
 The state plane (zone/statestore.py, M3.3): every zone and the cloud publish zone/{id}/state each state
 period, and every POST reply carries a snapshot; the anchor keeps the newest by version, counts its own
-pending sends (R1) and estimates ŵ_WAN from its cloud uploads (4.3).
+pending sends (R1) and estimates ŵ_WAN from its cloud uploads (4.3). Placement (M3.5): here, a neighbour
+(POST over the own backhaul pipe, reply after the backhaul delay) or the cloud; a refusal gets the one
+re-decision (9.1).
 
-M3 PLACEHOLDERS (continued):
-- A refused task is dropped and logged; there is no re-decision (M3.5).
+M3 PLACEHOLDERS, each the simplest correct thing behind a small interface:
 - No message is lost, so there is no watchdog, retry, cancel or republish (M3.6, M3.7).
 - Cars do not move: the anchor is always the serving zone (M3.8).
 """
@@ -28,6 +28,7 @@ from typing import Literal
 
 from pcnme.bus import topics
 from pcnme.bus.bus import Bus, Client, Delivery
+from pcnme.bus.calls import call
 from pcnme.car.car import Car, Confirm, Result, Task
 from pcnme.config import Config, DeadlineMode, SlotType
 from pcnme.energy import EnergyModel
@@ -50,6 +51,17 @@ from pcnme.zone.statestore import Snapshot, StateStore
 from pcnme.zone.tof import TofBroker
 
 
+@dataclass(frozen=True, slots=True)
+class EarlierAttempt:
+    """An attempt that ended before the last one: refused (9.1, 9.2)."""
+
+    attempt: int
+    option: Option
+    executor: str
+    reply: str
+    t_send: float
+
+
 @dataclass(slots=True)
 class TaskRecord:
     """Everything that happened to one task, for energy (12.5), metrics and invariants."""
@@ -64,6 +76,7 @@ class TaskRecord:
     d_a: float = 0.0
     route: str = ""  # "agent", "cloud" (boulder) or "drop" (boulder the cloud cannot make)
     option: Option | None = None
+    executor: str | None = None  # the zone id or "cloud" of the last attempt
     t_send: float | None = None
     t_at_executor: float | None = None  # when the input reached the executor
     budget: float | None = None  # B_k sent to the executor (6C.9)
@@ -77,6 +90,8 @@ class TaskRecord:
     closed_at: float | None = None
     deliveries: int = 0  # result copies pushed to the car (12.2: each pays the return energy)
     parts: dict[str, float] = field(default_factory=dict)  # durations along the way, for the latency check
+    earlier: list[EarlierAttempt] = field(default_factory=list)
+    redecided: bool = False  # the one re-decision after a refusal is used (9.1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -208,6 +223,8 @@ class Zone:
         """`start_sites`: the other zones active at start-up (deployment configuration, 7.5.2); none for a
         zone alone."""
         self.zone_id = zone_id
+        self._bus = bus
+        self.peers: dict[str, Zone] = {}  # the other zones, for direct calls (5.3); set by the city
         self._fog = dict(fog_classes or {})  # every zone's hardware class: deployment configuration (Q21)
         self._clock = clock
         self._streams = streams
@@ -380,43 +397,86 @@ class Zone:
     # --- placement and execution (6C) -----------------------------------------------------------------------
 
     def _send(self, rec: TaskRecord, row: AnchorRow, option: Option, view: OptionView | None) -> None:
+        """One attempt (6C.9, 9.1): here, a neighbour (POST over the own backhaul pipe) or the cloud (backhaul
+        then WAN). Every placement has its own attempt number (5.5); an earlier one was refused."""
         now = self._clock.now
         task = rec.task
+        if rec.option is not None and rec.executor is not None and rec.t_send is not None:
+            prev = EarlierAttempt(row.attempts, rec.option, rec.executor, rec.reply or "", rec.t_send)
+            rec.earlier.append(prev)
         attempt = self.anchor.next_attempt(task.task_id)
         key = AttemptKey(task.task_id, self.zone_id, attempt)
         rec.option, rec.t_send = option, now
-        if option not in ("here", "cloud"):
-            raise NotImplementedError("placement to a neighbour comes in M3.5")
+        rec.reply = rec.slot = rec.transfer = rec.t_at_executor = rec.budget = None
+        rec.parts.pop("input", None)
+        rec.parts["before_send"] = now - rec.t_rx  # the decision and any refusal before this send
+        pend = (task.task_id, attempt)
+        w_bh = self.backhaul.wait_at(now)
         if option == "here":
+            rec.executor = self.zone_id
             budget = rec.d_a - self._est.t_ret_fog() - now  # 6C.9: d_k = d_A - T̂_ret,here
-            self._submit(rec, self.executor, TaskRequest(key, task.task_type, task.cls, task.l_max, budget))
+            req = TaskRequest(key, task.task_type, task.cls, task.l_max, budget)
+            rec.t_at_executor, rec.budget = now, budget
+            self._reply(rec, self.zone_id, pend, self.executor.submit(req), None, w_bh)
             return
-        t_in = self._est.t_in_cloud(task.input_bits, self.backhaul.wait_at(now))
+        if option == "cloud":
+            self._send_cloud(rec, key, pend, view, w_bh)
+            return
+        target = self.neighbours.positions[int(option[1]) - 1]
+        assert target is not None and view is not None and view.slot is not None
+        rec.executor = target
+        t_in = self._est.t_in_neighbour(task.input_bits, w_bh)
+        budget = rec.d_a - now - t_in - self._est.t_ret_fog()  # 6C.9: B_k = d_A - t_s - T̂_in - T̂_ret
+        req = TaskRequest(key, task.task_type, task.cls, task.l_max, budget)
+        self.store.add_pending(target, pend, view.slot, task.cls, view.run)  # R1 (9.2)
+        d_bh = hops.delay(self._streams, hops.BH_OUT, self._cfg.links.backhaul_delay, task.task_id, attempt)
+        tr = self.backhaul.send(now=now, size_bits=task.input_bits, delay=d_bh)  # POST /tasks + the input
+        back = hops.delay(self._streams, hops.REPLY_BH, self._cfg.links.backhaul_delay, task.task_id, attempt)
+        peer = self.peers[target]
+
+        def at_peer() -> tuple[Reply, Snapshot]:
+            rec.parts["input"] = tr.duration
+            rec.t_at_executor, rec.budget = self._clock.now, budget
+            return peer.handle(req)
+
+        call(
+            self._clock,
+            tr.delivery,
+            lambda: self._bus.is_alive(target),
+            at_peer,
+            lambda r: back,
+            lambda r: self._reply(rec, target, pend, r[0], r[1], w_bh),
+            caller_alive=lambda: self.mqtt.alive,
+        )
+
+    def _send_cloud(
+        self, rec: TaskRecord, key: AttemptKey, pend: tuple[object, ...], view: OptionView | None, w_bh: float
+    ) -> None:
+        task, now, attempt = rec.task, self._clock.now, key.attempt
+        rec.executor = CLOUD
+        t_in = self._est.t_in_cloud(task.input_bits, w_bh)
         budget = rec.d_a - now - t_in - self._est.t_ret_cloud()  # 6C.9: B_k = d_A - t_s - T̂_in - T̂_ret
         d_bh = hops.delay(self._streams, hops.BH_OUT, self._cfg.links.backhaul_delay, task.task_id, attempt)
         d_wan = hops.delay(self._streams, hops.WAN_IN, self._cfg.links.wan_delay, task.task_id, attempt)
         req = TaskRequest(key, task.task_type, task.cls, task.l_max, budget)
-        pend = (task.task_id, attempt)
         slot = (
             view.slot if view is not None and view.slot is not None else self._cloud_fastest(task.task_type)
         )
-        mean = self._cfg.time_table.row(task.task_type, "cloud", slot)
-        assert mean is not None
-        self.store.add_pending(CLOUD, pend, slot, task.cls, mean.mean)  # R1 (9.2)
-        w_bh = self.backhaul.wait_at(now)
+        row = self._cfg.time_table.row(task.task_type, "cloud", slot)
+        assert row is not None
+        self.store.add_pending(CLOUD, pend, slot, task.cls, row.mean)  # R1 (9.2)
 
         def arrived(tr: SeriesTransfer) -> None:
             rec.transfer = tr
             rec.parts["input"] = tr.duration
-            rec.t_at_executor = self._clock.now
-            rec.budget = req.budget
+            rec.t_at_executor, rec.budget = self._clock.now, req.budget
             reply, snap = self.cloud.handle(req)
             back = hops.delay(self._streams, hops.REPLY_WAN, self._cfg.links.wan_delay, task.task_id, attempt)
             back += hops.delay(
                 self._streams, hops.REPLY_BH, self._cfg.links.backhaul_delay, task.task_id, attempt
             )
             self._clock.schedule(
-                self._clock.now + back, lambda: self._cloud_reply(rec, pend, reply, snap, w_bh)
+                self._clock.now + back, lambda: self._reply(rec, CLOUD, pend, reply, snap, w_bh)
             )
 
         self._cloud_path.send(task.input_bits, d_bh, d_wan, arrived)
@@ -428,35 +488,69 @@ class Zone:
             key=lambda q: rows.row(task_type, "cloud", q).mean,  # type: ignore[union-attr]
         )
 
-    def _cloud_reply(
-        self, rec: TaskRecord, pend: tuple[object, ...], reply: Reply, snap: Snapshot, w_bh: float
-    ) -> None:
-        """The cloud's reply reaches the anchor: its snapshot (R1), the pending send cleared, a ŵ_WAN sample
-        on an accept (4.3), and the outcome of the send."""
-        self.store.on_snapshot(snap)
-        self.store.clear_pending(CLOUD, pend)
-        if isinstance(reply, Accepted):
-            lk = self._cfg.links
-            assert rec.t_send is not None
-            sample = (self._clock.now - rec.t_send) - (w_bh + sum(lk.backhaul_delay) / 2)
-            sample -= (
-                rec.task.input_bits / self._cfg.derived.b_wan + sum(lk.wan_delay) / 2 + self._reply_cloud
-            )
-            self.store.wan_sample(sample)
-            rec.reply, rec.slot = "accepted", reply.slot
-        elif isinstance(reply, Refused):
-            rec.reply = reply.reason
-            self._close(rec, f"drop_refused_{reply.reason}")  # M3 PLACEHOLDER (M3.5): no re-decision
+    def handle(self, req: TaskRequest) -> tuple[Reply, Snapshot]:
+        """POST /tasks from another anchor (5.3): the executor's answer and a snapshot (R1). A zone that
+        accepted a task never forwards it (N12)."""
+        return self.executor.submit(req), self.snapshot()
 
-    def _submit(self, rec: TaskRecord, executor: Executor, req: TaskRequest) -> None:
-        rec.t_at_executor = self._clock.now
-        rec.budget = req.budget
-        reply = executor.submit(req)
+    def _reply(
+        self,
+        rec: TaskRecord,
+        executor_id: str,
+        pend: tuple[object, ...],
+        reply: Reply,
+        snap: Snapshot | None,
+        w_bh: float,
+    ) -> None:
+        """An executor's answer reaches the anchor (6C.10): its snapshot (R1), the pending send cleared, a
+        ŵ_WAN sample on a cloud accept (4.3); a refusal leads to the one re-decision (9.1, 9.2)."""
+        if not self.anchor.is_open(rec.task.task_id):
+            return
+        if snap is not None:
+            self.store.on_snapshot(snap)
+        self.store.clear_pending(executor_id, pend)
         if isinstance(reply, Accepted):
+            if executor_id == CLOUD:
+                lk = self._cfg.links
+                assert rec.t_send is not None
+                sample = (self._clock.now - rec.t_send) - (w_bh + sum(lk.backhaul_delay) / 2)
+                sample -= rec.task.input_bits / self._cfg.derived.b_wan + sum(lk.wan_delay) / 2
+                sample -= self._reply_cloud
+                self.store.wan_sample(sample)
             rec.reply, rec.slot = "accepted", reply.slot
         elif isinstance(reply, Refused):
             rec.reply = reply.reason
-            self._close(rec, f"drop_refused_{reply.reason}")  # M3 PLACEHOLDER (M3.5): no re-decision
+            self._refused(rec, reply.reason)
+
+    def _refused(self, rec: TaskRecord, reason: str) -> None:
+        """9.1: refused at once; the anchor re-decides once; refused again or no slack -> hard: drop; soft:
+        cloud, unless the cloud cannot finish by deadline + L_max either, then drop. A boulder had no
+        decision to redo (QUESTIONS Q22)."""
+        task, row = rec.task, self.anchor.row(rec.task.task_id)
+        if rec.route == "agent" and not rec.redecided:
+            rec.redecided = True
+            ctx = self._context(task, self._clock.now, rec.d_a)
+            option = self._placement.choose(ctx)
+            if option is not None:
+                self._send(rec, row, option, next(v for v in ctx.views if v.option == option))
+                return
+        if (
+            task.cls == "soft"
+            and rec.route == "agent"
+            and rec.executor != CLOUD
+            and self._cloud_can_finish(rec)
+        ):
+            self._send(rec, row, "cloud", None)  # 9.1: the soft fallback, a rule, not a decision
+            return
+        self._close(rec, f"drop_refused_{reason}")
+
+    def _cloud_can_finish(self, rec: TaskRecord) -> bool:
+        """9.1: T̂_in,cloud + Ê_cloud + T̂_ret,cloud <= time left + L_max (the cloud never queues, as 7.1.3)."""
+        task, now = rec.task, self._clock.now
+        t = self._est.t_in_cloud(task.input_bits, self.backhaul.wait_at(now)) + self._est.e_cloud(
+            task.task_type
+        )
+        return t + self._est.t_ret_cloud() <= rec.d_a - now + task.l_max
 
     # --- delivery, ack, close (6D, 6E, 8.6, 9.5, 10.3) ------------------------------------------------------
 
