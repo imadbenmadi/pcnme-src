@@ -459,6 +459,19 @@ class Executor:
         kept = self._kept.get(key)
         return kept[0] if kept is not None else "not found"
 
+    def probe(self, key: AttemptKey) -> tuple[Status, float | None]:
+        """GET /tasks/{id}?attempt=n&anchor=A (5.3, 9.3): queued with its wait (the C4 estimate over the tasks
+        ahead of it), running with its remaining time at Ê^high, or done, skipped, aborted, cancelled, not
+        found (no number)."""
+        now = self._clock.now
+        live = self._live.get(key)
+        if isinstance(live, _Queued):
+            i = self._queues[live.slot].index(live)
+            return "queued", self._current_finish(live.slot, i, now) - now - live.mean
+        if isinstance(live, _Running):
+            return "running", max(0.0, live.start + live.row.high - now)
+        return self.status(key), None
+
     def _keep(self, key: AttemptKey, outcome: Outcome) -> None:
         """Keep (attempt key, outcome) for T_keep (8.6, 5.5)."""
         now = self._clock.now
