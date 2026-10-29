@@ -22,6 +22,9 @@ WAN_IN = "wan_in"  # metro-edge router -> cloud: the WAN part of a cloud transfe
 PUB_BH = "pub_bh"  # a fog executor -> broker: publishing a result or status (backhaul)
 PUB_WAN = "pub_wan"  # the cloud -> broker: publishing a result or status (one WAN crossing, 4.2)
 TO_ZONE = "to_zone"  # broker -> a zone: delivering a message (backhaul)
+ACK_UP = "ack_up"  # car -> serving zone: the car's confirm (radio)
+ACK_PUB = "ack_pub"  # serving zone -> broker: the ack (backhaul)
+ACK_TO_ANCHOR = "ack_to_anchor"  # broker -> the anchor: the ack (backhaul)
 
 STREAM: Mapping[str, str] = MappingProxyType(
     {
@@ -32,6 +35,9 @@ STREAM: Mapping[str, str] = MappingProxyType(
         PUB_BH: "link_delays",
         PUB_WAN: "link_delays",
         TO_ZONE: "link_delays",
+        ACK_UP: "radio",
+        ACK_PUB: "link_delays",
+        ACK_TO_ANCHOR: "link_delays",
     }
 )
 
