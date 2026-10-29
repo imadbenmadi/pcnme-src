@@ -322,6 +322,7 @@ class TimeRow:
     p5: float
     p95: float
     longest_step: float
+    p5_measured: bool = False  # False: the placeholder factor filled p5 (QUESTIONS Q2, CHANGES C5)
 
 
 @dataclass(frozen=True, slots=True)
@@ -866,12 +867,13 @@ def _time_row(h: _Node, q: str, p5_f: float, p95_f: float, step_f: float) -> Tim
         return TimeRow(mean=mean, p5=p5_f * mean, p95=p95_f * mean, longest_step=step_f * mean)
     with _Node(value, key) as r:
         mean = r.number("mean", gt=0.0)
-        p5 = r.number("p5", gt=0.0) if r.has("p5") else p5_f * mean
+        measured_p5 = r.has("p5")
+        p5 = r.number("p5", gt=0.0) if measured_p5 else p5_f * mean
         p95 = r.number("p95", gt=0.0) if r.has("p95") else p95_f * mean
         step = r.number("longest_step", gt=0.0) if r.has("longest_step") else step_f * mean
     if not p5 <= mean <= p95:
         raise ConfigError(key, f"needs p5 <= mean <= p95, got {p5}, {mean}, {p95}")
-    return TimeRow(mean=mean, p5=p5, p95=p95, longest_step=step)
+    return TimeRow(mean=mean, p5=p5, p95=p95, longest_step=step, p5_measured=measured_p5)
 
 
 def _e_strong(specs: Mapping[str, _TaskSpec], table: TimeTable, strongest: str) -> Mapping[str, float]:

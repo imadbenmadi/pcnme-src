@@ -35,8 +35,8 @@ def streams(cfg: Config) -> RandomStreams:
 def test_a_row_holds_mean_quantiles_longest_step_and_energy(cfg: Config) -> None:
     row = RunTimeTable.from_config(cfg, exponential).row("T1", "F-GPU", "gpu")
     assert row is not None
-    # Placeholders of 18: mean 8 ms; p5 0.9x, p95 1.3x, longest step 0.5x; 25 W per F-GPU GPU slot.
-    assert (row.mean, row.low, row.high, row.longest_step) == pytest.approx((0.008, 0.0072, 0.0104, 0.004))
+    # Placeholders of 18: mean 8 ms; p5 0.75x (C5), p95 1.3x, longest step 0.5x; 25 W per F-GPU GPU slot.
+    assert (row.mean, row.low, row.high, row.longest_step) == pytest.approx((0.008, 0.006, 0.0104, 0.004))
     assert row.energy_per_run == pytest.approx(25 * 0.008)  # J of dynamic energy per run
     assert row.power == pytest.approx(25.0)  # p = energy per run / run time (12.2)
 
@@ -147,8 +147,10 @@ def test_the_distribution_shape_is_chosen_by_the_caller(cfg: Config) -> None:
     exp = RunTimeTable.from_config(cfg, exponential).row("T1", "F-GPU", "gpu")
     assert det is not None and exp is not None
     assert isinstance(det.distribution, Deterministic) and isinstance(exp.distribution, Exponential)
-    with pytest.raises(TypeError):
-        RunTimeTable.from_config(cfg)  # type: ignore[call-arg]  # no default shape until Q7 is answered
+    from pcnme.node.timetable import Lognormal
+
+    default = RunTimeTable.from_config(cfg).row("T1", "F-GPU", "gpu")  # C5: lognormal by default
+    assert default is not None and isinstance(default.distribution, Lognormal)
 
 
 @pytest.mark.parametrize("u", [0.0, 1.0, -0.1, 1.5, math.nan])

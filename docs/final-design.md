@@ -17,6 +17,7 @@ This is the one complete design of PCNME. It merges the PCNME Architecture doc, 
 | 28 Oct | 16.2 | ρ_fog uses every task of the whole mix, boulders included (not pebbles only), so S4–S6 keep S2's arrival rate | CHANGES C2 (QUESTIONS Q1) |
 | 28 Oct | 13.2 | Random draws keyed by task, not by event order: a run time is a uniform keyed by (seed, task id, attempt) through the inverse CDF of the row it runs on; a delay is keyed by (seed, task id, attempt, hop); arrivals and mobility stay sequential per car | CHANGES C3 (QUESTIONS Q6) |
 | 28 Oct | 8.5, 5.2 | The wait estimate is water-filling over each slot's remaining time r_i (published per slot instead of their sum R): Σ max(0, Ŵ − r_i) = B; still 0 while a slot is free; for c_q = 1 the same as before | CHANGES C4 |
+| 28 Oct | 14.4, 18 | Run times are lognormal, fitted to each row's mean and p95; the placeholder p5 factor is 0.75 (was 0.9); measured rows report the fitted p5 next to the measured one | CHANGES C5 (QUESTIONS Q7) |
 
 ## 1. What PCNME is
 
@@ -782,7 +783,7 @@ A task may be a small DAG, for example one frame: S1 decode (CPU) → S2 detect 
 
 ### 14.4 The time table
 
-One row per (task type, hardware class, slot type): mean, p5 and p95 of the run time, the longest step, and the mean dynamic energy per run. Measured by running real YOLO many times (or taken from published benchmarks), with the compressed input sizes beside them. In the main experiments a slot holds a task for a time drawn from this measured distribution (fixed seed); no real YOLO runs. The quantiles give Ê^low and Ê^high.
+One row per (task type, hardware class, slot type): mean, p5 and p95 of the run time, the longest step, and the mean dynamic energy per run. Measured by running real YOLO many times (or taken from published benchmarks), with the compressed input sizes beside them. In the main experiments a slot holds a task for a time drawn from this measured distribution (fixed seed); no real YOLO runs. The draw is lognormal, fitted to the row's mean and p95, which both stay exact; its p5 is about 0.75 × the mean for the placeholder rows, and for measured rows the calibration run reports the fitted p5 next to the measured one (CHANGES C5). The quantiles give Ê^low and Ê^high.
 
 # Part II — The evaluation environment
 
@@ -987,7 +988,7 @@ Every number now has a default; together they form config/default.yaml. Tag: **P
 | Workload | Input sizes; result sizes | 150 KB per JPEG frame (T1, T3, T4), T2 = 60 frames = 9 MB; results 3 KB, T2 10 KB | M | JPEG quality 80 on BDD100K 720p frames; 150 KB is a placeholder inside the 100–300 KB of 14.3 |
 | Workload | Deadlines D (loose / tight) | T1 100 / 50 ms; T3 100 / 70 ms; T4 1 / 0.5 s; T2 3 s / 1.1 × Ê_strong(T2) | R / C | Hard vision tasks inside 33–100 ms (14.1). T2's tight D makes it a boulder at α = 0.8 (0.72 ≥ 0.8 × 0.79 s), so the TOF-Broker is exercised in S4–S6 |
 | Workload | Arrival rate per car | λ_car = ρ_fog × c_GPU ÷ (mean GPU run of the mix × cars per zone): S2 = 74 tasks/s per zone, 1.5 per car at 200 cars, 0.3 at 1 000 | C | Sets the scenario load (16.2) |
-| Time table | Mean run, p5, p95, longest step, energy per run | Placeholders, F-GPU GPU slot: T1 8 ms, T3 10 ms, T4 25 ms, T2 720 ms; CPU slot: 90 / 110 / 200 ms, T2 none; cloud GPU about half of the F-GPU time. p5 = 0.9 ×, p95 = 1.3 × the mean, longest step = 0.5 × the mean | M | Measured with real YOLO (15.6, Calibrate). Ultralytics' own table (A100 TensorRT: v8n 0.99 ms, v8l 2.39 ms; CPU ONNX: v8n 80.4 ms) puts the placeholders in the right range |
+| Time table | Mean run, p5, p95, longest step, energy per run | Placeholders, F-GPU GPU slot: T1 8 ms, T3 10 ms, T4 25 ms, T2 720 ms; CPU slot: 90 / 110 / 200 ms, T2 none; cloud GPU about half of the F-GPU time. p5 = 0.75 ×, p95 = 1.3 × the mean, longest step = 0.5 × the mean; run times lognormal, fitted to the mean and p95 (the fit's p5 is 0.748 × the mean) | M | Measured with real YOLO (15.6, Calibrate). Ultralytics' own table (A100 TensorRT: v8n 0.99 ms, v8l 2.39 ms; CPU ONNX: v8n 80.4 ms) puts the placeholders in the right range |
 | Nodes | Classes and slots | F-GPU (reference and strongest): c_GPU = 2, c_CPU = 2 (4 cores each). F-CPU (S6 only): c_GPU = 0, c_CPU = 2. Cloud: 32 + 32 | R | One T4-class GPU with 2 streams. S6 alternates F-GPU and F-CPU zones |
 | Nodes | Q_q; r; h | Q_GPU = 32, Q_CPU = 16; r = 4; h = 2 | R | 32 queued T1 = 128 ms of work, more than D, so "late" binds before "full" for hard tasks. Soft tasks are admitted below 28 (GPU), and masked at 26 |
 | Scheduler | A_max; T_probe; T_keep | 200 ms; 50 ms (fog), 300 ms (cloud); 10 s | R | A_max = 2 × the loose hard D. T_probe covers about 10 backhaul round trips, or the WAN round-trip maximum plus margin. T_keep ≥ longest D + L_max = 6 s |
