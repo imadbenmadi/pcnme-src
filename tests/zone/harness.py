@@ -88,7 +88,16 @@ def one_zone(
         on_close=closed.append,
     )  # type: ignore[arg-type]
     scenario = cfg.scenarios["S2" if mode == "loose" else "S4"]
-    car = Car("c01", cfg, scenario, streams, clock, position=(0.0, 0.0), on_task=zone.upload)
+    car = Car(
+        "c01",
+        cfg,
+        scenario,
+        streams,
+        clock,
+        position=(0.0, 0.0),
+        on_task=zone.upload,
+        fleet=cfg.cars.count[0],
+    )
     zone.add_car(car, distance)
     return System(cfg, clock, zone, car, closed)
 
