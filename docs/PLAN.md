@@ -74,7 +74,7 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 ## M4 — Agent inputs and rewards (no learning yet)
 
 - [~] **M4.1 The 48 inputs** (11.1), caps (times ≤ 2, energy ≤ ē), masked options still get numbers.
-- [ ] **M4.2 Rewards** (11.4) for every attempt outcome; C_drop = 5.
+- [~] **M4.2 Rewards** (11.4) for every attempt outcome; C_drop = 5.
 - [ ] **M4.3 Transitions** (11.3): s, a, s', Δt at the same anchor, pending buffer keyed by (task_id, attempt), moved to replay at close + G, no transition for boulders and all-masked drops.
 - **M4 acceptance tests:**
   - Input vector length 48, every value in its range, order as in 11.1.
