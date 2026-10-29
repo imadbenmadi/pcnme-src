@@ -1,8 +1,9 @@
 """One fog zone end to end in fast mode: upload, intake, TOF, placement, execution, delivery, ack, close
 (final-design 6A-6E, 7.1, 8, 10.3; PLAN M2.6).
 
-Reuses the M1 pieces: the radio uplink and backhaul are FIFO pipes, a cloud transfer is a CloudPath over the
-shared WAN pipe, the zone's node and the cloud run the same Executor.
+Reuses the M1 pieces: the backhaul is a FIFO pipe, a cloud transfer is a CloudPath over the shared WAN pipe,
+the zone's node and the cloud run the same Executor. The radio uplink shares its airtime among the uploads in
+progress (net/radio.py, CHANGES C6).
 
 M3 PLACEHOLDERS, each the simplest correct thing behind a small interface:
 - Messages are direct clock callbacks with the modelled delays (broker processing on top of the backhaul or
@@ -24,7 +25,7 @@ from pcnme.config import Config, DeadlineMode, SlotType
 from pcnme.ids import AttemptKey
 from pcnme.net import hops
 from pcnme.net.pipe import FifoPipe
-from pcnme.net.radio import RadioUplink, shannon_rate
+from pcnme.net.radio import RadioTransfer, RadioUplink, shannon_rate
 from pcnme.net.series import CloudPath, SeriesTransfer
 from pcnme.node.executor import Accepted, Executor, Refused, Report, TaskRequest
 from pcnme.node.state import SlotState
@@ -131,7 +132,7 @@ class Zone:
         self._cfg = config
         self._mode: DeadlineMode = mode  # the scenario's deadlines (16.2), for the TOF-Broker
         self._hw_name = hw_name
-        self.uplink = RadioUplink()
+        self.uplink = RadioUplink(clock)
         self.backhaul = FifoPipe(config.links.backhaul_bw)
         self._cloud_path = CloudPath(clock, self.backhaul, wan)
         self.cloud = cloud
@@ -155,20 +156,23 @@ class Zone:
         self._cars[car.car_id] = (car, shannon_rate(distance, self._cfg.radio))
 
     def upload(self, task: Task) -> None:
-        """The car uploads its task over the zone's radio pipe (6A.2); the task exists at t_rx."""
+        """The car uploads its task over the zone's radio, sharing its airtime with the other uploads in
+        progress (6A.2, CHANGES C6); the task exists at t_rx."""
         car, rate = self._cars[task.car_id]
         now = self._clock.now
         b_car = car.budget(task, now)
         d = hops.delay(
             self._streams, hops.RADIO_UP, self._cfg.radio.uplink_delay, task.task_id, hops.UPLOAD_ATTEMPT
         )
-        tr = self.uplink.send(now=now, size_bits=task.input_bits, rate=rate, delay=d)
-        rec = TaskRecord(
-            task=task, anchor=self.zone_id, rate=rate, upload_start=now, w_radio=tr.wait, radio_delay=d
-        )
-        rec.parts["upload"] = tr.duration
+        rec = TaskRecord(task=task, anchor=self.zone_id, rate=rate, upload_start=now, radio_delay=d)
         self.records[task.task_id] = rec
-        self._clock.schedule(tr.delivery, lambda: self._intake(rec, b_car))
+
+        def arrived(tr: RadioTransfer) -> None:
+            rec.w_radio = tr.wait  # known exactly at t_rx: the zone runs its uplink (6A.3)
+            rec.parts["upload"] = tr.duration
+            self._intake(rec, b_car)
+
+        self.uplink.send(size_bits=task.input_bits, rate=rate, delay=d, on_delivered=arrived)
 
     def _intake(self, rec: TaskRecord, b_car: float) -> None:
         now = self._clock.now

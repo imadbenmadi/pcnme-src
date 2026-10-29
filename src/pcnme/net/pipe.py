@@ -39,7 +39,7 @@ def _positive(value: float, what: str) -> float:
 
 class FifoPipe:
     """A FIFO pipe shared by everything sent through it. Its bandwidth (bit/s) is fixed, or None when every
-    transfer brings its own rate (the radio uplink: each car pushes at its own Shannon rate, 4.2)."""
+    transfer brings its own rate. (The radio uplink shares airtime instead: net/radio.py, CHANGES C6.)"""
 
     def __init__(self, bandwidth: float | None) -> None:
         self._bandwidth = None if bandwidth is None else _positive(bandwidth, "the bandwidth")
