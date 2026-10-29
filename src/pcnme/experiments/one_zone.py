@@ -23,7 +23,6 @@ from pcnme.net.pipe import FifoPipe
 from pcnme.node.timetable import RunTimeTable, lognormal
 from pcnme.sim.clock import EventClock
 from pcnme.sim.rng import RandomStreams
-from pcnme.zone.estimates import PathEstimates, ZeroWanWait
 from pcnme.zone.zone import Cloud, Placement, TaskRecord, Zone
 
 DRAIN = 30.0  # s after the last arrival, so every task can close
@@ -56,7 +55,6 @@ def run_one_zone(
     wan = FifoPipe(cfg.derived.b_wan)
     bus = Bus(clock, streams, cfg.links.broker_extra_delay)
     cloud = Cloud(clock, streams, cfg, table, bus)
-    est = PathEstimates(cfg, wan_wait=ZeroWanWait())
     if method == "greedy":
         placement: Placement = Greedy(cfg)
     elif method == "random":
@@ -73,7 +71,6 @@ def run_one_zone(
         table,
         wan,
         cloud,
-        est,
         placement,
         mode=s.deadlines,
         hw_name=s.fog["z1"],
