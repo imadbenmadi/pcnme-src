@@ -407,6 +407,7 @@ class Timing:
     t_leave: float
     gps_expiry: float
     reward_grace_g: float
+    encode: float  # the car's encode time, inside L; the upload starts after it (14.3, QUESTIONS Q14)
 
 
 @dataclass(frozen=True, slots=True)
@@ -946,6 +947,7 @@ def _timing(n: _Node) -> Timing:
             t_leave=n.number("T_leave", gt=0.0),
             gps_expiry=n.number("gps_expiry", gt=0.0),
             reward_grace_g=n.number("reward_grace_G", gt=0.0),
+            encode=n.number("encode", ge=0.0),
         )
 
 
