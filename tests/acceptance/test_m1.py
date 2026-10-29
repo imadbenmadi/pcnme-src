@@ -176,6 +176,7 @@ def test_the_event_log_hash_is_pinned(cfg: Config) -> None:
     assert event_log_hash(cfg, 2000) == GOLDEN_HASH
 
 
-# 29 Oct, Windows; re-pinned for Q10 ("high" is the promotion default) and for whole-nanosecond draws
-# (sim/quantize.py: the Q10 pin differed on Linux, because exp / log1p differ in the last bit there).
-GOLDEN_HASH = "fa785cdea0726c254803a85d077fb3d50339c82b6e60944fafed28f8ccaca9db"
+# 29 Oct, Windows; re-pinned for Q10 ("high" is the promotion default), C4 (water-filling Ŵ) and
+# whole-nanosecond draws (sim/quantize.py: the earlier pin differed on Linux, where exp / log1p differ in the
+# last bit).
+GOLDEN_HASH = "cc60a3b4ea4211401c7d96582b01e390920833a00ae201bf9ecc13d994d0264f"
