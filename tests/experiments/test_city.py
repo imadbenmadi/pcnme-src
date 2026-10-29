@@ -226,3 +226,64 @@ def test_an_upload_uses_the_rate_at_the_cars_distance_now() -> None:
     c.clock.run_until(11.0)
     (rec,) = (r for r in c.records if r.task.task_id == task.task_id)
     assert rec.rate == shannon_rate(10.0, c.cfg.radio)
+
+
+def test_the_anchor_predicts_exit_time_and_next_zone_from_the_cars_gps() -> None:
+    # 10.1-10.2: the anchor has an open task of the car, so it gets its GPS (9.6). The car drives east at
+    # 10 m/s
+    # along y = 300 from x = 300; z1's edge is at x = 650, so T_exit = (650 - x) / 10 s; next: z2.
+    from pcnme.car.car import Task
+
+    c = city_of({"c000": Line((300.0, 300.0), (900.0, 300.0), 10.0)})
+    app = c.apps[0]
+    c.clock.run_until(4.9)
+    t = c.cfg.task_types["T2"]  # 720 ms here: the task (and the anchor role) is open past 5.0 s
+    task = Task(
+        TaskId("c000", 0, 99),
+        "c000",
+        "T2",
+        t.cls,
+        t.deadline["loose"],
+        t.l_max["loose"],
+        t.input_bits,
+        t.result_bits,
+        c.clock.now,
+    )  # type: ignore[index]
+    app.car._tasks[task.task_id] = task
+    c._task(app, task)
+    c.clock.run_until(5.3)  # anchored at z1 once the clip is in (about 5.04 s); the GPS keeps coming
+    g = c.zones["z1"].registry["c000"]
+    t_exit, nxt = c.zones["z1"].predict("c000")  # type: ignore[misc]
+    assert t_exit == pytest.approx((650.0 - g.x) / 10.0) and nxt == "z2"  # z1's edge at x = 650
+    assert 350.0 < g.x < 355.0
+
+
+def test_the_prediction_is_from_the_cars_current_zone_not_the_anchors() -> None:
+    # The car drives east past the z1-z2 handover (x = 611 at 31.1 s); z1 anchors a T2 made at 30.5 s (its
+    # clip is in by about 30.63 s, before the handover; it runs 720 ms) and gets the car's GPS from z2:
+    # T_exit from z2's circle (edge at x = 1250), next zone east of
+    # z2 = the nearest other centre to (1250, 300): z4 (694.6 m; z1 950 m).
+    from pcnme.car.car import Task
+
+    c = city_of({"c000": Line((300.0, 300.0), (900.0, 300.0), 10.0)})
+    app = c.apps[0]
+    c.clock.run_until(30.5)
+    t = c.cfg.task_types["T2"]
+    task = Task(
+        TaskId("c000", 0, 98),
+        "c000",
+        "T2",
+        t.cls,
+        t.deadline["loose"],
+        t.l_max["loose"],
+        t.input_bits,
+        t.result_bits,
+        c.clock.now,
+    )  # type: ignore[index]
+    app.car._tasks[task.task_id] = task
+    c._task(app, task)
+    c.clock.run_until(31.3)
+    g = c.zones["z1"].registry["c000"]
+    assert g.zone_id == "z2"
+    t_exit, nxt = c.zones["z1"].predict("c000")  # type: ignore[misc]
+    assert t_exit == pytest.approx((1250.0 - g.x) / 10.0) and nxt == "z4"
