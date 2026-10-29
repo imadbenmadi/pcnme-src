@@ -21,7 +21,7 @@ This is the one complete design of PCNME. It merges the PCNME Architecture doc, 
 | 29 Oct | 4.1, 4.2, 6A.3, 15.3, 17 | The radio uplink shares its airtime equally among the cars uploading at once (each advances at R_car ÷ n) instead of one car at a time; W_radio is the extra push time from sharing, still known exactly at t_rx | CHANGES C6 (QUESTIONS Q18) |
 | 29 Oct | 18, 14.3 | The car's encode time is a config value, `timing.encode` (M, placeholder 0); the upload starts after it, and B_car does not subtract it again | QUESTIONS Q14 |
 | 29 Oct | 15.2 | Every drawn time is rounded to whole nanoseconds and every radio rate to whole bit/s, so one seed gives the same run on every OS | web review of PR #20 |
-| 30 Oct | 9.3 | The upload timeout T_up starts when the zone's own send has finished; before that only the deadline cap applies, and reaching it drops the attempt with no re-send | CHANGES C7 (QUESTIONS Q31) |
+| 29 Oct | 9.3 | The upload timeout T_up starts when the zone's own send has finished; before that only the deadline cap applies, and reaching it drops the attempt with no re-send | CHANGES C7 (QUESTIONS Q31) |
 
 ## 1. What PCNME is
 
