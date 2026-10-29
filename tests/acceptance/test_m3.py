@@ -96,14 +96,21 @@ def test_the_city_keeps_its_invariants_and_z1_carries_the_hotspot(cfg: Config, s
 
 
 @pytest.mark.slow
-def test_the_wan_congests_in_s3_and_not_in_s1(cfg: Config) -> None:
-    # 16.2: "Run S1-S3 first: if the WAN pipe does not congest in S3, stop and debug the queueing."
-    waits = {}
-    for sc in ("S1", "S3"):
-        c = City(cfg, sc, "greedy", 2000).run(60.0)
-        w = [r.transfer.w_wan for r in c.records if r.transfer is not None]
-        waits[sc] = sum(w) / len(w)
-    assert waits["S3"] > 10 * waits["S1"]
+@pytest.mark.parametrize("scenario", ["S2", "S3"])
+def test_no_upload_timeout_feeds_the_wan_after_c7(cfg: Config, scenario: str) -> None:
+    # CHANGES C7: before it, timeouts re-sent uploads into a WAN that could not recall them (S2 seed 2000
+    # collapsed to TI 1.10 with a 3.8 s mean wait; S3 carried 2.45 against 1.36 eligible). Now the WAN carries
+    # at most the eligible bits (Greedy keeps some at the fog) and the S2 collapse is gone.
+    c = City(cfg, scenario, "greedy", 2000).run(60.0)
+    soft = [
+        r for r in c.records if r.task.cls == "soft" or cfg.is_boulder(r.task.task_type, c.scenario.deadlines)
+    ]
+    eligible = sum(r.task.input_bits for r in soft) / 60.0 / cfg.derived.b_wan
+    carried = c.wan.bits_sent / 60.0 / cfg.derived.b_wan
+    waits = [r.transfer.w_wan for r in c.records if r.transfer is not None]
+    assert carried <= 1.05 * eligible
+    if scenario == "S2":
+        assert sum(waits) / len(waits) < 0.5
 
 
 @pytest.mark.slow

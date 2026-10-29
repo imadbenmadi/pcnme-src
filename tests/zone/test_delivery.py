@@ -89,15 +89,14 @@ def test_a_t1_uploaded_behind_a_t2_shares_the_radio_and_keeps_its_deadline() -> 
 def test_a_hard_t1_sent_to_the_cloud_is_refused_late_and_dropped() -> None:
     # Its cloud budget is 100 - 5.226 - 67.831 - 69.5 = -42.6 ms: at the cloud d_k = 73.057 - 42.557 = 30.5 ms
     # is already past, so the executor refuses it "late". That reply would land 73.057 + 65.5 = 138.6 ms after
-    # the send, but a hard task's upload timeout is capped at d_A - t_s = 94.8 ms (9.3): the anchor treats it
-    # as not placed first, re-decides once (to the cloud again: a fixed placement), times out at once (no
-    # time left) and drops it (M3.6).
+    # the send. CHANGES C7: the own send ends at +67.8 ms and T_up = 2 x (67.8 + 65.5) ms would end past the
+    # deadline cap (d_A), so at d_A the attempt is dropped with no re-send.
     s = one_zone(fixed_delay_config(), Fixed("cloud"))
     s.zone.upload(task_now(s, "T1"))
     s.clock.run_until(1.0)
     (rec,) = s.closed
-    assert (rec.reply, rec.outcome) == ("no_reply", "drop_refused_no_reply")
-    assert rec.closed_at == pytest.approx(rec.d_a, abs=1e-9) and len(rec.earlier) == 1
+    assert (rec.reply, rec.outcome) == ("no_reply", "drop_upload_late")
+    assert rec.closed_at == pytest.approx(rec.d_a, abs=1e-9) and rec.earlier == []
 
 
 def test_a_boulder_goes_to_the_cloud_with_no_decision() -> None:
