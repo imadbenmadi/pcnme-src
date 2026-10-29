@@ -77,8 +77,9 @@ class RadioUplink:
 
     def send(
         self, size_bits: float, rate: float, delay: float, on_delivered: Callable[[RadioTransfer], None]
-    ) -> None:
-        """Start an upload now; `on_delivered` runs at its delivery time with the transfer."""
+    ) -> int:
+        """Start an upload now; `on_delivered` runs at its delivery time with the transfer. Returns its id,
+        for `cancel`."""
         if not (math.isfinite(size_bits) and size_bits > 0 and math.isfinite(rate) and rate > 0):
             raise ValueError(f"size and rate must be > 0, got {size_bits!r} bits at {rate!r} bit/s")
         if not (math.isfinite(delay) and delay >= 0):
@@ -89,6 +90,19 @@ class RadioUplink:
         self._seq += 1
         heapq.heappush(self._active, (self._v + push, self._seq, _Upload(now, push, delay, on_delivered)))
         self._reschedule(now)
+        return self._seq
+
+    def cancel(self, upload_id: int) -> bool:
+        """9.7: an upload cut by a handover or a gap before its last bit leaves nothing behind; the others
+        share the air from now on. False if its last bit was already on the air (it will arrive)."""
+        now = self._clock.now
+        if not any(seq == upload_id for _, seq, _ in self._active):
+            return False
+        self._advance(now)
+        self._active = [e for e in self._active if e[1] != upload_id]
+        heapq.heapify(self._active)
+        self._reschedule(now)
+        return True
 
     def _advance(self, now: float) -> None:
         if self._active:
