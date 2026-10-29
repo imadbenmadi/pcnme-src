@@ -10,7 +10,11 @@ car/{id}/result; the serving zone pushes results (never status messages) to the 
 copy; the car's confirm reaches the serving zone, which publishes car/{id}/ack for the anchor (6D, 10.3).
 
 M3 PLACEHOLDERS, each the simplest correct thing behind a small interface:
-- The anchor reads the cloud's state directly, with no age (M3.3); ŵ_WAN comes from estimates.ZeroWanWait.
+The state plane (zone/statestore.py, M3.3): every zone and the cloud publish zone/{id}/state each state
+period, and every POST reply carries a snapshot; the anchor keeps the newest by version, counts its own
+pending sends (R1) and estimates ŵ_WAN from its cloud uploads (4.3).
+
+M3 PLACEHOLDERS (continued):
 - A refused task is dropped and logged; there is no re-decision (M3.5).
 - No message is lost, so there is no watchdog, retry, cancel or republish (M3.6, M3.7).
 - Cars do not move: the anchor is always the serving zone (M3.8).
@@ -18,54 +22,32 @@ M3 PLACEHOLDERS, each the simplest correct thing behind a small interface:
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass, field
-from typing import Literal, Protocol
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field, replace
+from typing import Literal
 
 from pcnme.bus import topics
 from pcnme.bus.bus import Bus, Client, Delivery
 from pcnme.car.car import Car, Confirm, Result, Task
 from pcnme.config import Config, DeadlineMode, SlotType
-from pcnme.ids import AttemptKey, TaskId
+from pcnme.energy import EnergyModel
+from pcnme.ids import AttemptKey, SnapshotCounter, TaskId
 from pcnme.net import hops
 from pcnme.net.pipe import FifoPipe
 from pcnme.net.radio import RadioTransfer, RadioUplink, shannon_rate
 from pcnme.net.series import CloudPath, SeriesTransfer
-from pcnme.node.executor import Accepted, Executor, Refused, Report, TaskRequest
+from pcnme.node.executor import Accepted, Executor, Refused, Reply, Report, TaskRequest
 from pcnme.node.state import SlotState
 from pcnme.node.timetable import RunTimeTable
 from pcnme.sim.clock import EventClock
 from pcnme.sim.rng import RandomStreams
+from pcnme.zone.decision import DecisionContext, Option, OptionView, Placement
 from pcnme.zone.estimates import PathEstimates
 from pcnme.zone.intake import AnchorRow, AnchorTable, anchor_deadline
 from pcnme.zone.layout import CLOUD, NeighbourTable, Site
+from pcnme.zone.masks import views
+from pcnme.zone.statestore import Snapshot, StateStore
 from pcnme.zone.tof import TofBroker
-
-Option = Literal["here", "cloud"]
-
-
-@dataclass(frozen=True, slots=True)
-class DecisionContext:
-    """What the anchor knows when it places a pebble (6B): its own exact state and the cloud's."""
-
-    task: Task
-    now: float
-    d_a: float
-    here: dict[SlotType, SlotState]
-    cloud: dict[SlotType, SlotState]
-    backhaul_wait: float  # the zone's own backhaul pipe, known exactly (4.3)
-    estimates: PathEstimates
-    here_hw: str = "F-GPU"  # this zone's hardware class
-
-    @property
-    def time_left(self) -> float:
-        return self.d_a - self.now
-
-
-class Placement(Protocol):
-    """A placement method: an option, or None when every option is masked (7.3)."""
-
-    def choose(self, ctx: DecisionContext) -> Option | None: ...
 
 
 @dataclass(slots=True)
@@ -146,6 +128,22 @@ def publish_report(client: Client, executor_id: str, report: Report) -> None:
     )
 
 
+def busy_share(slots: Mapping[SlotType, SlotState]) -> float:
+    """The "load" of a state message (5.2): busy slots / slots (QUESTIONS Q20)."""
+    c = sum(s.c for s in slots.values())
+    return sum(s.u for s in slots.values()) / c if c else 0.0
+
+
+def start_state_loop(clock: EventClock, period: float, publish: Callable[[], None]) -> None:
+    """Publish now, then every state period (5.2: every 100 ms)."""
+
+    def tick() -> None:
+        publish()
+        clock.schedule(clock.now + period, tick)
+
+    clock.schedule(clock.now, tick)
+
+
 class Cloud:
     """The cloud: one executor shared by every zone, an MQTT client on the WAN (10.3: one WAN crossing to
     publish). It has no radio and never predicts."""
@@ -167,6 +165,23 @@ class Cloud:
         self.executor = Executor.from_config(
             clock, streams, config, "cloud", table, on_report=lambda r: publish_report(self.mqtt, "cloud", r)
         )
+        self._versions = SnapshotCounter()
+        start_state_loop(clock, config.stateplane.state_period, self._publish_state)
+
+    def snapshot(self) -> Snapshot:
+        """The cloud's state: it never publishes ŵ_WAN, it cannot see the router's queue (4.3)."""
+        slots = self.executor.snapshot()
+        return Snapshot(CLOUD, self._versions.next(), slots, 0.0, None, busy_share(slots))
+
+    def _publish_state(self) -> None:
+        s = self.snapshot()
+        self.mqtt.publish(
+            topics.zone_state(CLOUD), s, qos=0, key=(CLOUD, "state", s.version.counter), retained=True
+        )
+
+    def handle(self, req: TaskRequest) -> tuple[Reply, Snapshot]:
+        """POST /tasks at the cloud: the executor's reply and a snapshot (R1)."""
+        return self.executor.submit(req), self.snapshot()
 
 
 class Zone:
@@ -181,7 +196,6 @@ class Zone:
         table: RunTimeTable,
         wan: FifoPipe,
         cloud: Cloud,
-        estimates: PathEstimates,
         placement: Placement,
         mode: DeadlineMode,
         hw_name: str = "F-GPU",
@@ -225,14 +239,43 @@ class Zone:
         self.executor = Executor.from_config(
             clock, streams, config, hw_name, table, on_report=lambda r: publish_report(self.mqtt, zone_id, r)
         )
-        self._est = estimates
-        self._tof = TofBroker(config, estimates)
+        lk, sp = config.links, config.stateplane
+        bh_d, wan_d = sum(lk.backhaul_delay) / 2, sum(lk.wan_delay) / 2  # mean delays
+        pub = {z: bh_d + lk.broker_extra_delay + bh_d for z in config.layout.zones}  # δ̂_pub (Q20)
+        pub[CLOUD] = wan_d + lk.broker_extra_delay + bh_d
+        self.store = StateStore(zone_id, clock, sp.stale_after, pub, sp.wan_ewma_lambda)
+        self._est = PathEstimates(config, self.store)  # ŵ_WAN from the state store (4.3)
+        self._reply_cloud = (
+            wan_d + bh_d
+        )  # δ̂_reply,cloud: the HTTP reply crosses the WAN, then the backhaul (Q20)
+        self._tof = TofBroker(config, self._est)
+        self._em = EnergyModel(config)
+        self._versions = SnapshotCounter()
         self._placement = placement
         self.anchor = AnchorTable(zone_id)
         self.records: dict[object, TaskRecord] = {}
         self._cars: dict[str, tuple[Car, float]] = {}
         self._on_close = on_close
         self._mean_radio = sum(config.radio.uplink_delay) / 2
+        self.mqtt.subscribe(topics.zone_state(CLOUD))
+        for z in self.neighbours.positions:
+            if z is not None:
+                self.mqtt.subscribe(topics.zone_state(z))
+        start_state_loop(clock, sp.state_period, self._publish_state)
+
+    # --- state plane (5.2, 9.2) -----------------------------------------------------------------------------
+
+    def snapshot(self) -> Snapshot:
+        slots = self.executor.snapshot()
+        s = self.store
+        return Snapshot(
+            self.zone_id, self._versions.next(), slots, s.wan.estimate, s.own_wan_age(), busy_share(slots)
+        )
+
+    def _publish_state(self) -> None:
+        s = self.snapshot()
+        topic = topics.zone_state(self.zone_id)
+        self.mqtt.publish(topic, s, qos=0, key=(self.zone_id, "state", s.version.counter), retained=True)
 
     # --- cars and uploads (6A) ------------------------------------------------------------------------------
 
@@ -287,27 +330,37 @@ class Zone:
             self._close(rec, "drop_intake")  # 7.1.3: no decision, no transition
             return
         if route == "cloud":
-            self._send(rec, row, "cloud")
+            self._send(rec, row, "cloud", None)  # a boulder: no decision (7.1.3)
             return
-        ctx = DecisionContext(
-            task=task,
-            now=now,
-            d_a=rec.d_a,
-            here=dict(self.executor.snapshot()),
-            cloud=dict(self.cloud.executor.snapshot()),
-            backhaul_wait=self.backhaul.wait_at(now),
-            estimates=self._est,
-            here_hw=self._hw_name,
-        )
+        ctx = self._context(task, now, rec.d_a)
         option = self._placement.choose(ctx)
         if option is None:
             self._close(rec, "drop_masked")  # 7.3: every option masked
             return
-        self._send(rec, row, option)
+        self._send(rec, row, option, next(v for v in ctx.views if v.option == option))
+
+    def _context(self, task: Task, now: float, d_a: float) -> DecisionContext:
+        """What the anchor knows (6B.7): its own exact state; the cloud's newest snapshot and its own pending
+        sends there (R1); the masks' views of the 6 options."""
+        cloud = self.store.snapshot(CLOUD)
+        pending = {q: self.store.pending_on(CLOUD, q) for q in ("gpu", "cpu")}
+        ctx = DecisionContext(
+            task=task,
+            now=now,
+            d_a=d_a,
+            here=self.executor.snapshot(),
+            cloud=None if cloud is None else cloud.slots,
+            backhaul_wait=self.backhaul.wait_at(now),
+            estimates=self._est,
+            here_hw=self._hw_name,
+            cloud_pending=pending,  # type: ignore[arg-type]
+            cloud_stale=self.store.is_stale(CLOUD),
+        )
+        return replace(ctx, views=tuple(views(self._cfg, self._em, ctx)))
 
     # --- placement and execution (6C) -----------------------------------------------------------------------
 
-    def _send(self, rec: TaskRecord, row: AnchorRow, option: Option) -> None:
+    def _send(self, rec: TaskRecord, row: AnchorRow, option: Option, view: OptionView | None) -> None:
         now = self._clock.now
         task = rec.task
         attempt = self.anchor.next_attempt(task.task_id)
@@ -322,13 +375,57 @@ class Zone:
         d_bh = hops.delay(self._streams, hops.BH_OUT, self._cfg.links.backhaul_delay, task.task_id, attempt)
         d_wan = hops.delay(self._streams, hops.WAN_IN, self._cfg.links.wan_delay, task.task_id, attempt)
         req = TaskRequest(key, task.task_type, task.cls, task.l_max, budget)
+        pend = (task.task_id, attempt)
+        slot = (
+            view.slot if view is not None and view.slot is not None else self._cloud_fastest(task.task_type)
+        )
+        mean = self._cfg.time_table.row(task.task_type, "cloud", slot)
+        assert mean is not None
+        self.store.add_pending(CLOUD, pend, slot, task.cls, mean.mean)  # R1 (9.2)
+        w_bh = self.backhaul.wait_at(now)
 
         def arrived(tr: SeriesTransfer) -> None:
             rec.transfer = tr
             rec.parts["input"] = tr.duration
-            self._submit(rec, self.cloud.executor, req)
+            rec.t_at_executor = self._clock.now
+            rec.budget = req.budget
+            reply, snap = self.cloud.handle(req)
+            back = hops.delay(self._streams, hops.REPLY_WAN, self._cfg.links.wan_delay, task.task_id, attempt)
+            back += hops.delay(
+                self._streams, hops.REPLY_BH, self._cfg.links.backhaul_delay, task.task_id, attempt
+            )
+            self._clock.schedule(
+                self._clock.now + back, lambda: self._cloud_reply(rec, pend, reply, snap, w_bh)
+            )
 
         self._cloud_path.send(task.input_bits, d_bh, d_wan, arrived)
+
+    def _cloud_fastest(self, task_type: str) -> SlotType:
+        rows = self._cfg.time_table
+        return min(
+            (q for q in ("gpu", "cpu") if rows.row(task_type, "cloud", q) is not None),
+            key=lambda q: rows.row(task_type, "cloud", q).mean,  # type: ignore[union-attr]
+        )
+
+    def _cloud_reply(
+        self, rec: TaskRecord, pend: tuple[object, ...], reply: Reply, snap: Snapshot, w_bh: float
+    ) -> None:
+        """The cloud's reply reaches the anchor: its snapshot (R1), the pending send cleared, a ŵ_WAN sample
+        on an accept (4.3), and the outcome of the send."""
+        self.store.on_snapshot(snap)
+        self.store.clear_pending(CLOUD, pend)
+        if isinstance(reply, Accepted):
+            lk = self._cfg.links
+            assert rec.t_send is not None
+            sample = (self._clock.now - rec.t_send) - (w_bh + sum(lk.backhaul_delay) / 2)
+            sample -= (
+                rec.task.input_bits / self._cfg.derived.b_wan + sum(lk.wan_delay) / 2 + self._reply_cloud
+            )
+            self.store.wan_sample(sample)
+            rec.reply, rec.slot = "accepted", reply.slot
+        elif isinstance(reply, Refused):
+            rec.reply = reply.reason
+            self._close(rec, f"drop_refused_{reply.reason}")  # M3 PLACEHOLDER (M3.5): no re-decision
 
     def _submit(self, rec: TaskRecord, executor: Executor, req: TaskRequest) -> None:
         rec.t_at_executor = self._clock.now
@@ -347,7 +444,15 @@ class Zone:
         if scope == "zone" and kind == "status":
             st = d.payload
             assert isinstance(st, ZoneStatus)
+            before = set(self.neighbours.positions)
             self.neighbours.on_status(st.site, st.status == "online")  # 7.5.2-3
+            if st.zone_id in set(self.neighbours.positions) - before:
+                self.mqtt.subscribe(topics.zone_state(st.zone_id))  # a new neighbour's state
+            return
+        if scope == "zone" and kind == "state":
+            snap = d.payload
+            assert isinstance(snap, Snapshot)
+            self.store.on_snapshot(snap)
             return
         if scope != "car":
             return

@@ -122,7 +122,6 @@ def test_zones_learn_joins_and_last_wills_from_status_messages() -> None:
     from pcnme.node.timetable import RunTimeTable
     from pcnme.sim.clock import EventClock
     from pcnme.sim.rng import RandomStreams
-    from pcnme.zone.estimates import PathEstimates, ZeroWanWait
     from pcnme.zone.zone import Cloud, Zone
     from tests.zone.harness import Fixed, fixed_delay_config
 
@@ -137,9 +136,8 @@ def test_zones_learn_joins_and_last_wills_from_status_messages() -> None:
 
     def zone(z: str, active: list[str]) -> Zone:
         others = tuple(s[o] for o in active if o != z)
-        est = PathEstimates(cfg, ZeroWanWait())
         return Zone(
-            z, clock, streams, cfg, table, wan, cloud, est, Fixed(None), "loose", bus=bus, start_sites=others
+            z, clock, streams, cfg, table, wan, cloud, Fixed(None), "loose", bus=bus, start_sites=others
         )
 
     first = ["z1", "z2", "z3", "z4"]
