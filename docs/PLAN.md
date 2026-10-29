@@ -40,15 +40,15 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 
 ## M2 — One zone, end to end (no mobility, Greedy)
 
-- [~] **M2.1 Identifiers** (`ids.py`), section 5.5: task_id (car_id, epoch, seq), attempt key (task_id, anchor_id, attempt), snapshot version (epoch, counter) compared epoch first.
-- [~] **M2.2 Cars and tasks** (`car/`), sections 6A, 14.1–14.3: task types and mix, deadlines (loose / tight), sizes, arrivals at λ_car, the car's latency clock.
-- [~] **M2.3 Radio uplink** (`net/radio.py`), sections 4.2 and 18: Shannon rate from distance (free-space path loss, 5.9 GHz, correct units, see CHANGES C1), one car at a time per zone.
-- [~] **M2.4 Intake and anchor deadline**, section 6A: task exists only after the whole upload; `d_A = t_rx + B_car − Û_up`.
-- [~] **M2.5 TOF-Broker** (section 7.1), including the boulder drop test.
-- [~] **M2.6 Budgets and delivery** (sections 6C–6E): B_k, d_k, result path delays, the car keeps the first result and confirms.
-- [~] **M2.7 Energy accounting** (`energy.py`), section 12: E_k = forwarding + execution + return, PUE, E_ref, ê = min(E/E_ref, ē), the per-attempt table in 12.5.
-- [~] **M2.8 Greedy and Random** (section 16.1) over the options available in one zone (here, cloud).
-- [~] **M2 acceptance tests:**
+- [x] **M2.1 Identifiers** (`ids.py`), section 5.5: task_id (car_id, epoch, seq), attempt key (task_id, anchor_id, attempt), snapshot version (epoch, counter) compared epoch first.
+- [x] **M2.2 Cars and tasks** (`car/`), sections 6A, 14.1–14.3: task types and mix, deadlines (loose / tight), sizes, arrivals at λ_car, the car's latency clock.
+- [x] **M2.3 Radio uplink** (`net/radio.py`), sections 4.2 and 18: Shannon rate from distance (free-space path loss, 5.9 GHz, correct units, see CHANGES C1), one car at a time per zone.
+- [x] **M2.4 Intake and anchor deadline**, section 6A: task exists only after the whole upload; `d_A = t_rx + B_car − Û_up`.
+- [x] **M2.5 TOF-Broker** (section 7.1), including the boulder drop test.
+- [x] **M2.6 Budgets and delivery** (sections 6C–6E): B_k, d_k, result path delays, the car keeps the first result and confirms.
+- [x] **M2.7 Energy accounting** (`energy.py`), section 12: E_k = forwarding + execution + return, PUE, E_ref, ê = min(E/E_ref, ē), the per-attempt table in 12.5.
+- [x] **M2.8 Greedy and Random** (section 16.1) over the options available in one zone (here, cloud).
+- [x] **M2 acceptance tests:**
   - Hand calculation (16.5): one task, empty system, fixed numbers, once per destination (here, cloud): simulator within 1 %.
   - Energy: E_ref and ê for each task type equal `tools/calc_defaults.py`.
   - TOF: in tight deadlines T2 is a boulder; in loose it is not; a boulder whose cloud path cannot make it is dropped at intake with no transition.
