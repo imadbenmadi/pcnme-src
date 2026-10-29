@@ -60,7 +60,7 @@ class Tiny:
         return next(rep.outcome for rep in self.reports if rep.key == r.key)
 
 
-def tiny(rows: list[RunRow], c_gpu: int = 0, c_cpu: int = 1, promotion: str = "mean") -> Tiny:
+def tiny(rows: list[RunRow], c_gpu: int = 0, c_cpu: int = 1, promotion: str = "high") -> Tiny:
     hw = HardwareClass(
         name="N",
         c_gpu=c_gpu,
