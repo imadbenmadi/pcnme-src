@@ -129,22 +129,51 @@ def test_the_sanity_run_keeps_the_invariants(cfg: Config, scenario: str, seed: i
 
 def test_check_invariants_catches_each_violation(cfg: Config) -> None:
     run = run_one_zone(cfg, "S2", "greedy", 2.0, 2000)
-    good = [r for r in run.records if r.confirm is not None and r.task.cls == "hard"]
-    assert good
-    r = good[0]
-    run.records.append(r)
+    assert check_invariants(run) == []
+    assert run.uploaded and len(run.uploaded) == len(run.records) and run.open_at_end == 0
+    r = next(r for r in run.records if r.confirm is not None and r.task.cls == "hard")
+
+    run.records.append(r)  # closed twice
     assert "a task closed twice" in check_invariants(run)
     run.records.pop()
-    r.parts["run"] += 1.0
-    assert any("< parts" in v for v in check_invariants(run))
-    r.parts["run"] -= 1.0
-    saved = r.outcome
+
+    gone = run.records.pop(0)  # uploaded, never closed: invisible to a check of the records alone
+    assert f"{gone.task.task_id} never closed" in check_invariants(run)
+    run.records.insert(0, gone)
+
+    run.uploaded.remove(r.task.task_id)
+    assert f"{r.task.task_id} closed but never uploaded" in check_invariants(run)
+    run.uploaded.append(r.task.task_id)
+
+    run.open_at_end = 1
+    assert "1 anchor rows still open" in check_invariants(run)
+    run.open_at_end = 0
+
+    for shift in (1e-9, -1e-9):  # L must equal its parts, either way off by 1 ns is caught
+        r.parts["run"] += shift
+        assert any("!= parts" in v for v in check_invariants(run))
+        r.parts["run"] -= shift
+
+    saved = (r.outcome, r.confirm)
     assert r.confirm is not None
     r.outcome, r.confirm = "on_time", replace(r.confirm, latency=r.task.deadline + 1e-3)
+    r.parts["run"] += r.task.deadline + 1e-3 - saved[1].latency  # type: ignore[union-attr]  # keep L = parts
     assert any("after D" in v for v in check_invariants(run))
+    r.parts["run"] -= r.task.deadline + 1e-3 - saved[1].latency  # type: ignore[union-attr]
+    r.outcome, r.confirm = saved
+
     r.outcome = None
-    assert any("never closed" in v for v in check_invariants(run))
-    r.outcome = saved
+    assert any("closed with no outcome" in v for v in check_invariants(run))
+    r.outcome = saved[0]
+    assert check_invariants(run) == []
+
+
+@pytest.mark.parametrize("n_cars", [50, 250])
+def test_a_zones_load_does_not_depend_on_the_fleet_size(cfg: Config, n_cars: int) -> None:
+    # 50 cars = a zone of a 200-car city, 250 = of a 1000-car city: lambda_car = 74.26 / n_cars, so the zone
+    # gets 74.26 tasks/s in S2 either way (30 s: about 2 230 tasks, sd 2.1 %).
+    run = run_one_zone(cfg, "S2", "greedy", 30.0, 2000, n_cars=n_cars)
+    assert len(run.uploaded) / 30.0 == pytest.approx(cfg.derived.arrival_rate_per_zone["S2"], rel=0.07)
 
 
 def test_the_one_zone_run_is_deterministic(cfg: Config) -> None:
