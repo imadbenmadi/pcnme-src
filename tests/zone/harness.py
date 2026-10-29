@@ -157,6 +157,7 @@ def city(
     sites = {z: Site(z, *cfg.layout.zone_positions_m[z], r) for z in zone_ids}
     fog = cfg.scenarios[scenario].fog
     closed: list[TaskRecord] = []
+    ledger: dict[tuple[str, object], TaskRecord] = {}
     zones = {
         z: Zone(
             z,
@@ -172,6 +173,7 @@ def city(
             bus=bus,  # type: ignore[arg-type]
             start_sites=tuple(s for o, s in sites.items() if o != z),
             fog_classes=fog,
+            ledger=ledger,
             on_close=closed.append,
         )
         for z in zone_ids

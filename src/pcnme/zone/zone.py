@@ -17,8 +17,12 @@ re-decision (9.1). Loss detection (M3.6, 9.3-9.4): an upload timeout per send, t
 a watchdog from the accept, a status probe before any retry, retries with the normal masks, best-effort
 cancels; the first result wins; no ack by the end is a drop.
 
+Duplicates and subscriptions (M3.7, 9.5, 9.6): the serving zone pushes a task's result at most once per radio
+session; the anchor republishes its copy on every new attach until the ack, and once if no ack came within
+T_ack; subscriptions are counted per role (serving: result and attach while the car is attached; anchor:
+attach, gps, result and ack while it has an open task of the car).
+
 M3 PLACEHOLDERS, each the simplest correct thing behind a small interface:
-- No republish of a result after an attach or T_ack (M3.7).
 - Cars do not move: the anchor is always the serving zone (M3.8).
 """
 
@@ -114,6 +118,8 @@ class TaskRecord:
     retries: int = 0  # retries of lost attempts used (9.1: 1 hard, 2 soft)
     result_attempt: int | None = None  # the attempt whose result reached the anchor first (9.4.3)
     end_timer: EventHandle | None = None  # no ack by the end: a drop (9.5.5)
+    copy: ResultMessage | None = None  # the anchor's copy of the result, until close (6D.12)
+    republished: bool = False  # the one republish after T_ack without an ack (9.5.4)
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,6 +246,7 @@ class Zone:
         bus: Bus,
         start_sites: tuple[Site, ...] = (),
         fog_classes: Mapping[str, str] | None = None,
+        ledger: dict[tuple[str, object], TaskRecord] | None = None,
         on_close: Callable[[TaskRecord], None] | None = None,
     ) -> None:
         """`start_sites`: the other zones active at start-up (deployment configuration, 7.5.2); none for a
@@ -303,7 +310,13 @@ class Zone:
         self._placement = placement
         self.anchor = AnchorTable(zone_id)
         self.records: dict[object, TaskRecord] = {}
-        self._cars: dict[str, tuple[Car, float]] = {}
+        # The run's log of every task, keyed by (anchor, task id): a simulation record, not zone state, so a
+        # serving zone can note the deliveries of a task anchored elsewhere (shared by the city).
+        self.ledger = ledger if ledger is not None else {}
+        self._cars: dict[str, tuple[Car, float]] = {}  # the car registry follows the serving role (9.6)
+        self._confirmed: dict[str, set[object]] = {}  # per served car: task ids confirmed this radio session
+        self._anchored: dict[str, int] = {}  # per car: this zone's open tasks of it (the anchor role)
+        self._attaches = 0
         self._on_close = on_close
         self._mean_radio = sum(config.radio.uplink_delay) / 2
         self.mqtt.subscribe(topics.zone_state(CLOUD))
@@ -329,14 +342,47 @@ class Zone:
     # --- cars and uploads (6A) ------------------------------------------------------------------------------
 
     def add_car(self, car: Car, distance: float) -> None:
-        """The car is served here and anchors its tasks here (no mobility yet: M3.8). Serving role: result
-        and attach; anchor role: attach, gps, result and ack (9.6), counted per topic."""
-        self._cars[car.car_id] = (car, shannon_rate(distance, self._cfg.radio))
+        """The car attaches here (the serving role, 9.6)."""
+        self.attach(car, distance)
+
+    def attach(self, car: Car, distance: float) -> None:
+        """A car attaches to this access point: subscribe car/{id}/result and attach (serving role), start a
+        new radio session, and announce it on car/{id}/attach to its anchors and its previous serving zone
+        (5.2, 9.6)."""
         c = car.car_id
-        for topic in (topics.car_result(c), topics.car_attach(c)):  # serving
-            self.mqtt.subscribe(topic)
-        for topic in (topics.car_attach(c), topics.car_gps(c), topics.car_result(c), topics.car_ack(c)):
-            self.mqtt.subscribe(topic)  # anchor
+        if c not in self._cars:
+            for topic in (topics.car_result(c), topics.car_attach(c)):
+                self.mqtt.subscribe(topic)
+        self._cars[c] = (car, shannon_rate(distance, self._cfg.radio))
+        self._confirmed[c] = set()  # a new radio session (9.5.3)
+        self._attaches += 1
+        self.mqtt.publish(
+            topics.car_attach(c), (c, self.zone_id), qos=1, key=(c, self.zone_id, self._attaches)
+        )
+
+    def detach(self, car_id: str) -> None:
+        """The serving role ends (another zone announced an attach, or no GPS for T_leave): unsubscribe and
+        drop the car from the registry (9.6)."""
+        if self._cars.pop(car_id, None) is None:
+            return
+        self._confirmed.pop(car_id, None)
+        for topic in (topics.car_result(car_id), topics.car_attach(car_id)):
+            self.mqtt.unsubscribe(topic)
+
+    def _anchor_role(self, car_id: str, step: int) -> None:
+        """9.6: the anchor subscribes at its first open task of the car and unsubscribes at its last."""
+        n = self._anchored.get(car_id, 0) + step
+        self._anchored[car_id] = n
+        if (step, n) in ((1, 1), (-1, 0)):
+            for topic in (
+                topics.car_attach(car_id),
+                topics.car_gps(car_id),
+                topics.car_result(car_id),
+                topics.car_ack(car_id),
+            ):
+                (self.mqtt.subscribe if step > 0 else self.mqtt.unsubscribe)(topic)
+        if n == 0:
+            del self._anchored[car_id]
 
     def upload(self, task: Task) -> None:
         """The car uploads its task over the zone's radio, sharing its airtime with the other uploads in
@@ -349,6 +395,7 @@ class Zone:
         )
         rec = TaskRecord(task=task, anchor=self.zone_id, rate=rate, upload_start=now, radio_delay=d)
         self.records[task.task_id] = rec
+        self.ledger[(self.zone_id, task.task_id)] = rec
 
         def arrived(tr: RadioTransfer) -> None:
             rec.w_radio = tr.wait  # known exactly at t_rx: the zone runs its uplink (6A.3)
@@ -365,6 +412,7 @@ class Zone:
             now, b_car, rec.w_radio, task.input_bits, rec.rate, self._mean_radio
         )  # 6A.3
         row = self.anchor.open(task, t_rx=now, d_a=rec.d_a)
+        self._anchor_role(task.car_id, +1)  # 6A.4: register
         end = rec.d_a + (task.l_max if task.cls == "soft" else 0.0) + self._t_ack  # 9.5.5, QUESTIONS Q23
         rec.end_timer = self._clock.schedule(end, lambda: self._no_ack(rec))
         route = self._tof.classify(
@@ -833,6 +881,13 @@ class Zone:
             ack = d.payload
             assert isinstance(ack, AckMessage)
             self._anchor_ack(ack)
+        elif kind == "attach":
+            payload = d.payload
+            assert isinstance(payload, tuple)
+            car, zone = str(payload[0]), str(payload[1])  # (car_id, zone_id), 5.2
+            if zone != self.zone_id and car in self._cars:
+                self.detach(car)  # 9.6: another zone serves the car now
+            self._republish_for(car)  # 6D.14, 9.5: until the ack, republish on every new attach
 
     def _anchor_result(self, msg: ResultMessage) -> None:
         rec = self.records.get(msg.key.task_id)
@@ -851,7 +906,8 @@ class Zone:
             return
         if rec.result_attempt is not None:
             return  # 9.4.3: the first result wins; the car filters the copy
-        rec.result_attempt, rec.report = a, report
+        rec.result_attempt, rec.report, rec.copy = a, report, msg
+        self._clock.schedule(self._clock.now + self._t_ack, lambda: self._republish_once(rec))  # 9.5.4
         if info is not None:
             self._end_attempt(info)
         for other, i in rec.attempts.items():
@@ -859,18 +915,23 @@ class Zone:
                 self._cancel_attempt(rec, other)  # 9.4.3: cancel any attempt still alive
 
     def _push(self, car_id: str, msg: ResultMessage) -> None:
-        """The serving zone pushes a result to the car over the radio downlink (10.3)."""
+        """The serving zone pushes a result to the car over the radio downlink (10.3), unless the car already
+        confirmed that task id in this radio session (9.5.3)."""
         k = msg.key
+        if k.task_id in self._confirmed.get(car_id, ()):
+            return
         down = hops.delay(
             self._streams, hops.RADIO_DOWN, self._cfg.radio.downlink_delay, k.task_id, k.attempt
         )
         self._clock.schedule(self._clock.now + down, lambda: self._at_car(car_id, msg))
 
     def _at_car(self, car_id: str, msg: ResultMessage) -> None:
+        if car_id not in self._cars:
+            return  # the car left this access point before the copy reached it: the anchor republishes
         car, _ = self._cars[car_id]
         now = self._clock.now
         k = msg.key
-        rec = self.records.get(k.task_id)  # the anchor's record, while the car's zone is its anchor (M3.8)
+        rec = self.ledger.get((k.anchor_id, k.task_id))  # the run's log (the anchor may be another zone)
         if rec is not None:
             rec.deliveries += 1
             info = rec.attempts.get(k.attempt)
@@ -888,11 +949,35 @@ class Zone:
         confirm = car.receive(Result(TaskId(*k.task_id), k.anchor_id, k.attempt), now)  # type: ignore[arg-type]
         if confirm is None:
             return
+        self._confirmed.setdefault(car_id, set()).add(k.task_id)  # 9.5.3: this session has it
         # the car's confirm crosses the radio to this serving zone, which publishes the ack (6D.13)
         up = hops.delay(self._streams, hops.ACK_UP, self._cfg.radio.uplink_delay, k.task_id, k.attempt)
         ack = AckMessage(confirm, self.zone_id)
         key = (*k.task_id, k.anchor_id, k.attempt, "ack")
         self._clock.schedule(now + up, lambda: self.mqtt.publish(topics.car_ack(car_id), ack, qos=1, key=key))
+
+    def _republish(self, rec: TaskRecord) -> None:
+        """The anchor publishes its copy of the result again (QoS 1), keyed as a new message (9.5)."""
+        assert rec.copy is not None
+        k = rec.copy.key
+        n = rec.deliveries + int(rec.republished) + 1
+        topic = topics.car_result(rec.task.car_id)
+        self.mqtt.publish(topic, rec.copy, qos=1, key=(*k.task_id, k.anchor_id, k.attempt, "republish", n))
+
+    def _republish_once(self, rec: TaskRecord) -> None:
+        """9.5.4: the anchor saw the result but got no ack within T_ack: it republishes once (this timer is
+        set once, at the result; an ack closes the task)."""
+        if self.anchor.is_open(rec.task.task_id):
+            rec.republished = True
+            self._republish(rec)
+
+    def _republish_for(self, car_id: str) -> None:
+        """6D.14: on a new attach, republish the copy of every open task of the car that has a result but
+        no ack yet."""
+        for rec in self.records.values():
+            open_ = self.anchor.is_open(rec.task.task_id)
+            if open_ and rec.task.car_id == car_id and rec.copy is not None and rec.confirm is None:
+                self._republish(rec)
 
     def _anchor_ack(self, ack: AckMessage) -> None:
         c = ack.confirm
@@ -918,6 +1003,8 @@ class Zone:
         """6E.15: close; cancel any other live attempt; stop every timer."""
         now = self._clock.now
         self.anchor.close(rec.task.task_id, outcome, now)  # raises if closed twice
+        self._anchor_role(rec.task.car_id, -1)  # 9.6
+        rec.copy = None  # 6E.15: the result copy is deleted
         if rec.end_timer is not None:
             self._clock.cancel(rec.end_timer)
         for a, info in rec.attempts.items():
