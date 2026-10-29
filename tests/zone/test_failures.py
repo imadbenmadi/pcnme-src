@@ -20,18 +20,19 @@ def two(placement: object, **overrides: object) -> City:
 
 
 def test_a_lost_reply_times_out_and_the_first_result_still_wins() -> None:
-    """9.1, 9.3. The accept reply from z2 is lost. T_up = min(2 x (4.2 + 3), 94.8) = 14.4 ms: at t_rx + 14.4
-    the send counts as not placed: the pending send ends, z2 gets a cancel (it already finished: ignored),
-    and the anchor re-decides (here). z2's result (done at t_rx + 4.2 + 8 = 12.2 ms) reaches z1 at 19.2 ms:
-    the first result wins and the here attempt is cancelled. L = 5.226 + 22.2 = 27.426 ms."""
+    """9.1, 9.3, C7. The accept reply from z2 is lost. The own send ends at t_rx + 4.2 ms; T_up = 2 x
+    (4.2 + 3) = 14.4 ms from then: at t_rx + 18.6 the send counts as not placed: the pending send ends, z2
+    gets a cancel (it already finished: ignored), and the anchor re-decides (here). z2's result (done at
+    t_rx + 4.2 + 8 = 12.2 ms) reaches z1 at 19.2 ms: the first result wins and the here attempt is cancelled.
+    L = 5.226 + 22.2 = 27.426 ms."""
     placement = Seq("n1", "here")
     c = two(placement)
     z1 = c.zones["z1"]
     z1.lose_reply = lambda key: key.attempt == 1
     z1.upload(city_task(c, "T1"))
-    c.clock.run_until(T_RX + 0.0144 - 1e-6)
+    c.clock.run_until(T_RX + 0.0186 - 1e-6)
     assert placement.calls == 1 and len(z1.store.pending_on("z2", "gpu")) == 1
-    c.clock.run_until(T_RX + 0.0144 + 1e-6)
+    c.clock.run_until(T_RX + 0.0186 + 1e-6)
     assert placement.calls == 2 and z1.store.pending_on("z2", "gpu") == ()
     c.clock.run_until(3.0)
     (rec,) = c.closed
@@ -230,3 +231,35 @@ def test_a_task_whose_whole_budget_went_on_the_upload_is_dropped_without_a_crash
     (rec,) = c.closed
     # dropped at its arrival (a fixed placement ignores the masks, so here it is refused late instead)
     assert rec.outcome.startswith("drop_") and rec.closed_at == pytest.approx(rec.t_rx)
+
+
+def test_an_upload_still_being_sent_is_not_a_failure() -> None:
+    # CHANGES C7. The WAN already holds 216 Mbit (3 T2 clips, 419.6 ms of push) when a T4 goes to the cloud,
+    # so its input takes about 420 + 67.8 ms. The old T_up from the send start, 2 x (67.8 + 65.5) = 266.7 ms,
+    # would have fired mid-send and re-sent it into the same queue; now T_up starts when the send is done,
+    # the accept comes 65.5 ms later, and there is no re-send.
+    c = two(Fixed("cloud"))
+    wan = c.zones["z1"]._cloud_path._wan
+    wan.send(now=c.clock.now, size_bits=216e6, delay=0.0)
+    c.zones["z1"].upload(city_task(c, "T4"))
+    c.clock.run_until(5.0)
+    (rec,) = c.closed
+    assert rec.earlier == [] and rec.transfer is not None and rec.transfer.w_wan > 0.4
+    assert rec.outcome in ("on_time", "late") and rec.reply == "accepted"
+
+
+def test_a_lost_cloud_reply_times_out_after_the_send_not_at_the_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    # C7: the T4's send to the cloud ends at t_rx + 67.8 ms; T_up = 2 x (67.8 + 65.5) = 266.7 ms after that,
+    # well before the cap (d_A + L_max = 2 s): the re-decision (here) runs then. The cloud runs nothing
+    # (it refuses) and the refusal is lost, so neither a reply nor a result comes.
+    from pcnme.node.executor import Refused
+
+    placement = Seq("cloud", "here")
+    c = two(placement)
+    monkeypatch.setattr(c.cloud, "handle", lambda req: (Refused("late"), c.cloud.snapshot()))
+    c.zones["z1"].lose_reply = lambda key: key.attempt == 1
+    c.zones["z1"].upload(city_task(c, "T4"))
+    c.clock.run_until(T_RX + 0.0678 + 0.2667 - 0.002)
+    assert placement.calls == 1
+    c.clock.run_until(T_RX + 0.0678 + 0.2667 + 0.002)
+    assert placement.calls == 2

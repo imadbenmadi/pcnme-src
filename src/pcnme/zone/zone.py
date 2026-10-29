@@ -84,6 +84,7 @@ class AttemptInfo:
     probes: int = 0
     probe_timer: EventHandle | None = None
     done_seen: bool = False  # a probe said done: if no result follows, it was lost (QUESTIONS Q23)
+    t_up: float = 0.0  # κ_up (T̂_in + δ̂_reply): the upload timeout, counted from the end of the own send (C7)
 
 
 @dataclass(slots=True)
@@ -597,6 +598,7 @@ class Zone:
         self.store.add_pending(target, pend, view.slot, task.cls, view.run)  # R1 (9.2)
         d_bh = hops.delay(self._streams, hops.BH_OUT, self._cfg.links.backhaul_delay, task.task_id, attempt)
         tr = self.backhaul.send(now=now, size_bits=task.input_bits, delay=d_bh)  # POST /tasks + the input
+        self._clock.schedule(tr.delivery, lambda: self._sent(rec, attempt))  # the own send is done (C7)
         back = hops.delay(self._streams, hops.REPLY_BH, self._cfg.links.backhaul_delay, task.task_id, attempt)
         peer = self.peers[target]
 
@@ -644,6 +646,7 @@ class Zone:
             rec.parts["input"] = tr.duration
             rec.t_at_executor, rec.budget = self._clock.now, req.budget
             info.t_at_executor, info.input = self._clock.now, tr.duration
+            self._sent(rec, attempt)  # the own send is done (C7)
             if not self._bus.is_alive(CLOUD):
                 return  # a dead cloud never replies
             reply, snap = self.cloud.handle(req)
@@ -770,12 +773,35 @@ class Zone:
         return rec.d_a + (rec.task.l_max if rec.task.cls == "soft" else 0.0)
 
     def _upload_timer(self, rec: TaskRecord, attempt: int, t_in: float, reply: float) -> None:
-        """9.3: T_up,k = min(κ_up (T̂_in,k + δ̂_reply,k), d_A - t_s + ℓ), ℓ = 0 hard, L_max soft."""
-        now = self._clock.now
-        ell = rec.task.l_max if rec.task.cls == "soft" else 0.0
-        t_up = min(self._kappa * (t_in + reply), rec.d_a - now + ell)
+        """9.3, CHANGES C7: while the zone's own send is still going, only the deadline cap applies (an upload
+        still being sent is not a failure). T_up = κ_up (T̂_in + δ̂_reply) starts when that send is done."""
         info = rec.attempts[attempt]
-        info.timer = self._clock.schedule(now + max(0.0, t_up), lambda: self._upload_timeout(rec, attempt))
+        info.t_up = self._kappa * (t_in + reply)
+        cap = max(self._clock.now, self._cap(rec))
+        info.timer = self._clock.schedule(cap, lambda: self._upload_cap(rec, attempt))
+
+    def _sent(self, rec: TaskRecord, attempt: int) -> None:
+        """The own send is done (the input reached the executor): T_up starts, still capped (C7)."""
+        info = rec.attempts[attempt]
+        if not info.live or info.timer is None or not self.anchor.is_open(rec.task.task_id):
+            return  # replied already, or ended
+        self._clock.cancel(info.timer)
+        now, cap = self._clock.now, self._cap(rec)
+        if now + info.t_up >= cap:
+            info.timer = self._clock.schedule(max(now, cap), lambda: self._upload_cap(rec, attempt))
+        else:
+            info.timer = self._clock.schedule(now + info.t_up, lambda: self._upload_timeout(rec, attempt))
+
+    def _upload_cap(self, rec: TaskRecord, attempt: int) -> None:
+        """C7: no reply by the deadline cap: the attempt is dropped, with no re-send (the time is gone)."""
+        info = rec.attempts[attempt]
+        info.timer = None
+        if not info.live or not self.anchor.is_open(rec.task.task_id):
+            return
+        self.store.clear_pending(info.executor, (rec.task.task_id, attempt))
+        self._cancel_attempt(rec, attempt)
+        rec.reply = "no_reply"
+        self._close(rec, "drop_upload_late")
 
     def _upload_timeout(self, rec: TaskRecord, attempt: int) -> None:
         """9.1: no reply: treated as not placed. Re-decide (it counts as the one re-decision) and cancel the
