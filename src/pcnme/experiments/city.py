@@ -102,15 +102,18 @@ class CarApp:
     hotspot: bool
     serving: str | None = None
     held: dict[TaskId, Task] = field(default_factory=dict)
+    uncovered: set[TaskId] = field(default_factory=set)  # held frames made in a gap (Q29)
     uploading: dict[TaskId, str] = field(default_factory=dict)  # task id -> the zone receiving its upload
 
 
 @dataclass(frozen=True, slots=True)
 class CarDrop:
-    """A frame the car gave up before any zone held it (9.7.3)."""
+    """A frame the car gave up before any zone held it (9.7.3): "uncovered" if it was made in a coverage gap
+    (Q29: reported apart from method drops), else "gave_up" (a cut upload whose budget ran out)."""
 
     task: Task
     at: float
+    kind: str = "gave_up"
 
 
 class City:
@@ -203,6 +206,7 @@ class City:
                 m.position(),
                 functools.partial(self._task, app),
                 fleet=fleet,
+                coverage=cfg.cars.coverage[self.scenario.mobility],
             )
             self.apps.append(app)
         self._period = cfg.cars.gps_period
@@ -286,6 +290,7 @@ class City:
         self.created.append(task.task_id)
         if app.serving is None:
             app.held[task.task_id] = task  # in a gap: keep the frame
+            app.uncovered.add(task.task_id)
         else:
             self._upload(app, task)
 
@@ -311,12 +316,13 @@ class City:
                 self._car_drop(app, task, now)
 
     def _car_drop(self, app: CarApp, task: Task, now: float) -> None:
-        self.car_drops.append(CarDrop(task, now))
+        kind = "uncovered" if task.task_id in app.uncovered else "gave_up"
+        self.car_drops.append(CarDrop(task, now, kind))
         self.log.add(
             "events",
             now,
             car_id=app.car.car_id,
-            kind="car_drop",
+            kind="uncovered" if kind == "uncovered" else "car_drop",  # Q29: apart from method drops
             zone_from=app.serving or "",
             zone_to="",
             task_id=str(task.task_id),

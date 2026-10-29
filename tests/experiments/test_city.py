@@ -287,3 +287,46 @@ def test_the_prediction_is_from_the_cars_current_zone_not_the_anchors() -> None:
     assert g.zone_id == "z2"
     t_exit, nxt = c.zones["z1"].predict("c000")  # type: ignore[misc]
     assert t_exit == pytest.approx((1250.0 - g.x) / 10.0) and nxt == "z4"
+
+
+def test_frames_made_in_a_gap_are_reported_as_uncovered() -> None:
+    # Q29: a car parked in the centre gap: every frame it makes is "uncovered", not a method drop.
+    c = city_of({"c000": Line((600.0, 600.0), (600.0, 600.0), 10.0)})
+    c.run(5.0)
+    assert c.car_drops and {d.kind for d in c.car_drops} == {"uncovered"}
+
+
+def test_the_car_rate_is_scaled_by_the_covered_share(cfg: Config) -> None:
+    # Q29: lambda_car / coverage, so the covered creations meet the per-zone rate of 16.2.
+    from pcnme.car.car import Car
+    from pcnme.sim.clock import EventClock
+    from pcnme.sim.rng import RandomStreams
+
+    streams = RandomStreams.from_config(cfg, 2000, "training")
+    car = Car(
+        "c1",
+        cfg,
+        cfg.scenarios["S2"],
+        streams,
+        EventClock(),
+        (0.0, 0.0),
+        lambda t: None,
+        fleet=200,
+        coverage=0.8,
+    )
+    assert car._rate == pytest.approx(cfg.arrival_rate_per_car("S2", 200) / 0.8)
+
+
+def test_the_calibrated_coverage_matches_a_fresh_calibration_run(cfg: Config) -> None:
+    # tag C: the config holds what tools/calibrate_map.py measures (positions only, no tasks).
+    from pcnme.experiments.calibrate import calibrate
+
+    cal = cfg.cars.calibration
+    got = calibrate(cfg, "low", cal.seconds, cal.seed, cfg.cars.count[0])
+    assert got["coverage"] == pytest.approx(cfg.cars.coverage["low"], abs=1e-4)
+
+
+def test_the_city_gives_its_cars_the_calibrated_coverage(cfg: Config) -> None:
+    c = City(cfg, "S2", "greedy", 2000, n_cars=4)
+    want = cfg.arrival_rate_per_car("S2", 4) / cfg.cars.coverage["low"]
+    assert c.apps[0].car._rate == pytest.approx(want)
