@@ -182,3 +182,43 @@ def test_each_task_closes_exactly_once_under_load() -> None:
     ids = [r.task.task_id for r in s.closed]
     assert len(ids) == len(set(ids)) == len(s.zone.records) > 20
     assert s.zone.anchor.open_count == 0
+
+
+# --- over the bus (M3.1) ------------------------------------------------------------------------------------
+
+
+def test_a_qos1_duplicate_reaches_the_car_twice_and_the_task_closes_once() -> None:
+    # 9.5: QoS 1 may deliver the result (and the ack) twice. The car keeps the first and confirms both; the
+    # anchor ignores the repeat ack (9.5.4); both copies paid the return energy (12.2: per delivery).
+    # Backhaul delays random (U(1, 5) ms), so the repeat arrives at another time than the first copy.
+    s = one_zone(fixed_delay_config(links__backhaul_delay=[0.001, 0.005]), Fixed("here"))
+    s.bus.faults.duplicate = lambda topic, key, sub: True
+    s.zone.upload(task_now(s, "T1"))
+    s.clock.run_until(1.0)
+    (rec,) = s.closed
+    assert rec.outcome == "on_time" and rec.deliveries == 2
+    assert rec.confirm is not None
+    # L is measured at the first copy, and so is the return part: L = the sum of the parts
+    assert rec.result_at_car == pytest.approx(rec.task.created + rec.confirm.latency, abs=1e-12)
+    assert sum(rec.parts.values()) == pytest.approx(rec.confirm.latency, abs=1e-12)
+
+
+def test_a_status_message_reaches_the_anchor_but_never_the_car() -> None:
+    # 8.6: a skip is published on car/{id}/result as kind = status; the serving zone ignores it.
+    from pcnme.node.timetable import Deterministic
+
+    s = one_zone(fixed_delay_config(), Fixed("here"), shape=lambda r: Deterministic(50 * r.mean))
+    s.zone.upload(task_now(s, "T1"))  # 400 ms run > 90 ms d_k: aborted while running
+    s.clock.run_until(2.0)
+    (rec,) = s.closed
+    assert rec.outcome == "drop_aborted" and rec.deliveries == 0
+    assert s.car.kept(rec.task.task_id) is None
+
+
+def test_the_zone_counts_its_subscriptions_per_role() -> None:
+    # 9.6: the serving role (result, attach) and the anchor role (attach, gps, result, ack) share one client.
+    s = one_zone(fixed_delay_config(), Fixed("here"))
+    m = s.zone.mqtt
+    assert [m.count(f"car/c01/{k}") for k in ("result", "attach", "gps", "ack")] == [2, 2, 1, 1]
+    s.clock.run_until(0.1)
+    assert s.bus.subscribers("car/c01/result") == ("z1",)

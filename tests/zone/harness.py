@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from pcnme.bus.bus import Bus
 from pcnme.car.car import Car, Task
 from pcnme.config import Config, config_from_mapping, load_yaml
 from pcnme.net.pipe import FifoPipe
@@ -55,6 +56,7 @@ class System:
     zone: Zone
     car: Car
     closed: list[TaskRecord]
+    bus: Bus
 
 
 def one_zone(
@@ -70,7 +72,8 @@ def one_zone(
     streams = RandomStreams.from_config(cfg, seed, "training")
     table = RunTimeTable.from_config(cfg, shape)
     wan = FifoPipe(cfg.derived.b_wan)
-    cloud = Cloud(clock, streams, cfg, table)
+    bus = Bus(clock, streams, cfg.links.broker_extra_delay)
+    cloud = Cloud(clock, streams, cfg, table, bus)
     closed: list[TaskRecord] = []
     est = PathEstimates(cfg, wan_wait=ZeroWanWait())
     zone = Zone(
@@ -85,6 +88,7 @@ def one_zone(
         placement,
         mode=mode,
         hw_name=hw_name,
+        bus=bus,
         on_close=closed.append,
     )  # type: ignore[arg-type]
     scenario = cfg.scenarios["S2" if mode == "loose" else "S4"]
@@ -99,7 +103,7 @@ def one_zone(
         fleet=cfg.cars.count[0],
     )
     zone.add_car(car, distance)
-    return System(cfg, clock, zone, car, closed)
+    return System(cfg, clock, zone, car, closed, bus)
 
 
 def task_now(s: System, kind: str, seq: int = 1, mode: str = "loose") -> Task:

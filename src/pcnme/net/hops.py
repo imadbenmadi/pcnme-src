@@ -3,7 +3,8 @@ Q17).
 
 A delay is drawn by task, not by event order: u keyed by (task_id, attempt, hop) on the hop's stream, then
 d = low + u (high - low) on the hop's uniform interval from the config (4.2, 18). Radio hops use the radio
-stream (Q5); backhaul and WAN hops the link_delays stream. The upload comes before any attempt, so it uses
+stream (Q5); backhaul and WAN hops the link_delays stream. MQTT messages draw their delays in the bus
+(bus/bus.py), keyed the same way. The upload comes before any attempt, so it uses
 attempt 0 (Q17).
 """
 
@@ -19,12 +20,7 @@ RADIO_UP = "radio_up"  # car -> access point: the upload (and later the car's co
 RADIO_DOWN = "radio_down"  # access point -> car: a result
 BH_OUT = "bh_out"  # a zone's outgoing backhaul: to a neighbour, or the first part of a cloud transfer
 WAN_IN = "wan_in"  # metro-edge router -> cloud: the WAN part of a cloud transfer
-PUB_BH = "pub_bh"  # a fog executor -> broker: publishing a result or status (backhaul)
-PUB_WAN = "pub_wan"  # the cloud -> broker: publishing a result or status (one WAN crossing, 4.2)
-TO_ZONE = "to_zone"  # broker -> a zone: delivering a message (backhaul)
 ACK_UP = "ack_up"  # car -> serving zone: the car's confirm (radio)
-ACK_PUB = "ack_pub"  # serving zone -> broker: the ack (backhaul)
-ACK_TO_ANCHOR = "ack_to_anchor"  # broker -> the anchor: the ack (backhaul)
 
 STREAM: Mapping[str, str] = MappingProxyType(
     {
@@ -32,12 +28,7 @@ STREAM: Mapping[str, str] = MappingProxyType(
         RADIO_DOWN: "radio",
         BH_OUT: "link_delays",
         WAN_IN: "link_delays",
-        PUB_BH: "link_delays",
-        PUB_WAN: "link_delays",
-        TO_ZONE: "link_delays",
         ACK_UP: "radio",
-        ACK_PUB: "link_delays",
-        ACK_TO_ANCHOR: "link_delays",
     }
 )
 
