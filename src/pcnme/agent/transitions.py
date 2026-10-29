@@ -12,7 +12,7 @@ not final yet is discarded and counted.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from pcnme.agent.inputs import Decision
@@ -58,6 +58,8 @@ class TransitionBuffer:
         self.replay: list[Transition] = []
         self.discarded = 0  # episode end: reward not final yet
         self._last: Key | None = None
+        self.on_decision_hook: Callable[[Decision], None] | None = None  # the online learner (M6.5)
+        self.on_replay_hook: Callable[[Transition], None] | None = None
 
     def on_decision(self, d: Decision) -> None:
         """A decision at this anchor: it is s' of the previous one (11.3.2), and its own transition waits."""
@@ -68,6 +70,8 @@ class TransitionBuffer:
             raise ValueError(f"a second decision for {key} at {self.anchor}")
         prev = self._last
         self.pending[key] = _Pending(d)
+        if self.on_decision_hook is not None:
+            self.on_decision_hook(d)
         self._last = key
         if prev is not None and prev in self.pending:
             self.pending[prev].next = d
@@ -89,14 +93,19 @@ class TransitionBuffer:
             if p.reward is None:
                 self.discarded += 1
                 continue
-            self.replay.append(self._transition(p, truncated=True))
+            self._emit(self._transition(p, truncated=True))
         self._last = None
 
     def _move(self, key: Key) -> None:
         p = self.pending[key]
         if p.reward is not None and p.next is not None:
             del self.pending[key]
-            self.replay.append(self._transition(p, truncated=False))
+            self._emit(self._transition(p, truncated=False))
+
+    def _emit(self, t: Transition) -> None:
+        self.replay.append(t)
+        if self.on_replay_hook is not None:
+            self.on_replay_hook(t)
 
     def _transition(self, p: _Pending, truncated: bool) -> Transition:
         d, n = p.decision, p.next
