@@ -5,9 +5,11 @@ Reuses the M1 pieces: the backhaul is a FIFO pipe, a cloud transfer is a CloudPa
 the zone's node and the cloud run the same Executor. The radio uplink shares its airtime among the uploads in
 progress (net/radio.py, CHANGES C6).
 
+Messages go over the bus (bus/bus.py, M3.1): the executor publishes each result or status once on
+car/{id}/result; the serving zone pushes results (never status messages) to the car, and the anchor keeps a
+copy; the car's confirm reaches the serving zone, which publishes car/{id}/ack for the anchor (6D, 10.3).
+
 M3 PLACEHOLDERS, each the simplest correct thing behind a small interface:
-- Messages are direct clock callbacks with the modelled delays (broker processing on top of the backhaul or
-  WAN delay), not the bus (M3.1).
 - The anchor reads the cloud's state directly, with no age (M3.3); ŵ_WAN comes from estimates.ZeroWanWait.
 - A refused task is dropped and logged; there is no re-decision (M3.5).
 - No message is lost, so there is no watchdog, retry, cancel or republish (M3.6, M3.7).
@@ -20,9 +22,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
+from pcnme.bus import topics
+from pcnme.bus.bus import Bus, Client, Delivery
 from pcnme.car.car import Car, Confirm, Result, Task
 from pcnme.config import Config, DeadlineMode, SlotType
-from pcnme.ids import AttemptKey
+from pcnme.ids import AttemptKey, TaskId
 from pcnme.net import hops
 from pcnme.net.pipe import FifoPipe
 from pcnme.net.radio import RadioTransfer, RadioUplink, shannon_rate
@@ -92,20 +96,51 @@ class TaskRecord:
     parts: dict[str, float] = field(default_factory=dict)  # durations along the way, for the latency check
 
 
+@dataclass(frozen=True, slots=True)
+class ResultMessage:
+    """car/{id}/result (5.2): kind = result, or status (skipped or aborted, 8.6). The report carries the slot
+    type, the run and the energy spent."""
+
+    kind: Literal["result", "status"]
+    executor_id: str
+    report: Report
+
+    @property
+    def key(self) -> AttemptKey:
+        return self.report.key
+
+
+@dataclass(frozen=True, slots=True)
+class AckMessage:
+    """car/{id}/ack (5.2): the copy the car kept and its latency, from the serving zone."""
+
+    confirm: Confirm
+    zone_id: str
+
+
+def publish_report(client: Client, executor_id: str, report: Report) -> None:
+    """An executor publishes each result or drop once, at once (6D.12, 8.6), QoS 1."""
+    kind: Literal["result", "status"] = "result" if report.outcome == "done" else "status"
+    k = report.key
+    client.publish(
+        topics.car_result(str(k.task_id[0])),  # task_id = (car_id, epoch, seq)
+        ResultMessage(kind, executor_id, report),
+        qos=1,
+        key=(*k.task_id, k.anchor_id, k.attempt, "result"),
+    )
+
+
 class Cloud:
-    """The cloud: one executor shared by every zone; its reports go back to each attempt's anchor."""
+    """The cloud: one executor shared by every zone, an MQTT client on the WAN (10.3: one WAN crossing to
+    publish). It has no radio and never predicts."""
 
     def __init__(
-        self, clock: EventClock, streams: RandomStreams, config: Config, table: RunTimeTable
+        self, clock: EventClock, streams: RandomStreams, config: Config, table: RunTimeTable, bus: Bus
     ) -> None:
-        self._zones: dict[str, Zone] = {}
-        self.executor = Executor.from_config(clock, streams, config, "cloud", table, on_report=self._route)
-
-    def attach(self, zone: Zone) -> None:
-        self._zones[zone.zone_id] = zone
-
-    def _route(self, report: Report) -> None:
-        self._zones[report.key.anchor_id].on_report(report, executor="cloud")
+        self.mqtt = bus.connect("cloud", config.links.wan_delay, lambda d: None)
+        self.executor = Executor.from_config(
+            clock, streams, config, "cloud", table, on_report=lambda r: publish_report(self.mqtt, "cloud", r)
+        )
 
 
 class Zone:
@@ -124,6 +159,8 @@ class Zone:
         placement: Placement,
         mode: DeadlineMode,
         hw_name: str = "F-GPU",
+        *,
+        bus: Bus,
         on_close: Callable[[TaskRecord], None] | None = None,
     ) -> None:
         self.zone_id = zone_id
@@ -136,8 +173,14 @@ class Zone:
         self.backhaul = FifoPipe(config.links.backhaul_bw)
         self._cloud_path = CloudPath(clock, self.backhaul, wan)
         self.cloud = cloud
+        self.mqtt = bus.connect(
+            zone_id,
+            config.links.backhaul_delay,
+            self._on_message,
+            will=(topics.zone_status(zone_id), "offline"),
+        )
         self.executor = Executor.from_config(
-            clock, streams, config, hw_name, table, on_report=lambda r: self.on_report(r, executor="here")
+            clock, streams, config, hw_name, table, on_report=lambda r: publish_report(self.mqtt, zone_id, r)
         )
         self._est = estimates
         self._tof = TofBroker(config, estimates)
@@ -146,14 +189,19 @@ class Zone:
         self.records: dict[object, TaskRecord] = {}
         self._cars: dict[str, tuple[Car, float]] = {}
         self._on_close = on_close
-        cloud.attach(self)
         self._mean_radio = sum(config.radio.uplink_delay) / 2
-        self._broker = config.links.broker_extra_delay
 
     # --- cars and uploads (6A) ------------------------------------------------------------------------------
 
     def add_car(self, car: Car, distance: float) -> None:
+        """The car is served here and anchors its tasks here (no mobility yet: M3.8). Serving role: result
+        and attach; anchor role: attach, gps, result and ack (9.6), counted per topic."""
         self._cars[car.car_id] = (car, shannon_rate(distance, self._cfg.radio))
+        c = car.car_id
+        for topic in (topics.car_result(c), topics.car_attach(c)):  # serving
+            self.mqtt.subscribe(topic)
+        for topic in (topics.car_attach(c), topics.car_gps(c), topics.car_result(c), topics.car_ack(c)):
+            self.mqtt.subscribe(topic)  # anchor
 
     def upload(self, task: Task) -> None:
         """The car uploads its task over the zone's radio, sharing its airtime with the other uploads in
@@ -251,55 +299,71 @@ class Zone:
 
     # --- delivery, ack, close (6D, 6E, 8.6, 9.5, 10.3) ------------------------------------------------------
 
-    def on_report(self, report: Report, executor: str) -> None:
-        rec = self.records[report.key.task_id]
-        rec.report = report
-        attempt = report.key.attempt
-        tid = rec.task.task_id
-        lk = self._cfg.links
-        # The executor publishes once: one backhaul (fog) or WAN (cloud) crossing to the broker, broker
-        # processing, then one backhaul crossing to the serving zone (10.3, 4.2: results pay only delays).
-        pub_hop, pub_iv = (
-            (hops.PUB_WAN, lk.wan_delay) if executor == "cloud" else (hops.PUB_BH, lk.backhaul_delay)
-        )
-        to_zone = (
-            hops.delay(self._streams, pub_hop, pub_iv, tid, attempt)
-            + self._broker
-            + hops.delay(self._streams, hops.TO_ZONE, lk.backhaul_delay, tid, attempt)
-        )
-        if (
-            report.outcome != "done"
-        ):  # skipped or aborted: a status message to the anchor, sent at once (8.6),
-            # not when an abort tail frees the slot (report.finish)
-            self._clock.schedule(
-                self._clock.now + to_zone, lambda: self._close(rec, f"drop_{report.outcome}")
-            )
+    def _on_message(self, d: Delivery) -> None:
+        scope, car_id, kind = topics.parse(d.topic)
+        if scope != "car":
             return
-        down = hops.delay(self._streams, hops.RADIO_DOWN, self._cfg.radio.downlink_delay, tid, attempt)
+        if kind == "result":
+            msg = d.payload
+            assert isinstance(msg, ResultMessage)
+            if car_id in self._cars and msg.kind == "result":
+                self._push(car_id, msg)  # serving role: results only, never status messages (8.6)
+            if msg.key.anchor_id == self.zone_id:
+                self._anchor_result(msg)  # anchor role: keep the copy, or close on a drop
+        elif kind == "ack":
+            ack = d.payload
+            assert isinstance(ack, AckMessage)
+            self._anchor_ack(ack)
+
+    def _anchor_result(self, msg: ResultMessage) -> None:
+        rec = self.records.get(msg.key.task_id)
+        if rec is None or not self.anchor.is_open(rec.task.task_id):
+            return
+        report = msg.report
+        rec.report = report
+        if msg.kind == "status":  # skipped or aborted, reported at once (8.6)
+            self._close(rec, f"drop_{report.outcome}")
+            return
         assert report.start is not None and rec.t_at_executor is not None
         rec.parts["queue"] = report.start - rec.t_at_executor
         rec.parts["run"] = report.busy
-        rec.parts["return"] = to_zone + down
-        at_car = report.finish + to_zone + down
-        self._clock.schedule(at_car, lambda: self._at_car(rec, report.key))
 
-    def _at_car(self, rec: TaskRecord, key: AttemptKey) -> None:
-        car, _ = self._cars[rec.task.car_id]
+    def _push(self, car_id: str, msg: ResultMessage) -> None:
+        """The serving zone pushes a result to the car over the radio downlink (10.3)."""
+        k = msg.key
+        down = hops.delay(
+            self._streams, hops.RADIO_DOWN, self._cfg.radio.downlink_delay, k.task_id, k.attempt
+        )
+        self._clock.schedule(self._clock.now + down, lambda: self._at_car(car_id, msg))
+
+    def _at_car(self, car_id: str, msg: ResultMessage) -> None:
+        car, _ = self._cars[car_id]
         now = self._clock.now
-        rec.deliveries += 1
-        rec.result_at_car = now
-        confirm = car.receive(Result(rec.task.task_id, key.anchor_id, key.attempt), now)
+        k = msg.key
+        rec = self.records.get(k.task_id)  # the anchor's record, while the car's zone is its anchor (M3.8)
+        if rec is not None:
+            rec.deliveries += 1
+            if rec.result_at_car is None:
+                rec.result_at_car = now
+                rec.parts["return"] = now - msg.report.finish
+        confirm = car.receive(Result(TaskId(*k.task_id), k.anchor_id, k.attempt), now)  # type: ignore[arg-type]
         if confirm is None:
             return
-        rec.confirm = confirm
-        tid, a = rec.task.task_id, key.attempt
-        ack = (
-            hops.delay(self._streams, hops.ACK_UP, self._cfg.radio.uplink_delay, tid, a)
-            + hops.delay(self._streams, hops.ACK_PUB, self._cfg.links.backhaul_delay, tid, a)
-            + self._broker
-            + hops.delay(self._streams, hops.ACK_TO_ANCHOR, self._cfg.links.backhaul_delay, tid, a)
-        )
-        self._clock.schedule(now + ack, lambda: self._close(rec, self._outcome(rec.task, confirm.latency)))
+        # the car's confirm crosses the radio to this serving zone, which publishes the ack (6D.13)
+        up = hops.delay(self._streams, hops.ACK_UP, self._cfg.radio.uplink_delay, k.task_id, k.attempt)
+        ack = AckMessage(confirm, self.zone_id)
+        key = (*k.task_id, k.anchor_id, k.attempt, "ack")
+        self._clock.schedule(now + up, lambda: self.mqtt.publish(topics.car_ack(car_id), ack, qos=1, key=key))
+
+    def _anchor_ack(self, ack: AckMessage) -> None:
+        c = ack.confirm
+        if c.anchor_id != self.zone_id:
+            return
+        rec = self.records.get(c.task_id)
+        if rec is None or not self.anchor.is_open(c.task_id):
+            return  # 9.5.4: repeat acks for a closed task are ignored
+        rec.confirm = c
+        self._close(rec, self._outcome(rec.task, c.latency))
 
     @staticmethod
     def _outcome(task: Task, latency: float) -> str:
