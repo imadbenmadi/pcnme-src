@@ -25,7 +25,13 @@ cars:
   speed_kmh:
     low: [10, 20, 25, 40]        # P: VFC
     high: [30, 40, 50, 60]       # R: arterial roads, still urban
-  hotspot_share: 0.4             # R: 40 % of cars routed through z1 (Fan et al.'s high-load RSU)
+  hotspot_share: 0.4             # R: 40 % of cars routed through z1 (Fan et al.'s high-load RSU); routing: Q25
+  grid:                          # the dev map (final doc 16.2: the VFC grid, simple and complex)
+    block_m: 200                 # P: VFC (roads every 200 m, a random turn at each intersection)
+    complex: false               # the complex grid adds traffic lights and random stops
+    light_cycle_s: 60.0          # STAND-IN (QUESTIONS Q24): half the cycle green per axis
+    stop_probability: 0.1        # STAND-IN (Q24): chance of a random stop at an intersection
+    stop_s: [5.0, 20.0]          # STAND-IN (Q24): its duration, uniform
 
 radio:                           # P: VFC (Friis free-space + Shannon)
   bandwidth: 40.0e6

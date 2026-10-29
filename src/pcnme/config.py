@@ -251,6 +251,18 @@ class Cars:
     speed_low_mps: tuple[float, ...]
     speed_high_mps: tuple[float, ...]
     hotspot_share: float
+    grid: Grid
+
+
+@dataclass(frozen=True, slots=True)
+class Grid:
+    """The dev map: the VFC grid (final-design 16.2; stand-ins for lights and stops: QUESTIONS Q24)."""
+
+    block_m: float
+    complex: bool
+    light_cycle_s: float
+    stop_probability: float
+    stop_s: tuple[float, float]
 
 
 @dataclass(frozen=True, slots=True)
@@ -667,6 +679,23 @@ def _layout(n: _Node) -> Layout:
         )
 
 
+def _grid(n: _Node) -> Grid:
+    with n:
+        stop = n.numbers("stop_s", ge=0.0)
+        if len(stop) != 2 or stop[0] > stop[1]:
+            raise ConfigError(n.key("stop_s"), f"must be [shortest, longest], got {list(stop)}")
+        flag = n.raw("complex")
+        if not isinstance(flag, bool):
+            raise ConfigError(n.key("complex"), f"must be true or false, got {flag!r}")
+        return Grid(
+            block_m=n.number("block_m", gt=0.0),
+            complex=flag,
+            light_cycle_s=n.number("light_cycle_s", gt=0.0),
+            stop_probability=_fraction(n, "stop_probability"),
+            stop_s=(stop[0], stop[1]),
+        )
+
+
 def _cars(n: _Node) -> Cars:
     with n:
         count = n.items("count")
@@ -684,6 +713,7 @@ def _cars(n: _Node) -> Cars:
             speed_low_mps=slow,
             speed_high_mps=fast,
             hotspot_share=_fraction(n, "hotspot_share"),
+            grid=_grid(n.node("grid")),
         )
 
 
