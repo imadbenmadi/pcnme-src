@@ -15,7 +15,6 @@ from pcnme.net.pipe import FifoPipe
 from pcnme.node.timetable import RunTimeTable, deterministic
 from pcnme.sim.clock import EventClock
 from pcnme.sim.rng import RandomStreams
-from pcnme.zone.estimates import PathEstimates, ZeroWanWait
 from pcnme.zone.zone import Cloud, DecisionContext, Option, TaskRecord, Zone
 
 CONFIG = Path(__file__).resolve().parents[2] / "config" / "default.yaml"
@@ -75,7 +74,6 @@ def one_zone(
     bus = Bus(clock, streams, cfg.links.broker_extra_delay)
     cloud = Cloud(clock, streams, cfg, table, bus)
     closed: list[TaskRecord] = []
-    est = PathEstimates(cfg, wan_wait=ZeroWanWait())
     zone = Zone(
         "z1",
         clock,
@@ -84,7 +82,6 @@ def one_zone(
         table,
         wan,
         cloud,
-        est,
         placement,
         mode=mode,
         hw_name=hw_name,
