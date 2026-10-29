@@ -13,10 +13,12 @@ The state plane (zone/statestore.py, M3.3): every zone and the cloud publish zon
 period, and every POST reply carries a snapshot; the anchor keeps the newest by version, counts its own
 pending sends (R1) and estimates ŵ_WAN from its cloud uploads (4.3). Placement (M3.5): here, a neighbour
 (POST over the own backhaul pipe, reply after the backhaul delay) or the cloud; a refusal gets the one
-re-decision (9.1).
+re-decision (9.1). Loss detection (M3.6, 9.3-9.4): an upload timeout per send, the executor's last will,
+a watchdog from the accept, a status probe before any retry, retries with the normal masks, best-effort
+cancels; the first result wins; no ack by the end is a drop.
 
 M3 PLACEHOLDERS, each the simplest correct thing behind a small interface:
-- No message is lost, so there is no watchdog, retry, cancel or republish (M3.6, M3.7).
+- No republish of a result after an attach or T_ack (M3.7).
 - Cars do not move: the anchor is always the serving zone (M3.8).
 """
 
@@ -40,7 +42,7 @@ from pcnme.net.series import CloudPath, SeriesTransfer
 from pcnme.node.executor import Accepted, Executor, Refused, Reply, Report, TaskRequest
 from pcnme.node.state import SlotState
 from pcnme.node.timetable import RunTimeTable
-from pcnme.sim.clock import EventClock
+from pcnme.sim.clock import EventClock, EventHandle
 from pcnme.sim.rng import RandomStreams
 from pcnme.zone.decision import DecisionContext, NeighbourView, Option, OptionView, Placement
 from pcnme.zone.estimates import PathEstimates
@@ -60,6 +62,22 @@ class EarlierAttempt:
     executor: str
     reply: str
     t_send: float
+
+
+@dataclass(slots=True)
+class AttemptInfo:
+    """One attempt as its anchor tracks it (9.3, 9.4): where it went, when, and its live timers."""
+
+    option: Option
+    executor: str
+    t_send: float
+    t_at_executor: float | None = None
+    input: float | None = None  # the input's transfer time (0 here)
+    live: bool = True  # sent and not yet ended, lost or cancelled
+    timer: EventHandle | None = None  # its upload timeout, then its watchdog
+    probes: int = 0
+    probe_timer: EventHandle | None = None
+    done_seen: bool = False  # a probe said done: if no result follows, it was lost (QUESTIONS Q23)
 
 
 @dataclass(slots=True)
@@ -92,6 +110,10 @@ class TaskRecord:
     parts: dict[str, float] = field(default_factory=dict)  # durations along the way, for the latency check
     earlier: list[EarlierAttempt] = field(default_factory=list)
     redecided: bool = False  # the one re-decision after a refusal is used (9.1)
+    attempts: dict[int, AttemptInfo] = field(default_factory=dict)
+    retries: int = 0  # retries of lost attempts used (9.1: 1 hard, 2 soft)
+    result_attempt: int | None = None  # the attempt whose result reached the anchor first (9.4.3)
+    end_timer: EventHandle | None = None  # no ack by the end: a drop (9.5.5)
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,6 +291,14 @@ class Zone:
         )  # δ̂_reply,cloud: the HTTP reply crosses the WAN, then the backhaul (Q20)
         self._tof = TofBroker(config, self._est)
         self._em = EnergyModel(config)
+        self._bh_d, self._wan_d = bh_d, wan_d
+        tm, sc = config.timing, config.scheduler
+        self._kappa = tm.kappa_up
+        self._t_ack = tm.t_ack
+        self._m_wd = {"fog": tm.m_wd_fog, "cloud": tm.m_wd_cloud}
+        self._t_probe = {"fog": sc.probe_timeout_fog, "cloud": sc.probe_timeout_cloud}
+        self._retry_limit = {"hard": sc.retries_hard, "soft": sc.retries_soft}
+        self.lose_reply: Callable[[AttemptKey], bool] | None = None  # test hook: an HTTP reply is lost
         self._versions = SnapshotCounter()
         self._placement = placement
         self.anchor = AnchorTable(zone_id)
@@ -335,6 +365,8 @@ class Zone:
             now, b_car, rec.w_radio, task.input_bits, rec.rate, self._mean_radio
         )  # 6A.3
         row = self.anchor.open(task, t_rx=now, d_a=rec.d_a)
+        end = rec.d_a + (task.l_max if task.cls == "soft" else 0.0) + self._t_ack  # 9.5.5, QUESTIONS Q23
+        rec.end_timer = self._clock.schedule(end, lambda: self._no_ack(rec))
         route = self._tof.classify(
             task.task_type,
             self._mode,
@@ -414,18 +446,22 @@ class Zone:
         w_bh = self.backhaul.wait_at(now)
         if option == "here":
             rec.executor = self.zone_id
+            info = rec.attempts[attempt] = AttemptInfo(option, self.zone_id, now, now, 0.0)
             budget = rec.d_a - self._est.t_ret_fog() - now  # 6C.9: d_k = d_A - T̂_ret,here
             req = TaskRequest(key, task.task_type, task.cls, task.l_max, budget)
             rec.t_at_executor, rec.budget = now, budget
             self._reply(rec, self.zone_id, pend, self.executor.submit(req), None, w_bh)
             return
         if option == "cloud":
+            rec.attempts[attempt] = AttemptInfo(option, CLOUD, now)
             self._send_cloud(rec, key, pend, view, w_bh)
             return
         target = self.neighbours.positions[int(option[1]) - 1]
         assert target is not None and view is not None and view.slot is not None
         rec.executor = target
+        info = rec.attempts[attempt] = AttemptInfo(option, target, now)
         t_in = self._est.t_in_neighbour(task.input_bits, w_bh)
+        self._upload_timer(rec, attempt, t_in, self._bh_d)
         budget = rec.d_a - now - t_in - self._est.t_ret_fog()  # 6C.9: B_k = d_A - t_s - T̂_in - T̂_ret
         req = TaskRequest(key, task.task_type, task.cls, task.l_max, budget)
         self.store.add_pending(target, pend, view.slot, task.cls, view.run)  # R1 (9.2)
@@ -437,7 +473,12 @@ class Zone:
         def at_peer() -> tuple[Reply, Snapshot]:
             rec.parts["input"] = tr.duration
             rec.t_at_executor, rec.budget = self._clock.now, budget
+            info.t_at_executor, info.input = self._clock.now, tr.duration
             return peer.handle(req)
+
+        def replied(r: tuple[Reply, Snapshot]) -> None:
+            if self.lose_reply is None or not self.lose_reply(key):
+                self._reply(rec, target, pend, r[0], r[1], w_bh)
 
         call(
             self._clock,
@@ -445,7 +486,7 @@ class Zone:
             lambda: self._bus.is_alive(target),
             at_peer,
             lambda r: back,
-            lambda r: self._reply(rec, target, pend, r[0], r[1], w_bh),
+            replied,
             caller_alive=lambda: self.mqtt.alive,
         )
 
@@ -454,7 +495,9 @@ class Zone:
     ) -> None:
         task, now, attempt = rec.task, self._clock.now, key.attempt
         rec.executor = CLOUD
+        info = rec.attempts[attempt]
         t_in = self._est.t_in_cloud(task.input_bits, w_bh)
+        self._upload_timer(rec, attempt, t_in, self._reply_cloud)
         budget = rec.d_a - now - t_in - self._est.t_ret_cloud()  # 6C.9: B_k = d_A - t_s - T̂_in - T̂_ret
         d_bh = hops.delay(self._streams, hops.BH_OUT, self._cfg.links.backhaul_delay, task.task_id, attempt)
         d_wan = hops.delay(self._streams, hops.WAN_IN, self._cfg.links.wan_delay, task.task_id, attempt)
@@ -470,11 +513,16 @@ class Zone:
             rec.transfer = tr
             rec.parts["input"] = tr.duration
             rec.t_at_executor, rec.budget = self._clock.now, req.budget
+            info.t_at_executor, info.input = self._clock.now, tr.duration
+            if not self._bus.is_alive(CLOUD):
+                return  # a dead cloud never replies
             reply, snap = self.cloud.handle(req)
             back = hops.delay(self._streams, hops.REPLY_WAN, self._cfg.links.wan_delay, task.task_id, attempt)
             back += hops.delay(
                 self._streams, hops.REPLY_BH, self._cfg.links.backhaul_delay, task.task_id, attempt
             )
+            if self.lose_reply is not None and self.lose_reply(key):
+                return
             self._clock.schedule(
                 self._clock.now + back, lambda: self._reply(rec, CLOUD, pend, reply, snap, w_bh)
             )
@@ -504,11 +552,16 @@ class Zone:
     ) -> None:
         """An executor's answer reaches the anchor (6C.10): its snapshot (R1), the pending send cleared, a
         ŵ_WAN sample on a cloud accept (4.3); a refusal leads to the one re-decision (9.1, 9.2)."""
-        if not self.anchor.is_open(rec.task.task_id):
-            return
         if snap is not None:
             self.store.on_snapshot(snap)
         self.store.clear_pending(executor_id, pend)
+        attempt = int(pend[1])  # type: ignore[call-overload]
+        info = rec.attempts.get(attempt)
+        if not self.anchor.is_open(rec.task.task_id) or info is None or not info.live:
+            return  # the task closed, or this attempt timed out and was cancelled
+        if info.timer is not None:
+            self._clock.cancel(info.timer)
+            info.timer = None
         if isinstance(reply, Accepted):
             if executor_id == CLOUD:
                 lk = self._cfg.links
@@ -518,8 +571,12 @@ class Zone:
                 sample -= self._reply_cloud
                 self.store.wan_sample(sample)
             rec.reply, rec.slot = "accepted", reply.slot
+            self._arm(
+                rec, attempt, self._clock.now, reply.wait + self._row_high(rec, executor_id, reply.slot)
+            )
         elif isinstance(reply, Refused):
             rec.reply = reply.reason
+            info.live = False
             self._refused(rec, reply.reason)
 
     def _refused(self, rec: TaskRecord, reason: str) -> None:
@@ -552,6 +609,198 @@ class Zone:
         )
         return t + self._est.t_ret_cloud() <= rec.d_a - now + task.l_max
 
+    # --- loss detection, retry and cancel (9.1, 9.3, 9.4) ---------------------------------------------------
+
+    def _kind(self, executor_id: str) -> str:
+        return "cloud" if executor_id == CLOUD else "fog"
+
+    def _hw(self, executor_id: str) -> str:
+        if executor_id == CLOUD:
+            return CLOUD
+        return self._hw_name if executor_id == self.zone_id else self._fog.get(executor_id, self._hw_name)
+
+    def _executor(self, executor_id: str) -> Executor:
+        if executor_id == self.zone_id:
+            return self.executor
+        return self.cloud.executor if executor_id == CLOUD else self.peers[executor_id].executor
+
+    def _reply_delay(self, executor_id: str) -> float:
+        """δ̂_reply,k (Q20): 0 here, the backhaul to a neighbour, WAN + backhaul from the cloud."""
+        if executor_id == self.zone_id:
+            return 0.0
+        return self._reply_cloud if executor_id == CLOUD else self._bh_d
+
+    def _row_high(self, rec: TaskRecord, executor_id: str, slot: SlotType) -> float:
+        row = self._cfg.time_table.row(rec.task.task_type, self._hw(executor_id), slot)
+        assert row is not None
+        return row.p95  # Ê^high (14.4, 18)
+
+    def _cap(self, rec: TaskRecord) -> float:
+        """9.3: the watchdog is capped at d_A (hard) or d_A + L_max (soft): after that the task is dropped."""
+        return rec.d_a + (rec.task.l_max if rec.task.cls == "soft" else 0.0)
+
+    def _upload_timer(self, rec: TaskRecord, attempt: int, t_in: float, reply: float) -> None:
+        """9.3: T_up,k = min(κ_up (T̂_in,k + δ̂_reply,k), d_A - t_s + ℓ), ℓ = 0 hard, L_max soft."""
+        now = self._clock.now
+        ell = rec.task.l_max if rec.task.cls == "soft" else 0.0
+        t_up = min(self._kappa * (t_in + reply), rec.d_a - now + ell)
+        info = rec.attempts[attempt]
+        info.timer = self._clock.schedule(now + max(0.0, t_up), lambda: self._upload_timeout(rec, attempt))
+
+    def _upload_timeout(self, rec: TaskRecord, attempt: int) -> None:
+        """9.1: no reply: treated as not placed. Re-decide (it counts as the one re-decision) and cancel the
+        first target, in case only its reply was lost. The pending send ends (R1)."""
+        info = rec.attempts[attempt]
+        info.timer = None
+        if not info.live or not self.anchor.is_open(rec.task.task_id):
+            return
+        self.store.clear_pending(info.executor, (rec.task.task_id, attempt))
+        self._cancel_attempt(rec, attempt)
+        rec.reply = "no_reply"
+        self._refused(rec, "no_reply")
+
+    def _arm(self, rec: TaskRecord, attempt: int, t_reply: float, rest: float) -> None:
+        """9.3: t_wd = t_reply - δ̂_reply + (the time it still needs: Ŵ + Ê^high from an accept) + δ̂_pub
+        + m_wd, capped (after the cap the end timer drops the task)."""
+        info = rec.attempts[attempt]
+        e = info.executor
+        pub = self.store.pub_delay.get(e, self.store.pub_delay.get(self.zone_id, 0.0))
+        t_wd = t_reply - self._reply_delay(e) + rest + pub + self._m_wd[self._kind(e)]
+        if t_wd < self._cap(rec):
+            info.timer = self._clock.schedule(t_wd, lambda: self._watchdog(rec, attempt))
+
+    def _watchdog(self, rec: TaskRecord, attempt: int) -> None:
+        """9.3: a fired watchdog does not prove a loss: probe first if the executor is alive, as far as the
+        anchor knows (no last will). Whether it answers is up to the executor."""
+        info = rec.attempts[attempt]
+        info.timer = None
+        if not info.live or not self.anchor.is_open(rec.task.task_id) or rec.result_attempt is not None:
+            return
+        e = info.executor
+        if info.done_seen or self.neighbours.online.get(e) is False:
+            self._lost(rec, attempt)  # its will said offline, or done but its result never came (Q23)
+            return
+        info.probes += 1
+        n = info.probes
+        key = AttemptKey(rec.task.task_id, self.zone_id, attempt)
+        go = self._link(e, rec, attempt, f"probe{n}")
+        back = self._link(e, rec, attempt, f"probe{n}_back")
+        info.probe_timer = self._clock.schedule(
+            self._clock.now + self._t_probe[self._kind(e)], lambda: self._probe_answer(rec, attempt, n, None)
+        )
+        call(
+            self._clock,
+            self._clock.now + go,
+            lambda: self._bus.is_alive(e),
+            lambda: self._executor(e).probe(key),
+            lambda r: back,
+            lambda r: self._probe_answer(rec, attempt, n, r),
+            caller_alive=lambda: self.mqtt.alive,
+        )
+
+    def _link(self, e: str, rec: TaskRecord, attempt: int, hop: str) -> float:
+        """One-way delay of a GET or DELETE to executor e: none here, the backhaul to a neighbour, backhaul
+        and WAN to the cloud; keyed by task, attempt and hop (C3)."""
+        if e == self.zone_id:
+            return 0.0
+        tid, lk = rec.task.task_id, self._cfg.links
+        d = hops.delay(self._streams, hops.CALL_BH, lk.backhaul_delay, (*tid, hop), attempt)
+        if e == CLOUD:
+            d += hops.delay(self._streams, hops.CALL_WAN, lk.wan_delay, (*tid, hop), attempt)
+        return d
+
+    def _probe_answer(
+        self, rec: TaskRecord, attempt: int, n: int, answer: tuple[str, float | None] | None
+    ) -> None:
+        """9.3: queued -> re-arm with the new estimate (a hard task that would now finish after d_A is retried
+        elsewhere if the retry mask allows, and this attempt cancelled); running -> re-arm with the remaining
+        Ê^high; done -> wait δ̂_pub + m_wd; skipped, aborted, not found or no reply (by T_probe) -> lost."""
+        info = rec.attempts[attempt]
+        if info.probes != n or info.probe_timer is None:
+            return  # a later probe, or this one was already answered or timed out
+        self._clock.cancel(info.probe_timer)
+        info.probe_timer = None
+        if not info.live or not self.anchor.is_open(rec.task.task_id) or rec.result_attempt is not None:
+            return
+        status, value = answer if answer is not None else ("no reply", None)
+        now = self._clock.now
+        if status == "queued" and value is not None:
+            row = self._cfg.time_table.row(rec.task.task_type, self._hw(info.executor), rec.slot or "gpu")
+            mean = row.mean if row is not None else 0.0
+            t_ret = self._est.t_ret_cloud() if info.executor == CLOUD else self._est.t_ret_fog()
+            if rec.task.cls == "hard" and now + value + mean + t_ret > rec.d_a:
+                self._lost(rec, attempt)  # it would finish too late: retry elsewhere, cancel this one
+                return
+            self._arm(rec, attempt, now, value + self._row_high(rec, info.executor, rec.slot or "gpu"))
+        elif status == "running" and value is not None:
+            self._arm(rec, attempt, now, value)
+        elif status == "done":
+            info.done_seen = True  # wait δ̂_pub + m_wd for its result
+            self._arm(rec, attempt, now + self._reply_delay(info.executor), 0.0)
+        else:
+            self._lost(rec, attempt)
+
+    def _lost(self, rec: TaskRecord, attempt: int) -> None:
+        """A lost attempt: cancel it (best effort) and retry if the retry mask allows, else drop (9.1)."""
+        self._cancel_attempt(rec, attempt)
+        rec.reply = "lost"
+        self._retry(rec)
+
+    def _retry(self, rec: TaskRecord) -> None:
+        """9.1: the whole task again from the stored input, at most 1 retry (hard) or 2 (soft). A retry is a
+        new decision with the normal masks (the retry mask): none open -> drop."""
+        if rec.retries >= self._retry_limit[rec.task.cls] or rec.route != "agent":
+            self._close(rec, "drop_lost")
+            return
+        rec.retries += 1
+        ctx = self._context(rec.task, self._clock.now, rec.d_a)
+        option = self._placement.choose(ctx)
+        if option is None:
+            self._close(rec, "drop_lost")
+            return
+        row = self.anchor.row(rec.task.task_id)
+        self._send(rec, row, option, next(v for v in ctx.views if v.option == option))
+
+    def _executor_died(self, zone_id: str) -> None:
+        """9.1: its last will: every attempt this anchor placed there is handled at once."""
+        for rec in list(self.records.values()):
+            if not self.anchor.is_open(rec.task.task_id):
+                continue
+            for a, info in list(rec.attempts.items()):
+                if info.live and info.executor == zone_id and rec.result_attempt is None:
+                    self.store.clear_pending(zone_id, (rec.task.task_id, a))
+                    self._lost(rec, a)
+                    break
+
+    def _end_attempt(self, info: AttemptInfo) -> None:
+        info.live = False
+        for timer in (info.timer, info.probe_timer):
+            if timer is not None:
+                self._clock.cancel(timer)
+        info.timer = info.probe_timer = None
+
+    def _cancel_attempt(self, rec: TaskRecord, attempt: int) -> None:
+        """9.4.2: DELETE /tasks/{id}?attempt=n&anchor=A, best effort: queued -> removed, running -> aborted,
+        unknown or finished -> ignored; twice is harmless. The attempt ends here at once."""
+        info = rec.attempts[attempt]
+        self._end_attempt(info)
+        e = info.executor
+        key = AttemptKey(rec.task.task_id, self.zone_id, attempt)
+        call(
+            self._clock,
+            self._clock.now + self._link(e, rec, attempt, "cancel"),
+            lambda: self._bus.is_alive(e),
+            lambda: self._executor(e).cancel(key),
+            lambda r: 0.0,
+            lambda r: None,
+        )
+
+    def _no_ack(self, rec: TaskRecord) -> None:
+        """9.5.5: no ack by the end (deadline, or deadline + L_max) is a drop (QUESTIONS Q23: + T_ack)."""
+        rec.end_timer = None
+        if self.anchor.is_open(rec.task.task_id):
+            self._close(rec, "drop_no_ack")
+
     # --- delivery, ack, close (6D, 6E, 8.6, 9.5, 10.3) ------------------------------------------------------
 
     def _on_message(self, d: Delivery) -> None:
@@ -561,6 +810,8 @@ class Zone:
             assert isinstance(st, ZoneStatus)
             before = set(self.neighbours.positions)
             self.neighbours.on_status(st.site, st.status == "online")  # 7.5.2-3
+            if st.status == "offline":
+                self._executor_died(st.zone_id)  # 9.1: every attempt placed there, at once
             if st.zone_id in set(self.neighbours.positions) - before:
                 self.mqtt.subscribe(topics.zone_state(st.zone_id))  # a new neighbour's state
             return
@@ -588,13 +839,24 @@ class Zone:
         if rec is None or not self.anchor.is_open(rec.task.task_id):
             return
         report = msg.report
-        rec.report = report
-        if msg.kind == "status":  # skipped or aborted, reported at once (8.6)
-            self._close(rec, f"drop_{report.outcome}")
+        a = msg.key.attempt
+        info = rec.attempts.get(a)
+        if msg.kind == "status":  # skipped, aborted (8.6) or cancelled by this anchor
+            if info is None or not info.live:
+                return  # an attempt this anchor already gave up or cancelled
+            self._end_attempt(info)
+            rec.report = report
+            if not any(i.live for i in rec.attempts.values()) and rec.result_attempt is None:
+                self._close(rec, f"drop_{report.outcome}")
             return
-        assert report.start is not None and rec.t_at_executor is not None
-        rec.parts["queue"] = report.start - rec.t_at_executor
-        rec.parts["run"] = report.busy
+        if rec.result_attempt is not None:
+            return  # 9.4.3: the first result wins; the car filters the copy
+        rec.result_attempt, rec.report = a, report
+        if info is not None:
+            self._end_attempt(info)
+        for other, i in rec.attempts.items():
+            if other != a and i.live:
+                self._cancel_attempt(rec, other)  # 9.4.3: cancel any attempt still alive
 
     def _push(self, car_id: str, msg: ResultMessage) -> None:
         """The serving zone pushes a result to the car over the radio downlink (10.3)."""
@@ -611,8 +873,17 @@ class Zone:
         rec = self.records.get(k.task_id)  # the anchor's record, while the car's zone is its anchor (M3.8)
         if rec is not None:
             rec.deliveries += 1
-            if rec.result_at_car is None:
+            info = rec.attempts.get(k.attempt)
+            if rec.result_at_car is None and info is not None and msg.report.start is not None:
+                # the latency parts of the copy that reached the car first (the one it keeps, 9.5.1)
                 rec.result_at_car = now
+                rec.parts["before_send"] = info.t_send - rec.t_rx
+                rec.parts.pop("input", None)
+                if info.input:
+                    rec.parts["input"] = info.input
+                assert info.t_at_executor is not None
+                rec.parts["queue"] = msg.report.start - info.t_at_executor
+                rec.parts["run"] = msg.report.busy
                 rec.parts["return"] = now - msg.report.finish
         confirm = car.receive(Result(TaskId(*k.task_id), k.anchor_id, k.attempt), now)  # type: ignore[arg-type]
         if confirm is None:
@@ -644,8 +915,14 @@ class Zone:
         return "drop_late"
 
     def _close(self, rec: TaskRecord, outcome: str) -> None:
+        """6E.15: close; cancel any other live attempt; stop every timer."""
         now = self._clock.now
         self.anchor.close(rec.task.task_id, outcome, now)  # raises if closed twice
+        if rec.end_timer is not None:
+            self._clock.cancel(rec.end_timer)
+        for a, info in rec.attempts.items():
+            if info.live:
+                self._cancel_attempt(rec, a)
         rec.outcome, rec.closed_at = outcome, now
         if self._on_close is not None:
             self._on_close(rec)
