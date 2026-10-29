@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from pcnme.bus.bus import Bus
 from pcnme.car.car import Car, Task
 from pcnme.car.placement import standin_uniform_disk
 from pcnme.config import Config
@@ -53,7 +54,8 @@ def run_one_zone(
     streams = RandomStreams.from_config(cfg, seed, "training")
     table = RunTimeTable.from_config(cfg, shape)
     wan = FifoPipe(cfg.derived.b_wan)
-    cloud = Cloud(clock, streams, cfg, table)
+    bus = Bus(clock, streams, cfg.links.broker_extra_delay)
+    cloud = Cloud(clock, streams, cfg, table, bus)
     est = PathEstimates(cfg, wan_wait=ZeroWanWait())
     if method == "greedy":
         placement: Placement = Greedy(cfg)
@@ -75,6 +77,7 @@ def run_one_zone(
         placement,
         mode=s.deadlines,
         hw_name=s.fog["z1"],
+        bus=bus,
         on_close=run.records.append,
     )
     centre = cfg.layout.zone_positions_m["z1"]
