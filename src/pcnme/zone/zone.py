@@ -34,6 +34,7 @@ from dataclasses import dataclass, field, replace
 from typing import Literal
 
 from pcnme.agent.inputs import Decision, Scales, build_inputs
+from pcnme.agent.reward import AttemptReward, RewardParams, dropped, settle
 from pcnme.bus import topics
 from pcnme.bus.bus import Bus, Client, Delivery
 from pcnme.bus.calls import call
@@ -94,6 +95,9 @@ class AttemptInfo:
     probe_timer: EventHandle | None = None
     done_seen: bool = False  # a probe said done: if no result follows, it was lost (QUESTIONS Q23)
     t_up: float = 0.0  # κ_up (T̂_in + δ̂_reply): the upload timeout, counted from the end of the own send (C7)
+    decided: bool = False  # a placement decision sent it (11.3.1); False for a boulder or the soft fallback
+    t_end: float | None = None  # when it ended at the anchor: refused, timed out, lost or cancelled (11.4)
+    report: Report | None = None  # its executor's report, if one reached the anchor by close + G (12.5)
 
 
 @dataclass(slots=True)
@@ -133,6 +137,9 @@ class TaskRecord:
     copy: ResultMessage | None = None  # the anchor's copy of the result, until close (6D.12)
     delivered_by: str | None = None  # the serving zone that pushed the copy the car kept (logs)
     republished: bool = False  # the one republish after T_ack without an ack (9.5.4)
+    republishes: int = 0  # every republish of the anchor's copy (12.2: each pays the return again)
+    rewards: dict[int, AttemptReward] = field(default_factory=dict)  # per attempt, at close + G (11.4)
+    drop_reward: float | None = None  # a task dropped before any attempt: intake or every option masked
 
 
 @dataclass(frozen=True, slots=True)
@@ -350,6 +357,9 @@ class Zone:
         self.registry: dict[str, GpsMessage] = {}
         self._gps_seq = 0
         self._on_close = on_close
+        self._rewards = RewardParams.from_config(config)
+        self._grace = config.timing.reward_grace_g  # G (11.3.3)
+        self.on_settle: Callable[[TaskRecord], None] | None = None  # the rewards are final (M4.3)
         self._mean_radio = sum(config.radio.uplink_delay) / 2
         self._scales = Scales.from_config(config)  # the fixed divisors of the 48 inputs (11.1)
         self.decisions: list[Decision] = []  # every decision with its inputs, masks and action (16.3, M4.1)
@@ -551,7 +561,7 @@ class Zone:
         if option is None:
             self._close(rec, "drop_masked")  # 7.3: every option masked
             return
-        self._send(rec, row, option, next(v for v in ctx.views if v.option == option))
+        self._send(rec, row, option, next(v for v in ctx.views if v.option == option), decided=True)
 
     def _neighbour(self, zone_id: str | None) -> NeighbourView:
         """One neighbour position as the anchor knows it (7.2): its newest snapshot, its own pending sends
@@ -617,9 +627,12 @@ class Zone:
 
     # --- placement and execution (6C) -----------------------------------------------------------------------
 
-    def _send(self, rec: TaskRecord, row: AnchorRow, option: Option, view: OptionView | None) -> None:
+    def _send(
+        self, rec: TaskRecord, row: AnchorRow, option: Option, view: OptionView | None, decided: bool = False
+    ) -> None:
         """One attempt (6C.9, 9.1): here, a neighbour (POST over the own backhaul pipe) or the cloud (backhaul
-        then WAN). Every placement has its own attempt number (5.5); an earlier one was refused."""
+        then WAN). Every placement has its own attempt number (5.5); an earlier one was refused. `decided`: a
+        placement decision sent it (11.3.1)."""
         now = self._clock.now
         task = rec.task
         if rec.option is not None and rec.executor is not None and rec.t_send is not None:
@@ -635,20 +648,20 @@ class Zone:
         w_bh = self.backhaul.wait_at(now)
         if option == "here":
             rec.executor = self.zone_id
-            info = rec.attempts[attempt] = AttemptInfo(option, self.zone_id, now, now, 0.0)
+            info = rec.attempts[attempt] = AttemptInfo(option, self.zone_id, now, now, 0.0, decided=decided)
             budget = rec.d_a - self._est.t_ret_fog() - now  # 6C.9: d_k = d_A - T̂_ret,here
             req = TaskRequest(key, task.task_type, task.cls, task.l_max, budget)
             rec.t_at_executor, rec.budget = now, budget
             self._reply(rec, self.zone_id, pend, self.executor.submit(req), None, w_bh)
             return
         if option == "cloud":
-            rec.attempts[attempt] = AttemptInfo(option, CLOUD, now)
+            rec.attempts[attempt] = AttemptInfo(option, CLOUD, now, decided=decided)
             self._send_cloud(rec, key, pend, view, w_bh)
             return
         target = self.neighbours.positions[int(option[1]) - 1]
         assert target is not None and view is not None and view.slot is not None
         rec.executor = target
-        info = rec.attempts[attempt] = AttemptInfo(option, target, now)
+        info = rec.attempts[attempt] = AttemptInfo(option, target, now, decided=decided)
         t_in = self._est.t_in_neighbour(task.input_bits, w_bh)
         self._upload_timer(rec, attempt, t_in, self._bh_d)
         budget = rec.d_a - now - t_in - self._est.t_ret_fog()  # 6C.9: B_k = d_A - t_s - T̂_in - T̂_ret
@@ -768,6 +781,7 @@ class Zone:
         elif isinstance(reply, Refused):
             rec.reply = reply.reason
             info.live = False
+            info.t_end = self._clock.now  # T_waste ends at the refusal (11.4)
             self._refused(rec, reply.reason)
 
     def _refused(self, rec: TaskRecord, reason: str) -> None:
@@ -780,7 +794,7 @@ class Zone:
             ctx = self._context(task, self._clock.now, rec.d_a)
             option = self._decide(ctx, "redecision")
             if option is not None:
-                self._send(rec, row, option, next(v for v in ctx.views if v.option == option))
+                self._send(rec, row, option, next(v for v in ctx.views if v.option == option), decided=True)
                 return
         if (
             task.cls == "soft"
@@ -973,7 +987,7 @@ class Zone:
             self._close(rec, "drop_lost")
             return
         row = self.anchor.row(rec.task.task_id)
-        self._send(rec, row, option, next(v for v in ctx.views if v.option == option))
+        self._send(rec, row, option, next(v for v in ctx.views if v.option == option), decided=True)
 
     def _executor_died(self, zone_id: str) -> None:
         """9.1: its last will: every attempt this anchor placed there is handled at once."""
@@ -988,6 +1002,8 @@ class Zone:
 
     def _end_attempt(self, info: AttemptInfo) -> None:
         info.live = False
+        if info.t_end is None:
+            info.t_end = self._clock.now  # T_waste ends here: loss detection or cancel (11.4)
         for timer in (info.timer, info.probe_timer):
             if timer is not None:
                 self._clock.cancel(timer)
@@ -1061,11 +1077,15 @@ class Zone:
 
     def _anchor_result(self, msg: ResultMessage) -> None:
         rec = self.records.get(msg.key.task_id)
-        if rec is None or not self.anchor.is_open(rec.task.task_id):
+        if rec is None:
             return
         report = msg.report
         a = msg.key.attempt
         info = rec.attempts.get(a)
+        if info is not None and info.report is None:
+            info.report = report  # its energy really spent (12.5), even after close, until close + G
+        if not self.anchor.is_open(rec.task.task_id):
+            return
         if msg.kind == "status":  # skipped, aborted (8.6) or cancelled by this anchor
             if info is None or not info.live:
                 return  # an attempt this anchor already gave up or cancelled
@@ -1132,6 +1152,7 @@ class Zone:
         assert rec.copy is not None
         k = rec.copy.key
         n = rec.deliveries + int(rec.republished) + 1
+        rec.republishes += 1
         topic = topics.car_result(rec.task.car_id)
         self.mqtt.publish(topic, rec.copy, qos=1, key=(*k.task_id, k.anchor_id, k.attempt, "republish", n))
 
@@ -1182,5 +1203,14 @@ class Zone:
             if info.live:
                 self._cancel_attempt(rec, a)
         rec.outcome, rec.closed_at = outcome, now
+        if not rec.attempts:
+            rec.drop_reward = dropped(self._rewards)  # 7.3: logged, no transition (no decision)
+        self._clock.schedule(now + self._grace, lambda: self._settle(rec))  # 11.3.3: final at close + G
         if self._on_close is not None:
             self._on_close(rec)
+
+    def _settle(self, rec: TaskRecord) -> None:
+        """6E.16, 11.3.3: every attempt gets its reward at close + G, with the energy reports in by then."""
+        rec.rewards = settle(rec, self.zone_id, self._rewards, self._em)
+        if self.on_settle is not None:
+            self.on_settle(rec)

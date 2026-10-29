@@ -372,6 +372,7 @@ class City:
                 run_s=p.get("run"),
                 return_s=p.get("return"),
                 zone_changed=int(r.delivered_by is not None and r.delivered_by != r.anchor),
+                reward=r.drop_reward,  # a drop before any attempt (7.3): logged, no transition
             )
             for a, i in sorted(r.attempts.items()):
                 last = a == max(r.attempts)
@@ -387,6 +388,7 @@ class City:
                 else:
                     result = r.reply if r.reply in ("lost", "no_reply") else (r.outcome or "")
                 rep_ = r.report if r.report is not None and r.report.key.attempt == a else None
+                rw = r.rewards.get(a)  # 11.4, final at close + G
                 self.log.add(
                     "attempts",
                     i.t_send,
@@ -402,6 +404,11 @@ class City:
                     t_start_s=rep_.start if rep_ else None,
                     t_finish_s=rep_.finish if rep_ else None,
                     t_result_at_car_s=r.result_at_car if a == r.result_attempt else None,
+                    reward=rw.reward if rw else None,
+                    reward_kind=rw.kind if rw else "",
+                    energy_j=rw.energy if rw else None,
+                    t_waste_s=rw.t_waste if rw else None,
+                    decided=i.decided,
                 )
 
     def _decision_rows(self) -> None:

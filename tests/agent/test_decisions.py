@@ -175,3 +175,15 @@ def test_a_parked_car_stays() -> None:
     (d,) = c.zones["z1"].decisions
     x = named(d.inputs)
     assert x["exit"] == 1.0 and x["next_stays"] == 1.0
+
+
+def test_every_attempt_row_carries_its_reward(run_dir: Path) -> None:
+    # 11.4, METRICS.md: reward, reward_kind, energy_j, t_waste_s (wasted only), decided; final at close + G.
+    rows = pq.read_table(run_dir / "attempts.parquet").to_pylist()
+    assert rows and all(r["reward"] is not None for r in rows)
+    assert {r["reward_kind"] for r in rows} <= {"delivered", "wasted", "dropped"}
+    assert all((r["t_waste_s"] is None) == (r["reward_kind"] != "wasted") for r in rows)
+    assert all(r["energy_j"] >= 0 for r in rows)
+    decisions = pq.read_table(run_dir / "decisions.parquet").to_pylist()
+    made = {(r["anchor"], r["task_id"], r["attempt"]) for r in decisions}
+    assert {(r["anchor"], r["task_id"], r["attempt"]) for r in rows if r["decided"]} == made
