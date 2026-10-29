@@ -169,21 +169,14 @@ def test_the_fifo_pipe_takes_a_per_transfer_rate() -> None:
 
 
 def test_hop_names_are_fixed_strings_in_one_place() -> None:
-    names = [
-        hops.RADIO_UP,
-        hops.RADIO_DOWN,
-        hops.BH_OUT,
-        hops.WAN_IN,
-        hops.PUB_BH,
-        hops.PUB_WAN,
-        hops.TO_ZONE,
-    ]
+    names = [hops.RADIO_UP, hops.RADIO_DOWN, hops.BH_OUT, hops.WAN_IN, hops.ACK_UP]
     assert len(set(names)) == len(names)
     assert all(isinstance(n, str) for n in names)
-    assert hops.STREAM[hops.RADIO_UP] == hops.STREAM[hops.RADIO_DOWN] == "radio"  # Q5
-    assert {hops.STREAM[h] for h in (hops.BH_OUT, hops.WAN_IN, hops.PUB_BH, hops.PUB_WAN, hops.TO_ZONE)} == {
-        "link_delays"
-    }
+    assert (
+        hops.STREAM[hops.RADIO_UP] == hops.STREAM[hops.RADIO_DOWN] == hops.STREAM[hops.ACK_UP] == "radio"
+    )  # Q5
+    assert {hops.STREAM[h] for h in (hops.BH_OUT, hops.WAN_IN)} == {"link_delays"}
+    assert set(hops.STREAM) == set(names)  # MQTT hops are drawn in the bus (M3.1)
 
 
 def test_a_hop_delay_is_uniform_on_its_interval_and_keyed_by_task_attempt_hop(cfg: Config) -> None:
