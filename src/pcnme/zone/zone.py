@@ -40,6 +40,7 @@ from pcnme.car.car import Car, Confirm, Result, Task
 from pcnme.config import Config, DeadlineMode, SlotType
 from pcnme.energy import EnergyModel
 from pcnme.ids import AttemptKey, SnapshotCounter, TaskId
+from pcnme.mobility.predictor import exit_time, next_zone
 from pcnme.net import hops
 from pcnme.net.pipe import FifoPipe
 from pcnme.net.radio import RadioTransfer, RadioUplink, shannon_rate
@@ -464,6 +465,19 @@ class Zone:
         if old is not None:
             self._clock.cancel(old)
         self._leave[car_id] = self._clock.schedule(self._clock.now + tm.t_leave, lambda: self._left(car_id))
+
+    def predict(self, car_id: str) -> tuple[float, str | None] | None:
+        """The anchor's mobility prediction from the car's last GPS (10.1, 10.2): (T_exit from its current
+        zone, the next zone going straight). None without a GPS sample; T_exit is infinite when stopped."""
+        g = self.registry.get(car_id)
+        if g is None:
+            return None
+        centres = {z: self._cfg.layout.zone_positions_m[z] for z in (self.zone_id, *self.peers)}
+        r = self._cfg.layout.zone_radius_m
+        if g.zone_id not in centres:
+            return None
+        p, v = (g.x, g.y), (g.vx, g.vy)
+        return exit_time(p, v, centres[g.zone_id], r), next_zone(p, v, g.zone_id, centres, r)
 
     def _left(self, car_id: str) -> None:
         """9.6: no GPS for T_leave: the car left (a gap): the serving role ends."""
