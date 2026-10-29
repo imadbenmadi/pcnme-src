@@ -24,6 +24,7 @@ from pcnme.config import Config, load_config
 from pcnme.node.executor import AttemptKey, Executor, Report, TaskRequest, TraceEntry
 from pcnme.node.timetable import RunTimeTable, exponential
 from pcnme.sim.clock import EventClock
+from pcnme.sim.quantize import to_ns
 from pcnme.sim.rng import RandomStreams
 from tests.acceptance.queueing import MEAN_RUN, erlang_c_wait, mmc_waits
 
@@ -137,7 +138,7 @@ def event_log_hash(cfg: Config, seed: int, seconds: float = 5.0) -> str:
     rate = cfg.derived.arrival_rate_per_zone["S2"]
     t, seq = 0.0, 0
     while True:
-        t += float(arrivals.exponential(1 / rate))
+        t += to_ns(float(arrivals.exponential(1 / rate)))  # whole ns: the same on every OS
         if t > seconds:
             break
         clock.run_until(t)
@@ -175,5 +176,6 @@ def test_the_event_log_hash_is_pinned(cfg: Config) -> None:
     assert event_log_hash(cfg, 2000) == GOLDEN_HASH
 
 
-# 28 Oct, Windows; re-pinned when Q10 made "high" the promotion default.
-GOLDEN_HASH = "915586064a17d722057b5bbde7f01aafc0b40fdbd069338198a83426789ab294"
+# 29 Oct, Windows; re-pinned for Q10 ("high" is the promotion default) and for whole-nanosecond draws
+# (sim/quantize.py: the Q10 pin differed on Linux, because exp / log1p differ in the last bit there).
+GOLDEN_HASH = "fa785cdea0726c254803a85d077fb3d50339c82b6e60944fafed28f8ccaca9db"

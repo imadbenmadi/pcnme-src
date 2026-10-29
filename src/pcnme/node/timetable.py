@@ -18,6 +18,7 @@ from types import MappingProxyType
 from typing import Protocol
 
 from pcnme.config import SLOT_TYPES, Config, ConfigError, SlotType, TimeRow
+from pcnme.sim.quantize import to_ns
 from pcnme.sim.rng import KeyPart, RandomStreams
 
 # The table's quantile columns (14.4): Ê^low and Ê^high are its p5 and p95.
@@ -129,5 +130,5 @@ class RunTimeTable:
     @staticmethod
     def draw(streams: RandomStreams, row: RunRow, task_id: tuple[KeyPart, ...], attempt: int) -> float:
         """The run time of this attempt on this row: u keyed by (task_id, attempt), through the row's inverse
-        CDF (CHANGES C3)."""
-        return row.distribution.inverse_cdf(streams.uniform("run_times", *task_id, attempt))
+        CDF (CHANGES C3), in whole nanoseconds so every OS gives the same run (sim/quantize.py)."""
+        return to_ns(row.distribution.inverse_cdf(streams.uniform("run_times", *task_id, attempt)))
