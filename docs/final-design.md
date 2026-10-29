@@ -21,6 +21,7 @@ This is the one complete design of PCNME. It merges the PCNME Architecture doc, 
 | 29 Oct | 4.1, 4.2, 6A.3, 15.3, 17 | The radio uplink shares its airtime equally among the cars uploading at once (each advances at R_car ÷ n) instead of one car at a time; W_radio is the extra push time from sharing, still known exactly at t_rx | CHANGES C6 (QUESTIONS Q18) |
 | 29 Oct | 18, 14.3 | The car's encode time is a config value, `timing.encode` (M, placeholder 0); the upload starts after it, and B_car does not subtract it again | QUESTIONS Q14 |
 | 29 Oct | 15.2 | Every drawn time is rounded to whole nanoseconds and every radio rate to whole bit/s, so one seed gives the same run on every OS | web review of PR #20 |
+| 30 Oct | 9.3 | The upload timeout T_up starts when the zone's own send has finished; before that only the deadline cap applies, and reaching it drops the attempt with no re-send | CHANGES C7 (QUESTIONS Q31) |
 
 ## 1. What PCNME is
 
@@ -442,6 +443,8 @@ A refusal costs a waste penalty in the reward (section 11.4), which is what teac
 ```latex
 T_{up,k} = \min\big(\kappa_{up}\,(\hat{T}_{in,k} + \hat{\delta}_{reply,k}),\; d_A - t_s + \ell\big), \qquad \ell = 0 \text{ (hard)},\; L_{max} \text{ (soft)}
 ```
+
+An upload still being sent is not a failure (CHANGES C7): while the zone's own send is going (the input has not yet reached the executor), only the deadline cap d_A + ℓ applies, and reaching it drops the attempt with no re-send. T_up is counted from the end of that send; only a reply missing after it counts as "no reply" (9.1).
 
 - **Last will:** zone/{id}/status = offline, immediate.
 - **Watchdog**, started at the accept reply (t_acc), using the executor's own wait estimate Ŵ from that reply:
