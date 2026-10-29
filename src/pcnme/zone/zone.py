@@ -38,6 +38,7 @@ from pcnme.sim.clock import EventClock
 from pcnme.sim.rng import RandomStreams
 from pcnme.zone.estimates import PathEstimates
 from pcnme.zone.intake import AnchorRow, AnchorTable, anchor_deadline
+from pcnme.zone.layout import CLOUD, NeighbourTable, Site
 from pcnme.zone.tof import TofBroker
 
 Option = Literal["here", "cloud"]
@@ -111,6 +112,21 @@ class ResultMessage:
 
 
 @dataclass(frozen=True, slots=True)
+class ZoneStatus:
+    """zone/{id}/status (5.2): retained; the last will says offline (7.2, 9.1)."""
+
+    zone_id: str
+    status: Literal["online", "offline"]
+    x: float
+    y: float
+    radius: float
+
+    @property
+    def site(self) -> Site:
+        return Site(self.zone_id, self.x, self.y, self.radius)
+
+
+@dataclass(frozen=True, slots=True)
 class AckMessage:
     """car/{id}/ack (5.2): the copy the car kept and its latency, from the serving zone."""
 
@@ -137,7 +153,17 @@ class Cloud:
     def __init__(
         self, clock: EventClock, streams: RandomStreams, config: Config, table: RunTimeTable, bus: Bus
     ) -> None:
-        self.mqtt = bus.connect("cloud", config.links.wan_delay, lambda d: None)
+        offline = ZoneStatus(CLOUD, "offline", 0.0, 0.0, 0.0)  # the cloud has no coverage circle
+        self.mqtt = bus.connect(
+            CLOUD, config.links.wan_delay, lambda d: None, will=(topics.zone_status(CLOUD), offline)
+        )
+        self.mqtt.publish(
+            topics.zone_status(CLOUD),
+            ZoneStatus(CLOUD, "online", 0.0, 0.0, 0.0),
+            qos=1,
+            key=(CLOUD, "status"),
+            retained=True,
+        )
         self.executor = Executor.from_config(
             clock, streams, config, "cloud", table, on_report=lambda r: publish_report(self.mqtt, "cloud", r)
         )
@@ -161,8 +187,11 @@ class Zone:
         hw_name: str = "F-GPU",
         *,
         bus: Bus,
+        start_sites: tuple[Site, ...] = (),
         on_close: Callable[[TaskRecord], None] | None = None,
     ) -> None:
+        """`start_sites`: the other zones active at start-up (deployment configuration, 7.5.2); none for a
+        zone alone."""
         self.zone_id = zone_id
         self._clock = clock
         self._streams = streams
@@ -173,11 +202,25 @@ class Zone:
         self.backhaul = FifoPipe(config.links.backhaul_bw)
         self._cloud_path = CloudPath(clock, self.backhaul, wan)
         self.cloud = cloud
+        x, y = config.layout.zone_positions_m[zone_id]
+        self.site = Site(zone_id, x, y, config.layout.zone_radius_m)
+        self.neighbours = NeighbourTable.at_start(self.site, list(start_sites), config.layout.d_nb_m)  # 7.5
+        offline = ZoneStatus(zone_id, "offline", x, y, self.site.radius)
         self.mqtt = bus.connect(
             zone_id,
             config.links.backhaul_delay,
             self._on_message,
-            will=(topics.zone_status(zone_id), "offline"),
+            will=(topics.zone_status(zone_id), offline),
+        )
+        for other in (*config.layout.zones, CLOUD):  # every zone and the cloud announce their status (5.2)
+            if other != zone_id:
+                self.mqtt.subscribe(topics.zone_status(other))
+        self.mqtt.publish(
+            topics.zone_status(zone_id),
+            ZoneStatus(zone_id, "online", x, y, self.site.radius),
+            qos=1,
+            key=(zone_id, "status"),
+            retained=True,
         )
         self.executor = Executor.from_config(
             clock, streams, config, hw_name, table, on_report=lambda r: publish_report(self.mqtt, zone_id, r)
@@ -301,6 +344,11 @@ class Zone:
 
     def _on_message(self, d: Delivery) -> None:
         scope, car_id, kind = topics.parse(d.topic)
+        if scope == "zone" and kind == "status":
+            st = d.payload
+            assert isinstance(st, ZoneStatus)
+            self.neighbours.on_status(st.site, st.status == "online")  # 7.5.2-3
+            return
         if scope != "car":
             return
         if kind == "result":
