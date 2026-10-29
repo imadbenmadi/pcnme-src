@@ -9,7 +9,8 @@ import pytest
 from pcnme.car.car import Task
 from pcnme.config import Config, load_config
 from pcnme.ids import TaskId
-from pcnme.net.radio import RadioUplink, shannon_rate
+from pcnme.net.radio import RadioTransfer, RadioUplink, shannon_rate
+from pcnme.sim.clock import EventClock
 from pcnme.zone.intake import AnchorTable, anchor_deadline
 
 
@@ -58,11 +59,17 @@ def test_the_anchor_deadline_by_hand(cfg: Config) -> None:
 
 
 def test_with_the_mean_delay_the_anchor_deadline_is_the_cars_deadline(cfg: Config) -> None:
-    # When the radio delay equals its mean, d_A = creation + D on the anchor's clock, for any wait and rate.
-    up = RadioUplink()
+    # When the radio delay equals its mean, d_A = creation + D on the anchor's clock, for any wait and rate,
+    # here with a T2 clip sharing the air (CHANGES C6).
+    clock = EventClock()
+    up = RadioUplink(clock)
     rate = shannon_rate(120.0, cfg.radio)
-    up.send(now=0.0, size_bits=72e6, rate=rate, delay=0.003)  # a T2 clip ahead of it
-    tr = up.send(now=0.001, size_bits=1.2e6, rate=rate, delay=0.003)
+    got: list[RadioTransfer] = []
+    clock.schedule(0.0, lambda: up.send(72e6, rate, 0.003, lambda tr: None))  # a T2 clip ahead of it
+    clock.schedule(0.001, lambda: up.send(1.2e6, rate, 0.003, got.append))
+    clock.run_until(1.0)
+    (tr,) = got
+    assert tr.wait > 0.001  # it shared the air with the T2
     d_a = anchor_deadline(
         t_rx=tr.delivery, b_car=0.100, w_radio=tr.wait, size_bits=1.2e6, rate=rate, mean_radio_delay=0.003
     )

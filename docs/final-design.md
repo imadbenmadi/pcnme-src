@@ -18,6 +18,9 @@ This is the one complete design of PCNME. It merges the PCNME Architecture doc, 
 | 28 Oct | 13.2 | Random draws keyed by task, not by event order: a run time is a uniform keyed by (seed, task id, attempt) through the inverse CDF of the row it runs on; a delay is keyed by (seed, task id, attempt, hop); arrivals and mobility stay sequential per car | CHANGES C3 (QUESTIONS Q6) |
 | 28 Oct | 8.5, 5.2 | The wait estimate is water-filling over each slot's remaining time r_i (published per slot instead of their sum R): Σ max(0, Ŵ − r_i) = B; still 0 while a slot is free; for c_q = 1 the same as before | CHANGES C4 |
 | 28 Oct | 14.4, 18 | Run times are lognormal, fitted to each row's mean and p95; the placeholder p5 factor is 0.75 (was 0.9); measured rows report the fitted p5 next to the measured one | CHANGES C5 (QUESTIONS Q7) |
+| 29 Oct | 4.1, 4.2, 6A.3, 15.3, 17 | The radio uplink shares its airtime equally among the cars uploading at once (each advances at R_car ÷ n) instead of one car at a time; W_radio is the extra push time from sharing, still known exactly at t_rx | CHANGES C6 (QUESTIONS Q18) |
+| 29 Oct | 18, 14.3 | The car's encode time is a config value, `timing.encode` (M, placeholder 0); the upload starts after it, and B_car does not subtract it again | QUESTIONS Q14 |
+| 29 Oct | 15.2 | Every drawn time is rounded to whole nanoseconds and every radio rate to whole bit/s, so one seed gives the same run on every OS | web review of PR #20 |
 
 ## 1. What PCNME is
 
@@ -118,13 +121,13 @@ T_{transfer} = W_{pipe} + \frac{S}{B} + d, \qquad d \sim \mathcal{U}(d_{min}, d_
 W_{pipe} = \max(0,\; t_{free} - t_{now}), \qquad t_{free} \leftarrow \max(t_{now}, t_{free}) + \frac{S}{B}
 ```
 
-S = the size in bits, B = the pipe's bandwidth, d = a random delay drawn per transfer, t_free = when the pipe is next free. The delay does not hold the pipe: the next transfer can be pushed while this one travels. Waiting costs time, never energy (section 12). A cloud transfer crosses two pipes in series, the zone's own backhaul pipe and the shared WAN pipe. Its packets flow through both at once, so it reaches the WAN pipe d_bh after it starts on the backhaul pipe, and the WAN pipe, the narrowest, sets the push time: T = W_bh + d_bh + W_WAN + S ÷ B_WAN + d_WAN. Fast mode simulates it this way; on the testbed TCP through two links does it by itself.
+S = the size in bits, B = the pipe's bandwidth, d = a random delay drawn per transfer, t_free = when the pipe is next free. The delay does not hold the pipe: the next transfer can be pushed while this one travels. Waiting costs time, never energy (section 12). A cloud transfer crosses two pipes in series, the zone's own backhaul pipe and the shared WAN pipe. Its packets flow through both at once, so it reaches the WAN pipe d_bh after it starts on the backhaul pipe, and the WAN pipe, the narrowest, sets the push time: T = W_bh + d_bh + W_WAN + S ÷ B_WAN + d_WAN. Fast mode simulates it this way; on the testbed TCP through two links does it by itself. The radio uplink is the one exception: the cars uploading at once share its airtime instead of queueing (4.2, CHANGES C6).
 
 ### 4.2 Every link
 
 | Link | Between | Bulk data on it | Delay d | Bandwidth | Who shares the pipe |
 | --- | --- | --- | --- | --- | --- |
-| Radio uplink | car → access point | task input | U(1, 5) ms (18) | each upload pushed at that car's Shannon rate R_car from its distance | all cars of the zone: one uplink per zone, one car at a time |
+| Radio uplink | car → access point | task input | U(1, 5) ms (18) | each upload pushed at that car's Shannon rate R_car from its distance; while n uploads are in progress each advances at R_car ÷ n | all cars of the zone: one uplink per zone, its airtime shared equally among the cars uploading at once (CHANGES C6) |
 | Radio downlink | access point → car | none (results are about 3 KB) | U(1, 5) ms (18) | not modelled | — |
 | Backhaul | zone → zone, zone → broker, zone → metro-edge router | task input to a neighbour; the first segment of a cloud transfer | 1–5 ms, random | 1 Gbps, fiber (18) | each zone has one outgoing pipe |
 | WAN | metro-edge router → cloud | task input to the cloud; FedAvg weights | 25–100 ms one way, random | the narrowest, about 515 Mbps (18); one value gives TI 0.5 / 0.9 / 1.5 in S1–S3 (16.2) | one pipe shared by all zones |
@@ -229,7 +232,7 @@ Three loops run all the time: **GPS** (each car → its serving zone every 100 m
 
 1. **Create.** The car creates the task: type (which fixes its time-table rows), class (hard or soft), deadline D, compressed input (JPEG per frame, N10). The car starts its own latency clock at creation.
 2. **Upload.** The car uploads to its serving zone over the radio pipe, with B_car = D − time since creation. A task exists only once the whole upload arrived (hole 12): that zone becomes the anchor, stores the input and answers task id + anchor id. A cut upload leaves nothing behind; the car re-uploads to the zone it reaches next.
-3. **Anchor deadline.** The whole upload has arrived at t_rx (anchor clock). The anchor sets the task's deadline on its own clock, taking off the upload time: W_radio = how long the upload waited in the zone's radio pipe (known exactly, because the zone owns its uplink), S ÷ R_car = its push time at the car's rate, δ̂_radio = the radio delay:
+3. **Anchor deadline.** The whole upload has arrived at t_rx (anchor clock). The anchor sets the task's deadline on its own clock, taking off the upload time: W_radio = the time from the upload's first bit to its last, minus S ÷ R_car (the extra time from sharing the air; known exactly, because the zone runs its uplink; CHANGES C6), S ÷ R_car = its push time alone at the car's rate, δ̂_radio = the radio delay:
 
 ```latex
 d_A = t_{rx} + B_{car} - \hat{U}_{up}, \qquad \hat{U}_{up} = W_{radio} + S / R_{car} + \hat{\delta}_{radio}
@@ -812,13 +815,13 @@ The zone service, the car app and the cloud service are written once in Python (
 | Clock and timers | Discrete-event simulated clock (one event queue, no waiting) | Real clock |
 | Links | The link-model formulas in code | tc netem delays and rate limits; the radio pipe in software |
 
-Every random draw comes from seeded generators, one per purpose (arrivals, run times, link delays, mobility), so the same seed gives the same run. Fast mode is used for NSGA-II, pretraining, baseline training and sweeps; the testbed for the final evaluation of every method. Training on the testbed alone is impossible: about 240 real-time runs (6 scenarios × 8 methods × 5 seeds) plus training and thousands of NSGA-II evaluations would take weeks.
+Every random draw comes from seeded generators, one per purpose (arrivals, run times, link delays, mobility), so the same seed gives the same run. Every drawn time (run times, link delays, arrival gaps) is rounded to whole nanoseconds, and every radio rate to whole bit/s, where it is made: log, exp, sin and cos may differ in the last bit between operating systems, and one bit can flip a scheduling decision, so without it the same seed could give different runs on Windows and Linux. No quantity in the design is near 1 ns or 1 bit/s. Fast mode is used for NSGA-II, pretraining, baseline training and sweeps; the testbed for the final evaluation of every method. Training on the testbed alone is impossible: about 240 real-time runs (6 scenarios × 8 methods × 5 seeds) plus training and thousands of NSGA-II evaluations would take weeks.
 
 ### 15.3 What comes from the VFC code
 
 Taken: the radio model (path loss + Shannon rate), the city grid and its mobility with random turns (extended with traffic lights and random stops), sensible parameter values, and its PPO agent as a baseline algorithm. Not taken: its environment loop, its state and actions, its delay equations (three errors found: follow its code, not its equations), its device-side decision, its parked service vehicles. Check its license before copying code; otherwise reimplement from the paper and cite it.
 
-**The radio uplink:** one FIFO pipe per zone; each upload is pushed at that car's current Shannon rate R_car, one car at a time. On the testbed tc cannot give every virtual car its own rate on one interface, so the pipe runs in software at the zone's intake with the fast-mode code (the car app sends R_car with the upload), and netem adds only the radio's base delay. Coverage is enforced in the car app: a car talks only to the zone covering its simulated position, and to nobody in a gap.
+**The radio uplink:** one pipe per zone whose airtime the cars uploading at once share equally: while n uploads are in progress each advances at that car's current Shannon rate R_car ÷ n (CHANGES C6). On the testbed tc cannot give every virtual car its own rate on one interface, so the pipe runs in software at the zone's intake with the fast-mode code (the car app sends R_car with the upload), and netem adds only the radio's base delay. Coverage is enforced in the car app: a car talks only to the zone covering its simulated position, and to nobody in a gap.
 
 ### 15.4 Testbed containers and networks
 
@@ -943,7 +946,7 @@ One sentence each in the thesis.
 - A dead anchor loses the tasks it owns (the car may still get a result, but no reward is recorded).
 - Connections between zones and to the cloud are persistent and warm (no TCP slow start).
 - Bandwidths and mean link delays are known configuration; only pipe waits are estimated.
-- The radio uplink is time-shared: one car transmits at a time, at its own Shannon rate. The rates come from free-space path loss (the VFC model), about 540–930 Mbps at 10–300 m, so the radio is not the bottleneck (radio TI about 0.3 in S2); every option pays the same upload.
+- The radio uplink shares its airtime equally among the cars uploading at once, each at its own Shannon rate (fluid processor sharing; real 5G NR and Wi-Fi 6 schedulers share airtime among users within a millisecond). The rates come from free-space path loss (the VFC model), about 540–930 Mbps at 10–300 m, so the radio is not the bottleneck (radio TI about 0.37 in S2), and a 150 KB frame is never held behind a 9 MB T2 clip (CHANGES C6); every option pays the same upload.
 - Execution times follow the measured table; a slot is one inference stream or one core group.
 - Every fog node has every task type's model loaded; only the task's input moves, never a container or a model (proactive service migration, as in MAPSM, moves hundreds of MB and is out of scope).
 - Security and privacy of messages and data are not covered.
@@ -993,6 +996,7 @@ Every number now has a default; together they form config/default.yaml. Tag: **P
 | Nodes | Q_q; r; h | Q_GPU = 32, Q_CPU = 16; r = 4; h = 2 | R | 32 queued T1 = 128 ms of work, more than D, so "late" binds before "full" for hard tasks. Soft tasks are admitted below 28 (GPU), and masked at 26 |
 | Scheduler | A_max; T_probe; T_keep | 200 ms; 50 ms (fog), 300 ms (cloud); 10 s | R | A_max = 2 × the loose hard D. T_probe covers about 10 backhaul round trips, or the WAN round-trip maximum plus margin. T_keep ≥ longest D + L_max = 6 s |
 | Timing | κ_up; m_wd; quantiles; λ; T_ack; T_leave; GPS expiry | 2; 20 ms (fog), 50 ms (cloud); 5 % and 95 %; 0.2; 200 ms; 300 ms; 1 s | R | T_ack ≫ result + radio + confirm (about 20 ms) |
+| Timing | Encode time (the car's JPEG encode, 14.3) | 0 s (placeholder) | M | `timing.encode`. Inside L: the upload starts at creation + encode, and B_car = D − time since creation already holds it, so it is not subtracted again (QUESTIONS Q14) |
 | State | State period; staleness | 100 ms; 300 ms | P | Section 9.2 |
 | Reward | B, P, w3, C_drop; w; G; ē | 1, 2, 1, 5; median knee weight; G = 500 ms; ē computed from the time table | P / C / R | G > the slowest status report (cloud one way 100 ms + broker) + d_abort. Placeholder ē ≈ 11.7 (T1 on a CPU slot at p95) |
 | RL | γ per τ; τ | 0.9 per 100 ms | P | Tang & Wong and QECO (0.9 per 0.1 s slot). At S2 an anchor decides every 13.5 ms, so the per-step factor is 0.986 and the horizon about 70 decisions |
