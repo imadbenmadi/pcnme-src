@@ -68,6 +68,13 @@ class NeighbourTable:
             table.online[s.zone_id] = True
         return table
 
+    def permute(self, order: list[int]) -> None:
+        """13.6, training only: position k takes the zone that was in position order[k], for one episode
+        (empty positions move too; next_zone follows, since it is read from the positions)."""
+        if sorted(order) != list(range(POSITIONS)):
+            raise ValueError(f"not a permutation of the {POSITIONS} positions: {order}")
+        self.positions = [self.positions[i] for i in order]
+
     def on_status(self, site: Site, online: bool) -> None:
         """A zone/{id}/status message: a zone new to this table joins (7.5.2); a known one goes offline or
         comes back, keeping its position either way (7.5.3)."""
