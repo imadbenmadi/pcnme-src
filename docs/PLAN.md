@@ -96,7 +96,7 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 
 - [~] **M6.1 Network**: 48 → 256 → 256 → dueling heads, masked argmax (11.2, 11.3).
 - [~] **M6.2 Losses** (13.5): 1-step double-DQN, n-step with the time-based discount, margin loss on expert transitions only, L2. The last transition of each anchor per episode has no s' (truncated, QUESTIONS Q36): leave it out of the bootstrapped targets (1-step and n-step).
-- [ ] **M6.3 Replay**: agent part (100 000) + expert part never overwritten; prioritized replay with ε_d, ε_a, α, β.
+- [~] **M6.3 Replay**: agent part (100 000) + expert part never overwritten; prioritized replay with ε_d, ε_a, α, β.
 - [ ] **M6.4 Pretraining loop** with held-out expert agreement and early stop.
 - [ ] **M6.5 Online learning** in every zone; neighbour order shuffled per episode in training (13.6).
 - [ ] **M6.6 Training curves** (TensorBoard or Grafana): loss, expert agreement, on-time rate and mean ê per episode.
