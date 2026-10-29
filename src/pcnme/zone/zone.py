@@ -49,6 +49,7 @@ class DecisionContext:
     cloud: dict[SlotType, SlotState]
     backhaul_wait: float  # the zone's own backhaul pipe, known exactly (4.3)
     estimates: PathEstimates
+    here_hw: str = "F-GPU"  # this zone's hardware class
 
     @property
     def time_left(self) -> float:
@@ -129,6 +130,7 @@ class Zone:
         self._streams = streams
         self._cfg = config
         self._mode: DeadlineMode = mode  # the scenario's deadlines (16.2), for the TOF-Broker
+        self._hw_name = hw_name
         self.uplink = RadioUplink()
         self.backhaul = FifoPipe(config.links.backhaul_bw)
         self._cloud_path = CloudPath(clock, self.backhaul, wan)
@@ -200,6 +202,7 @@ class Zone:
             cloud=dict(self.cloud.executor.snapshot()),
             backhaul_wait=self.backhaul.wait_at(now),
             estimates=self._est,
+            here_hw=self._hw_name,
         )
         option = self._placement.choose(ctx)
         if option is None:
