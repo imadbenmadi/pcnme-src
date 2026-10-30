@@ -48,6 +48,48 @@ def _run_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> Non
     p.add_argument("--population", type=int, default=None, help="knee-reference: NSGA-II population")
     p.add_argument("--generations", type=int, default=None, help="knee-reference: NSGA-II generations")
     p.add_argument("--workers", type=int, default=1, help="knee-reference: NSGA-II evaluations in parallel")
+    p.add_argument("--ablation", action="append", default=[], help="16.4 ablation by name (repeatable)")
+    p.add_argument(
+        "--set", action="append", default=[], metavar="KEY=VALUE", help="config override (YAML value)"
+    )
+    p.add_argument(
+        "--sweep", default=None, help="16.4 sweep: state-period, alpha, or a sensitivity parameter"
+    )
+    p.add_argument("--w", type=float, nargs="+", default=None, help="16.4 w sweep: these w values")
+    p.add_argument("--variant", default=None, help="label of the runs' directory (default: from the options)")
+
+
+def _points(
+    args: argparse.Namespace, source: dict[str, object]
+) -> list[tuple[str, tuple[tuple[str, object], ...]]]:
+    """The (variant, overrides) to run: the named ablations and --set entries, once or at each sweep point."""
+    import yaml
+
+    from pcnme.experiments.runner import ABLATIONS, sweep_points, w_points
+
+    fixed: list[tuple[str, object]] = []
+    labels: list[str] = []
+    for name in args.ablation:
+        if name not in ABLATIONS:
+            raise ValueError(f"unknown ablation {name!r}; known: {', '.join(ABLATIONS)}")
+        fixed += ABLATIONS[name]
+        labels.append(name)
+    for entry in args.set:
+        key, sep, value = entry.partition("=")
+        if not sep:
+            raise ValueError(f"--set needs KEY=VALUE, got {entry!r}")
+        fixed.append((key.strip(), yaml.safe_load(value)))
+        labels.append(f"{key.strip()}={value.strip()}")
+    points: list[tuple[str, tuple[tuple[str, object], ...]]] = [("", ())]
+    if args.sweep is not None:
+        points = sweep_points(source, args.sweep)
+    elif args.w is not None:
+        points = w_points(args.w)
+    out = []
+    for label, over in points:
+        variant = args.variant or "+".join(x for x in (*labels, label) if x)
+        out.append((variant, (*fixed, *over)))
+    return out
 
 
 def _run(args: argparse.Namespace) -> int:
@@ -55,27 +97,32 @@ def _run(args: argparse.Namespace) -> int:
     from pcnme.experiments.runner import RunSpec, parse_seeds, run
 
     try:
-        spec = RunSpec(
-            args.scenario,
-            args.method,
-            parse_seeds(args.seeds),
-            seconds=args.seconds,
-            n_cars=args.cars,
-            budget=args.budget,
-            train_seconds=args.train_seconds,
-            train_seed=args.train_seed,
-            demos=tuple(args.demos),
-            windows=args.windows,
-            pretrain_updates=args.pretrain_updates,
-            nsga_population=args.population,
-            nsga_generations=args.generations,
-            workers=args.workers,
-        )
-        result = run(load_yaml(args.config or DEFAULT_CONFIG_PATH), spec, args.out or _results())
-    except ValueError as e:  # seeds out of range (SeedError), unknown scenario, missing demonstrations
+        source = load_yaml(args.config or DEFAULT_CONFIG_PATH)
+        dirs = []
+        for variant, overrides in _points(args, source):
+            spec = RunSpec(
+                args.scenario,
+                args.method,
+                parse_seeds(args.seeds),
+                seconds=args.seconds,
+                n_cars=args.cars,
+                budget=args.budget,
+                train_seconds=args.train_seconds,
+                train_seed=args.train_seed,
+                demos=tuple(args.demos),
+                windows=args.windows,
+                pretrain_updates=args.pretrain_updates,
+                nsga_population=args.population,
+                nsga_generations=args.generations,
+                workers=args.workers,
+                overrides=overrides,
+                variant=variant,
+            )
+            dirs += run(source, spec, args.out or _results()).runs
+    except ValueError as e:  # seeds out of range (SeedError), unknown scenario, ablation or key
         print(f"pcnme run: {e}", file=sys.stderr)
         return 2
-    for d in result.runs:
+    for d in dirs:
         print(d)
     return 0
 

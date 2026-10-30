@@ -73,7 +73,7 @@ def fmt(ci: Interval, scale: float, digits: int) -> str:
 def write_csv(path: Path, summary: dict[tuple[str, str], dict[str, Interval]], runs: Sequence[Run]) -> None:
     seeds: dict[tuple[str, str], list[int]] = defaultdict(list)
     for r in runs:
-        seeds[(r.scenario, r.method)].append(r.seed)
+        seeds[(r.scenario, r.label)].append(r.seed)
     with path.open("w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
         w.writerow(["scenario", "method", "metric", "mean", "ci_low", "ci_high", "half", "n", "seeds"])
@@ -190,7 +190,7 @@ def report(paths: Sequence[Path], out: Path, early_decisions: int, plots: bool =
             loads: dict[str, list[dict[str, float]]] = defaultdict(list)
             for r in runs:
                 if r.scenario == sc:
-                    loads[r.method].append(zone_loads(read_table(r.path, "zones"), r.seconds))
+                    loads[r.label].append(zone_loads(read_table(r.path, "zones"), r.seconds))
             files.append(out / f"{sc}-load.png")
             plot_loads(files[-1], sc, loads)
     return files

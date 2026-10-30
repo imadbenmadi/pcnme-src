@@ -29,6 +29,7 @@ starts at the car's current rate and can be cut by a handover or a gap (9.7): no
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Literal
@@ -40,7 +41,7 @@ from pcnme.bus import topics
 from pcnme.bus.bus import Bus, Client, Delivery
 from pcnme.bus.calls import call
 from pcnme.car.car import Car, Confirm, Result, Task
-from pcnme.config import Config, DeadlineMode, SlotType
+from pcnme.config import Config, DeadlineMode, SlotType, StatePlane
 from pcnme.energy import EnergyModel
 from pcnme.ids import AttemptKey, SnapshotCounter, TaskId
 from pcnme.mobility.predictor import exit_time, next_zone
@@ -212,14 +213,40 @@ def busy_share(slots: Mapping[SlotType, SlotState]) -> float:
     return sum(s.u for s in slots.values()) / c if c else 0.0
 
 
-def start_state_loop(clock: EventClock, period: float, publish: Callable[[], None]) -> None:
-    """Publish now, then every state period (5.2: every 100 ms)."""
+def start_state_loop(
+    clock: EventClock, sp: StatePlane, publish: Callable[[], None], queues: Callable[[], tuple[int, ...]]
+) -> None:
+    """Publish now, then every state period (5.2: every 100 ms). With R3 (9.2, an extension): check every
+    min_interval and publish when a slot type's queue (hard + soft) changed by at least delta since the last
+    publish, or when heartbeat has passed since it (QUESTIONS Q47)."""
+    if not sp.r3.enabled:
 
-    def tick() -> None:
-        publish()
-        clock.schedule(clock.now + period, tick)
+        def tick() -> None:
+            publish()
+            clock.schedule(clock.now + sp.state_period, tick)
 
-    clock.schedule(clock.now, tick)
+        clock.schedule(clock.now, tick)
+        return
+    r3 = sp.r3
+    start = clock.now
+    beat = round(r3.heartbeat / r3.min_interval)  # ticks per heartbeat (a whole number, config)
+    last: list[tuple[int, ...]] = []
+    since = [0]
+
+    def check(k: int) -> None:
+        q = queues()
+        since[0] += 1
+        if (
+            not last
+            or since[0] >= beat
+            or any(abs(a - b) >= r3.delta for a, b in zip(q, last[0], strict=True))
+        ):
+            publish()
+            last[:] = [q]
+            since[0] = 0
+        clock.schedule(start + (k + 1) * r3.min_interval, lambda: check(k + 1))  # no drift over a run
+
+    clock.schedule(start, lambda: check(0))
 
 
 class Cloud:
@@ -244,12 +271,16 @@ class Cloud:
             clock, streams, config, "cloud", table, on_report=lambda r: publish_report(self.mqtt, "cloud", r)
         )
         self._versions = SnapshotCounter()
-        start_state_loop(clock, config.stateplane.state_period, self._publish_state)
+        start_state_loop(clock, config.stateplane, self._publish_state, self._queues)
 
     def snapshot(self) -> Snapshot:
         """The cloud's state: it never publishes ŵ_WAN, it cannot see the router's queue (4.3)."""
         slots = self.executor.snapshot()
         return Snapshot(CLOUD, self._versions.next(), slots, 0.0, None, busy_share(slots))
+
+    def _queues(self) -> tuple[int, ...]:
+        """Each slot type's queue length, hard + soft (R3's change test, 9.2)."""
+        return tuple(st.n_hard + st.n_soft for st in self.executor.snapshot().values())
 
     def _publish_state(self) -> None:
         s = self.snapshot()
@@ -372,7 +403,7 @@ class Zone:
         for z in self.neighbours.positions:
             if z is not None:
                 self.mqtt.subscribe(topics.zone_state(z))
-        start_state_loop(clock, sp.state_period, self._publish_state)
+        start_state_loop(clock, sp, self._publish_state, self._queues)
 
     # --- state plane (5.2, 9.2) -----------------------------------------------------------------------------
 
@@ -382,6 +413,10 @@ class Zone:
         return Snapshot(
             self.zone_id, self._versions.next(), slots, s.wan.estimate, s.own_wan_age(), busy_share(slots)
         )
+
+    def _queues(self) -> tuple[int, ...]:
+        """Each slot type's queue length, hard + soft (R3's change test, 9.2)."""
+        return tuple(st.n_hard + st.n_soft for st in self.executor.snapshot().values())
 
     def _publish_state(self) -> None:
         s = self.snapshot()
@@ -515,7 +550,10 @@ class Zone:
 
     def mobility(self, car_id: str) -> Mobility | None:
         """The predictor's output for the agent's inputs (11.1): T_exit, and the zone the car is heading to
-        (its current zone when stopped, QUESTIONS Q34). None without a GPS sample."""
+        (its current zone when stopped, QUESTIONS Q34). None without a GPS sample. 16.4 no predictor: exit = ∞
+        and next zone = stays, always."""
+        if not self._cfg.ablation.predictor:
+            return Mobility(math.inf, self.zone_id)
         p = self.predict(car_id)
         if p is None:
             return None
@@ -603,7 +641,9 @@ class Zone:
             cloud_pending=pending,  # type: ignore[arg-type]
             cloud_stale=self.store.is_stale(CLOUD),
             cloud_offline=self.neighbours.online.get(CLOUD) is False,
-            neighbours=tuple(self._neighbour(z) for z in self.neighbours.positions),
+            neighbours=tuple(self._neighbour(z) for z in self.neighbours.positions)
+            if self._cfg.ablation.neighbours
+            else (),  # 16.4: here + cloud only, the 4 positions empty
             cloud_age=self.store.age(CLOUD),
             mobility=self.mobility(task.car_id),
         )
@@ -1062,8 +1102,11 @@ class Zone:
         if kind == "result":
             msg = d.payload
             assert isinstance(msg, ResultMessage)
-            if car_id in self._cars and msg.kind == "result":
-                self._push(car_id, msg)  # serving role: results only, never status messages (8.6)
+            forward = self._cfg.ablation.result_forwarding or msg.key.anchor_id == self.zone_id
+            if car_id in self._cars and msg.kind == "result" and forward:
+                # serving role: results only, never status messages (8.6); 16.4 without forwarding: the
+                # anchor's own access point only
+                self._push(car_id, msg)
             if msg.key.anchor_id == self.zone_id:
                 self._anchor_result(msg)  # anchor role: keep the copy, or close on a drop
         elif kind == "ack":

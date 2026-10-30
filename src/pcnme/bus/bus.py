@@ -91,6 +91,7 @@ class Bus:
         self._retained_seq = 0
         self.faults = Faults()
         self.delivered = 0  # deliveries made (broker load, 9.2)
+        self.published = 0  # messages that reached the broker (9.2: broker messages per second)
 
     # --- clients --------------------------------------------------------------------------------------------
 
@@ -169,6 +170,7 @@ class Bus:
         retained: bool,
         expiry: float | None,
     ) -> None:
+        self.published += 1
         if retained:
             self._retained_seq += 1
             seq = self._retained_seq
