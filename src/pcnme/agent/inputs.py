@@ -91,6 +91,7 @@ class Decision:
     inputs: tuple[float, ...]
     masked: tuple[str | None, ...]
     action: int
+    model_version: tuple[int, int] = (0, 0)  # (global version, local updates since its install), 13.7.5
 
     @property
     def valid(self) -> tuple[bool, ...]:
