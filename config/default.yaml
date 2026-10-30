@@ -188,6 +188,9 @@ fast_mode:
   episode_length: 60.0           # P: VFC (1 min)
   eval_seeds: 20                 # N19
   testbed_seeds: 5
+  train_decisions: 8750000       # STAND-IN (QUESTIONS Q41): the training budget in decisions for every learning
+                                 # method (16.1), about 500 S2 episodes of 60 s (Tang & Wong and QECO need about
+                                 # 450-650 from random play, 13.5)
   seed_split: {nsga2_and_demos: 1000-1999, training: 2000-2999, evaluation: 3000-3999}   # Maus et al.: disjoint
 
 scenarios:                       # rho_fog = per-zone arrival rate x mean F-GPU GPU run of the whole mix / c_gpu

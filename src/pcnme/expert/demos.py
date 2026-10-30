@@ -193,3 +193,9 @@ def load_samples(paths: Sequence[Path]) -> list[tuple[tuple[str, int], Sample]]:
             )
             out.append(((row["scenario"], row["window"]), smp))
     return out
+
+
+def greedy_demonstrations(cfg: Config, window: Window) -> Demonstration:
+    """The greedy expert as teacher (16.1, D3QN + greedy expert): the window's greedy plan replayed with the
+    deployment w (no front, so no w_p), every first decision flagged as the plan's own."""
+    return replay(cfg, window, window.greedy_genome, cfg.reward.w)
