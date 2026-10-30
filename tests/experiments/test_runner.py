@@ -169,6 +169,16 @@ def test_the_knee_reference_replays_its_plan_on_the_evaluation_window(
     assert w["replayed"] == [obj.f1, obj.f2]
 
 
+def test_the_knee_reference_runs_on_s2_and_s4_and_the_first_5_seeds(
+    source: dict[str, Any], tmp_path: Path
+) -> None:
+    # Q45: nsga2.knee_reference {scenarios: [S2, S4], seeds: 5}; refused before any NSGA-II runs
+    with pytest.raises(ValueError, match="S2, S4 only"):
+        run(source, RunSpec("S1", "knee-reference", (3000,)), tmp_path)
+    with pytest.raises(ValueError, match="3000-3004 only"):
+        run(source, RunSpec("S4", "knee-reference", (3004, 3005)), tmp_path)
+
+
 def test_the_knee_reference_needs_the_whole_window(source: dict[str, Any], tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="window"):
         run(source, RunSpec("S2", "knee-reference", (3000,), seconds=5.0), tmp_path)

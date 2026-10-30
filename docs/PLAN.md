@@ -104,8 +104,17 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 
 ## M7 — Baselines, experiments, statistics
 
-- [ ] Baselines in the agent's seat with the same inputs, masks, reward and budget (16.1): D3QN from scratch, D3QN + greedy expert, VFC PPO, Tang & Wong, QECO, Greedy, Random, NSGA-II knee reference.
-- [ ] Scenario runner S1–S6, seeds from the evaluation range only, metrics and CIs (16.3), ablations and sweeps (16.4).
+- [x] Baselines in the agent's seat with the same inputs, masks, reward and budget (16.1): D3QN from scratch, D3QN + greedy expert, VFC PPO, Tang & Wong, QECO, Greedy, Random, NSGA-II knee reference.
+- [x] Scenario runner S1–S6, seeds from the evaluation range only, metrics and CIs (16.3), ablations and sweeps (16.4).
+
+Open (not built in M7):
+
+- [ ] Queue-order variants: FIFO, classes + FIFO, the full rule (8.7; 16.4).
+- [ ] The fixed refusal penalty ablation (16.4; only if the refusal rate stays high).
+- [ ] IQL instead of DQfD (16.4).
+- [ ] 60 inputs: both slot types per option (16.4).
+- [ ] Zone join, zone kill, broker restart (15.7; 16.4).
+- [ ] Missing metrics (16.3): next-zone acc@1 and T_exit error, delivery success after a zone change, decisions until the on-time rate is stable, the hypervolume of the fronts in the report.
 
 ## M8 — Federated learning (phase 2)
 

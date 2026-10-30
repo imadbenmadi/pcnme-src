@@ -128,6 +128,18 @@ def _check(cfg: Config, spec: RunSpec) -> None:
     if spec.method in LEARNING and spec.train_seed is not None:
         check_seeds(cfg, (spec.train_seed,), "training")
     if spec.method == "knee-reference":
+        # Q45: only these scenarios and the first evaluation seeds (one NSGA-II run per seed)
+        nsga = cfg.nsga2
+        if spec.scenario not in nsga.knee_scenarios:
+            raise ValueError(
+                f"the knee reference runs on {', '.join(nsga.knee_scenarios)} only (nsga2.knee_reference)"
+            )
+        first = cfg.fast_mode.seed_split["evaluation"].start
+        allowed = range(first, first + nsga.knee_seeds)
+        if any(s not in allowed for s in spec.seeds):
+            raise ValueError(
+                f"the knee reference runs on seeds {first}-{allowed.stop - 1} only (nsga2.knee_reference)"
+            )
         seconds = cfg.fast_mode.episode_length if spec.seconds is None else spec.seconds
         end = cfg.nsga2.t_warmup + cfg.nsga2.t_win
         if seconds < end:
