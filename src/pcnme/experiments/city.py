@@ -477,6 +477,8 @@ class City:
                     attempt=d.attempt,
                     kind=d.kind,
                     action=OPTIONS[d.action],
+                    model_version=d.model_version[0],  # 13.7.5: the FedAvg version it used
+                    local_updates=d.model_version[1],
                     **{f"x_{n}": x for n, x in zip(INPUT_NAMES, d.inputs, strict=True)},
                     **{f"masked_{o}": m or "" for o, m in zip(OPTIONS, d.masked, strict=True)},
                 )

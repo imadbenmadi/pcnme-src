@@ -668,6 +668,7 @@ class Zone:
                     inputs=ctx.inputs,
                     masked=tuple(v.masked for v in ctx.views),
                     action=OPTIONS.index(option),
+                    model_version=getattr(self._placement, "model_version", (0, 0)),  # 13.7.5; a rule: (0, 0)
                 )
             )
             self.transitions.on_decision(self.decisions[-1])  # s' of this anchor's previous decision
