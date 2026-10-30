@@ -32,7 +32,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
-from typing import Literal
+from typing import Any, Literal
 
 from pcnme.agent.inputs import Decision, Scales, build_inputs
 from pcnme.agent.reward import AttemptReward, RewardParams, dropped, settle
@@ -320,6 +320,7 @@ class Zone:
         zone alone."""
         self.zone_id = zone_id
         self._bus = bus
+        self.fl: Any = None  # the zone's FedAvg client (13.7), when federated
         self.peers: dict[str, Zone] = {}  # the other zones, for direct calls (5.3); set by the city
         self._fog = dict(fog_classes or {})  # every zone's hardware class: deployment configuration (Q21)
         self._clock = clock
@@ -1081,6 +1082,10 @@ class Zone:
     # --- delivery, ack, close (6D, 6E, 8.6, 9.5, 10.3) ------------------------------------------------------
 
     def _on_message(self, d: Delivery) -> None:
+        if d.topic.startswith("fl/"):
+            if self.fl is not None:  # 13.7: fl/round and fl/global go to the zone's FedAvg client
+                (self.fl.on_round if d.topic == "fl/round" else self.fl.on_global)(d.payload)
+            return
         scope, car_id, kind = topics.parse(d.topic)
         if scope == "zone" and kind == "status":
             st = d.payload
