@@ -14,4 +14,4 @@ def test_default_config_parses(default_config_path):
 
 
 def test_cli_reports_unimplemented_commands():
-    assert main(["run"]) == 2
+    assert main(["testbed"]) == 2
