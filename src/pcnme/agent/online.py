@@ -23,13 +23,14 @@ from dataclasses import dataclass, field
 import numpy as np
 import torch
 
+from pcnme.agent.budget import Budget, epsilon
 from pcnme.agent.inputs import Decision
 from pcnme.agent.losses import Batch, dqfd_loss
 from pcnme.agent.network import DuelingQNet, deterministic, masked_argmax
 from pcnme.agent.nstep import Sample, build
 from pcnme.agent.replay import Replay
 from pcnme.agent.transitions import Transition
-from pcnme.config import Config
+from pcnme.config import Config, EpsilonSchedule
 from pcnme.sim.rng import RandomStreams
 from pcnme.zone.decision import OPTIONS, DecisionContext, Option
 from pcnme.zone.zone import TaskRecord
@@ -86,9 +87,12 @@ class OnlineAgent:
     zone_id: str
     network: DuelingQNet
     expert: Sequence[Sample] = ()
-    seed: int = 2000  # a training seed: the agent's own streams
+    seed: int = 2000  # the agent's own streams: a seed of `usage`'s range
+    usage: str = "training"  # evaluation for a deployed agent (16.3: evaluation seeds only there)
     learn: bool = True
     epsilon: float | None = None  # default: rl.epsilon_online
+    budget: Budget | None = None  # the training budget in decisions, shared by every zone (16.1)
+    schedule: EpsilonSchedule | None = None  # the baselines' ε schedule over the budget (18)
     updates: int = 0
     new_samples: int = 0
     losses: list[tuple[int, float, float, float, float, float]] = field(default_factory=list)
@@ -96,7 +100,7 @@ class OnlineAgent:
     def __post_init__(self) -> None:
         deterministic()
         rl = self.cfg.rl
-        streams = RandomStreams.from_config(self.cfg, self.seed, "training")
+        streams = RandomStreams.from_config(self.cfg, self.seed, self.usage)
         self._eps_rng = streams.generator("agent", self.zone_id, "epsilon")
         self.replay = Replay(self.cfg, streams.generator("agent", self.zone_id, "replay"), self.expert)
         self.online = copy.deepcopy(self.network)
@@ -111,13 +115,26 @@ class OnlineAgent:
         valid = [v.masked is None for v in ctx.views]
         if not any(valid):
             return None  # 7.3: every option masked, no decision
-        if self._eps_rng.random() < self.eps:
+        if self._eps_rng.random() < self.current_epsilon():
             open_ = [i for i, v in enumerate(valid) if v]
-            return OPTIONS[open_[int(self._eps_rng.integers(len(open_)))]]
-        with torch.no_grad():
-            q = self.online(torch.tensor([ctx.inputs], dtype=torch.float32))
-            a = int(masked_argmax(q, torch.tensor([valid]))[0])
+            a = open_[int(self._eps_rng.integers(len(open_)))]
+        else:
+            with torch.no_grad():
+                q = self.online(torch.tensor([ctx.inputs], dtype=torch.float32))
+                a = int(masked_argmax(q, torch.tensor([valid]))[0])
+        if self.budget is not None:
+            self.budget.spend()  # a decision (16.1: the budget counts decisions)
         return OPTIONS[a]
+
+    def current_epsilon(self) -> float:
+        if self.schedule is not None and self.budget is not None:
+            return epsilon(self.schedule, self.budget.used, self.budget.total)
+        return self.eps
+
+    @property
+    def learning(self) -> bool:
+        """Learning stops once the shared budget is used up (16.1)."""
+        return self.learn and (self.budget is None or not self.budget.exhausted)
 
     # --- learning (13.5) -----------------------------------------------------------------------------------
 
@@ -141,7 +158,7 @@ class OnlineAgent:
         for s in samples:
             self.replay.add(s)
             self.new_samples += 1
-            if self.learn and self.new_samples * per >= self.updates + 1:
+            if self.learning and self.new_samples * per >= self.updates + 1:
                 self.update()
 
     def update(self) -> None:
