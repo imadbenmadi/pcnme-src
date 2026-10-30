@@ -118,7 +118,7 @@ Open (not built in M7):
 
 ## M8 — Federated learning (phase 2)
 
-- [ ] FedAvg rounds and the three variants (13.7).
+- [~] FedAvg rounds and the three variants (13.7).
 
 ## M9 — Docker testbed
 

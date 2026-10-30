@@ -28,6 +28,7 @@ from pcnme.bus.bus import Bus
 from pcnme.car.car import Car, Task
 from pcnme.config import Config
 from pcnme.energy import EnergyModel
+from pcnme.fl.fedavg import FedClient, FedServer, FedState
 from pcnme.ids import TaskId
 from pcnme.methods.simple import Greedy, Random
 from pcnme.metrics.runlog import RunLog
@@ -100,6 +101,10 @@ class CarDrop:
     kind: str = "gave_up"
 
 
+def _alive(zone: Zone) -> Callable[[], bool]:
+    return lambda: zone.mqtt.alive
+
+
 class City:
     def __init__(
         self,
@@ -115,14 +120,16 @@ class City:
         logging: bool = True,
         shuffle_neighbours: bool = False,
         method_name: str | None = None,
+        fed: FedState | None = None,
     ) -> None:
         """`usage`: the seed range (fast_mode.seed_split): training, or nsga2_and_demos for NSGA-II windows
         and demonstrations (16.3: never evaluation seeds). `logging`: the per-period rows (positions, zones,
         pipes); off for NSGA-II evaluations, which read only the task records. Neither changes the run.
         `shuffle_neighbours`: training (13.6): each zone's neighbour positions are permuted for this episode,
         drawn from its neighbour_order stream. A placement with an `attach(zone)` method is attached to its
-        zone (the online learner, M6.5). `method_name`: the method tag of the logs (METRICS.md) when `method`
-        is a factory."""
+        zone (the online learner, M6.5). `fed`: the FedAvg state that outlives this episode (13.7; with
+        ablation.federated other than none every zone's learner joins the rounds). `method_name`: the
+        method tag of the logs (METRICS.md) when `method` is a factory."""
         self.cfg = cfg
         self._logging = logging
         self.scenario = cfg.scenarios[scenario]
@@ -179,6 +186,21 @@ class City:
             attach = getattr(zone._placement, "attach", None)
             if attach is not None:
                 attach(zone)
+        self.fed = fed if fed is not None else FedState()
+        if cfg.ablation.federated != "none":  # 13.7: the cloud's rounds and each zone's client
+            self.fed_server = FedServer(clock, cfg, self.cloud.mqtt, self.fed)
+            for z, zone in self.zones.items():
+                zone.fl = FedClient(
+                    z,
+                    clock,
+                    streams,
+                    cfg,
+                    zone.mqtt,
+                    zone._cloud_path,
+                    self.fed_server,
+                    zone._placement,
+                    alive=_alive(zone),
+                )
         self.grid = RoadGrid.from_area(lay.area_m, cfg.cars.grid.block_m)
         hot_nodes = self.grid.within(lay.zone_positions_m["z1"], lay.zone_radius_m)
         rate_fleet = n_cars if n_cars is not None else cfg.cars.count[0]  # the fleet λ_car is set for (18)

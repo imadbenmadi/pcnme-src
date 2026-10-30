@@ -222,6 +222,8 @@ ablation:                        # final-design 16.4 switches; every default is 
                                  # share and the margin weight shrink linearly to 0 over the training budget) |
                                  # clear (dropped after pretraining)
   online: true                   # false: pretraining only, no online learning (Zhang et al.'s Only-BC)
+  federated: none                # 13.7 variants: none (no federated learning) | fedavg | finetune (FedAvg +
+                                 # local fine-tuning); phase 2, so phase-1 runs default to none
 
 scenarios:                       # rho_fog = per-zone arrival rate x mean F-GPU GPU run of the whole mix / c_gpu
                                  # (boulders included, final doc 16.2): S4-S6 keep S2's arrival rate

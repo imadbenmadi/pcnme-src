@@ -443,6 +443,7 @@ class Ablation:
     tof: bool
     expert: str  # keep | fade | clear
     online: bool
+    federated: str  # none | fedavg | finetune (13.7)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1089,6 +1090,7 @@ def _ablation(n: _Node) -> Ablation:
             tof=n.flag("tof"),
             expert=n.text("expert", ("keep", "fade", "clear")),
             online=n.flag("online"),
+            federated=n.text("federated", ("none", "fedavg", "finetune")),
         )
 
 
