@@ -160,7 +160,8 @@ rl:
   epsilon_baselines: [1.0, 0.01, 0.2]   # P: Tang & Wong (1 -> 0.01), over the first 20 % of the budget
   loss: mse                      # Huber if unstable (final doc 11.3)
   lstm_history_H: 10             # R: Tang & Wong and QECO baselines only
-  ppo: {clip: 0.2, lr: 3.0e-4, gae_lambda: 0.95, epochs: 10, minibatch: 64}   # P: Schulman et al. defaults
+  ppo: {clip: 0.2, lr: 3.0e-4, gae_lambda: 0.95, epochs: 10, minibatch: 64,   # P: Schulman et al. defaults
+        rollout: 1024, vf_coef: 0.5, ent_coef: 0.01}   # R (M7): decisions per zone per update; loss weights
 
 dqfd:                            # P: Hester et al. 2018
   n_step: 10

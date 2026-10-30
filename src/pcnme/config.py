@@ -468,6 +468,9 @@ class Ppo:
     gae_lambda: float
     epochs: int
     minibatch: int
+    rollout: int  # decisions per zone between two updates (M7)
+    vf_coef: float
+    ent_coef: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -1053,6 +1056,9 @@ def _rl(n: _Node) -> Rl:
                 gae_lambda=_fraction(p, "gae_lambda"),
                 epochs=p.integer("epochs", ge=1),
                 minibatch=p.integer("minibatch", ge=1),
+                rollout=p.integer("rollout", ge=1),
+                vf_coef=p.number("vf_coef", ge=0.0),
+                ent_coef=p.number("ent_coef", ge=0.0),
             )
         return Rl(
             gamma_per_tau=n.number("gamma_per_tau", ge=0.0, le=1.0),
