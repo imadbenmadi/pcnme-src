@@ -23,6 +23,8 @@ class TofBroker:
         self._est = estimates
 
     def is_boulder(self, task_type: str, mode: DeadlineMode) -> bool:
+        if not self._cfg.ablation.tof:
+            return False  # 16.4: no TOF-Broker (α = ∞)
         return self._cfg.is_boulder(task_type, mode)  # 7.1 step 1 (Ê_strong >= α D)
 
     def classify(

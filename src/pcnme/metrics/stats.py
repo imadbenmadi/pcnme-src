@@ -184,6 +184,12 @@ class Run:
     seed: int
     seconds: float  # the episode (arrivals); the drain after it is not part of the load
     metrics: dict[str, float]
+    variant: str = ""  # an ablation or a sweep point (16.4); empty for the design
+
+    @property
+    def label(self) -> str:
+        """The method as the tables show it: with its variant in brackets."""
+        return f"{self.method} [{self.variant}]" if self.variant else self.method
 
 
 def run_metrics(d: Path, early_decisions: int) -> Run:
@@ -215,7 +221,7 @@ def run_metrics(d: Path, early_decisions: int) -> Run:
     m["jain_load"] = jain(list(zone_loads(read_table(d, "zones"), info["seconds"]).values()))
     m["early_on_time"] = early_on_time(read_table(d, "decisions"), tasks, early_decisions)
     method = info.get("method", tasks[0]["method"] if tasks else "")
-    return Run(d, info["scenario"], method, info["seed"], info["seconds"], m)
+    return Run(d, info["scenario"], method, info["seed"], info["seconds"], m, info.get("variant") or "")
 
 
 def zone_loads(zones: Iterable[Mapping[str, Any]], until: float = math.inf) -> dict[str, float]:
@@ -244,10 +250,10 @@ def early_on_time(
 
 
 def summarise(runs: Sequence[Run]) -> dict[tuple[str, str], dict[str, Interval]]:
-    """(scenario, method) -> metric -> mean ± CI over its seeds; a seed counted twice is refused."""
+    """(scenario, method label) -> metric -> mean ± CI over its seeds; a seed counted twice is refused."""
     groups: dict[tuple[str, str], list[Run]] = defaultdict(list)
     for r in runs:
-        groups[(r.scenario, r.method)].append(r)
+        groups[(r.scenario, r.label)].append(r)
     out = {}
     for key, rs in sorted(groups.items()):
         seeds = [r.seed for r in rs]
@@ -317,5 +323,6 @@ def window_points(dirs: Sequence[Path]) -> list[WindowPoint]:
                 continue
             f1, f2, n = window_objectives(read_table(d, "tasks"), keys, i["objective"])
             dist = front_distance((f1, f2), window["front"]) if n else math.nan
-            out.append(WindowPoint(i["scenario"], i["method"], i["seed"], f1, f2, n, dist))
+            label = f"{i['method']} [{i['variant']}]" if i.get("variant") else i["method"]
+            out.append(WindowPoint(i["scenario"], label, i["seed"], f1, f2, n, dist))
     return sorted(out, key=lambda p: (p.scenario, p.seed, p.method))
