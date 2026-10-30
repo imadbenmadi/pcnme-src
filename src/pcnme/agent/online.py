@@ -19,6 +19,7 @@ from __future__ import annotations
 import copy
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -34,6 +35,9 @@ from pcnme.config import Config, EpsilonSchedule
 from pcnme.sim.rng import RandomStreams
 from pcnme.zone.decision import OPTIONS, DecisionContext, Option
 from pcnme.zone.zone import TaskRecord
+
+if TYPE_CHECKING:
+    from pcnme.fl.fedavg import FedState
 
 Key = tuple[object, int]
 
@@ -96,6 +100,7 @@ class OnlineAgent:
     updates: int = 0
     new_samples: int = 0
     losses: list[tuple[int, float, float, float, float, float]] = field(default_factory=list)
+    global_version: int = 0  # the FedAvg version it last installed (13.7.5; 0: its own model)
 
     def __post_init__(self) -> None:
         deterministic()
@@ -110,6 +115,8 @@ class OnlineAgent:
         self.eps = rl.epsilon_online if self.epsilon is None else self.epsilon
         self._loss_cfg: tuple[float, Config] = (1.0, self.cfg)
         self._fade()
+        self._uploaded_at = 0  # new_samples at the last FedAvg upload
+        self._installed_at = 0  # updates at the last install
 
     # --- acting (11.2) -------------------------------------------------------------------------------------
 
@@ -166,6 +173,33 @@ class OnlineAgent:
             self.new_samples += 1
             if self.learning and self.new_samples * per >= self.updates + 1:
                 self.update()
+
+    # --- FedAvg (13.7) --------------------------------------------------------------------------------------
+
+    @property
+    def new_experiences(self) -> int:
+        """Samples added since the last upload (13.7.2: none, nothing sent)."""
+        return self.new_samples - self._uploaded_at
+
+    def mark_uploaded(self) -> None:
+        self._uploaded_at = self.new_samples
+
+    def shared_state(self) -> dict[str, torch.Tensor]:
+        """The model it uploads: the shared model (13.7 table)."""
+        return self.online.state_dict()
+
+    def install(self, weights: dict[str, torch.Tensor], version: int) -> None:
+        """13.7.5: install the global model between two decisions and reset the target network. The
+        optimizer starts afresh too (engineering choice: its moments belong to the replaced weights)."""
+        self.online.load_state_dict(weights)
+        self.target.load_state_dict(weights)
+        self.opt = torch.optim.Adam(self.online.parameters(), lr=self.cfg.rl.lr)
+        self.global_version, self._installed_at = version, self.updates
+
+    @property
+    def model_version(self) -> tuple[int, int]:
+        """5.5: (global version, local update count since it was installed), logged with every decision."""
+        return self.global_version, self.updates - self._installed_at
 
     # --- the expert data online (16.4: kept / shrinking share + fading margin / cleared) ------------------
 
@@ -247,16 +281,21 @@ def train_online(
     seeds: Sequence[int],
     seconds: float,
     n_cars: int | None = None,
+    fed: FedState | None = None,
 ) -> list[Episode]:
-    """Online episodes in fast mode: the same agents across episodes, the neighbour order shuffled in each."""
+    """Online episodes in fast mode: the same agents across episodes, the neighbour order shuffled in each;
+    with federated learning (13.7) the FedAvg rounds go on across the episodes (one FedState)."""
     from pcnme.experiments.city import City
+    from pcnme.fl.fedavg import FedState
+
+    fed = fed if fed is not None else FedState()
 
     out = []
     for seed in seeds:
         before = {z: a.updates for z, a in agents.items()}
-        city = City(cfg, scenario, lambda c, s, z: agents[z], seed, n_cars, shuffle_neighbours=True).run(
-            seconds
-        )
+        city = City(
+            cfg, scenario, lambda c, s, z: agents[z], seed, n_cars, shuffle_neighbours=True, fed=fed
+        ).run(seconds)
         recs = [r for r in city.records if r.task.created < seconds]
         on_time, mean_e = episode_stats(cfg, recs)
         losses = [x[4] for a in agents.values() for x in a.losses if x[0] > before[a.zone_id]]
