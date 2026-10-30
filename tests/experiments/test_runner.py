@@ -83,6 +83,7 @@ def test_a_rule_runs_each_seed_and_writes_its_logs(source: dict[str, Any], tmp_p
         assert tasks and {(t["method"], t["seed"], t["scenario"]) for t in tasks} == {("random", seed, "S1")}
         i = info(d)
         assert (i["method"], i["usage"], i["seed"], i["training"]) == ("random", "evaluation", seed, None)
+        assert i["idle_w"] == pytest.approx(4 * 83.4 + 57)  # Q46: 4 active F-GPU nodes and one cloud server
     assert out.trained is None
 
 
