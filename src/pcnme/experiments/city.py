@@ -385,6 +385,7 @@ class City:
                 "tasks",
                 r.task.created,
                 anchor=r.anchor,
+                task_id=str(r.task.task_id),
                 type=r.task.task_type,
                 cls=r.task.cls,
                 outcome=r.outcome,
