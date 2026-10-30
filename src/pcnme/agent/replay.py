@@ -38,6 +38,14 @@ class SumTree:
             self.tree[j] = self.tree[2 * j] + self.tree[2 * j + 1]
             j //= 2
 
+    def set_many(self, start: int, values: np.ndarray) -> None:
+        """Leaves start, start + 1, ... at once; the sums above them rebuilt level by level."""
+        lo, hi = self.leaf0 + start, self.leaf0 + start + len(values)
+        self.tree[lo:hi] = values
+        while lo > 1:
+            lo, hi = lo // 2, (hi - 1) // 2 + 1
+            self.tree[lo:hi] = self.tree[2 * lo : 2 * hi : 2] + self.tree[2 * lo + 1 : 2 * hi : 2]
+
     def get(self, i: int) -> float:
         return float(self.tree[self.leaf0 + i])
 
@@ -76,8 +84,10 @@ class Replay:
         self.tree = SumTree(len(self.expert) + self.capacity)
         self.max_p = 1.0
         self.rng = rng
-        for i in range(len(self.expert)):
-            self.tree.set(i, self.max_p**self.alpha)
+        self.expert_scale = 1.0  # 16.4 fading: the expert part's priorities x this (1 = the design)
+        self._expert_p = np.full(len(self.expert), self.max_p**self.alpha)  # unscaled p^α
+        if len(self.expert):
+            self.tree.set_many(0, self._expert_p)
 
     def __len__(self) -> int:
         return len(self.expert) + len(self.agent)
@@ -119,7 +129,19 @@ class Replay:
         for i, d in zip(slots, td_errors, strict=True):
             p = abs(float(d)) + (self.eps_demo if self.is_expert(i) else self.eps_agent)
             self.max_p = max(self.max_p, p)
-            self.tree.set(i, p**self.alpha)
+            if self.is_expert(i):
+                self._expert_p[i] = p**self.alpha
+                self.tree.set(i, p**self.alpha * self.expert_scale)
+            else:
+                self.tree.set(i, p**self.alpha)
+
+    def scale_expert(self, f: float) -> None:
+        """16.4 shrinking share: draw the expert part with its priorities x f (0 <= f <= 1; 0: never)."""
+        if not 0.0 <= f <= 1.0:
+            raise ValueError(f"the expert scale must be in [0, 1], got {f}")
+        self.expert_scale = f
+        if len(self.expert):
+            self.tree.set_many(0, self._expert_p * f)
 
     def upsample_ratio(self, drawn: Drawn) -> float:
         """16.3: how often expert transitions are drawn against uniform sampling (DQfD's Fig. 1)."""

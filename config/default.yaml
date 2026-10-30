@@ -216,6 +216,10 @@ ablation:                        # final-design 16.4 switches; every default is 
   predictor: true                # false: no predictor (exit = inf, next zone = stays)
   result_forwarding: true        # false: the result reaches the car only through its anchor (9.6)
   tof: true                      # false: no TOF-Broker (alpha = inf: no boulders; B_WAN unchanged)
+  expert: keep                   # expert data online (13.5, 16.4): keep (with priorities) | fade (its sampling
+                                 # share and the margin weight shrink linearly to 0 over the training budget) |
+                                 # clear (dropped after pretraining)
+  online: true                   # false: pretraining only, no online learning (Zhang et al.'s Only-BC)
 
 scenarios:                       # rho_fog = per-zone arrival rate x mean F-GPU GPU run of the whole mix / c_gpu
                                  # (boulders included, final doc 16.2): S4-S6 keep S2's arrival rate
