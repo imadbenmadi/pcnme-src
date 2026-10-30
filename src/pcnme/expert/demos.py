@@ -123,6 +123,10 @@ def rows(demos: Sequence[Demonstration]) -> list[dict[str, Any]]:
                 "plan": d.plan,
                 "knee": d.is_knee,
                 "w": d.w,
+                "f1": d.objectives.f1,  # the plan's and greedy's objectives (13.2.4): the 16.4 filter
+                "f2": d.objectives.f2,
+                "greedy_f1": d.window.greedy.f1,
+                "greedy_f2": d.window.greedy.f2,
                 "anchor": t.anchor,
                 "task_id": str(t.task_id),
                 "attempt": t.attempt,
@@ -162,10 +166,29 @@ def write(path: Path, demos: Sequence[Demonstration]) -> Path:
     return path
 
 
-def load_samples(paths: Sequence[Path]) -> list[tuple[tuple[str, int], Sample]]:
+def beats_greedy(knee: tuple[float, float], greedy: tuple[float, float], w: float, margin: float) -> bool:
+    """16.4 expert filter (Maus et al.; QUESTIONS Q49 stand-in): the knee's cost w f1 + (1 - w) f2, with the
+    knee's own w, is at least `margin` (a share) below greedy's. A margin of 0 filters nothing."""
+    if margin <= 0.0:
+        return True
+    cost = w * knee[0] + (1.0 - w) * knee[1]
+    return cost <= (1.0 - margin) * (w * greedy[0] + (1.0 - w) * greedy[1])
+
+
+def load_samples(paths: Sequence[Path], filter_margin: float = 0.0) -> list[tuple[tuple[str, int], Sample]]:
     """The demonstrations as the learner's samples, each with its (scenario, window) for the held-out
-    split."""
+    split. With a filter margin > 0 (nsga2.expert_filter_margin, 16.4), only the windows whose knee plan
+    beats greedy by that share are kept."""
     import pyarrow.parquet as pq
+
+    def kept(rows_: list[dict[str, Any]]) -> set[tuple[str, int]]:
+        out_: set[tuple[str, int]] = set()
+        for r in rows_:
+            if r["knee"]:
+                pts = ((r["f1"], r["f2"]), (r["greedy_f1"], r["greedy_f2"]))
+                if beats_greedy(*pts, r["w"], filter_margin):
+                    out_.add((r["scenario"], r["window"]))
+        return out_
 
     def opt(row: dict[str, Any], prefix: str, names: Sequence[str]) -> tuple[Any, ...] | None:
         vals = tuple(row[f"{prefix}{n}"] for n in names)
@@ -173,7 +196,11 @@ def load_samples(paths: Sequence[Path]) -> list[tuple[tuple[str, int], Sample]]:
 
     out = []
     for path in paths:
-        for row in pq.read_table(path).to_pylist():
+        table = pq.read_table(path).to_pylist()
+        windows = kept(table) if filter_margin > 0.0 else None
+        for row in table:
+            if windows is not None and (row["scenario"], row["window"]) not in windows:
+                continue
             smp = Sample(
                 s=tuple(row[f"x_{n}"] for n in INPUT_NAMES),
                 a=row["a"],
@@ -193,6 +220,18 @@ def load_samples(paths: Sequence[Path]) -> list[tuple[tuple[str, int], Sample]]:
             )
             out.append(((row["scenario"], row["window"]), smp))
     return out
+
+
+def random_plan(cfg: Config, window: Window) -> tuple[int, ...]:
+    """16.4 random-plan expert (Lin et al.): a random valid individual of the window, one uniform gene per
+    task, from the window's own "nsga" stream (so the same plan every time)."""
+    from pcnme.sim.rng import RandomStreams
+
+    s = window.spec
+    rng = RandomStreams.from_config(cfg, s.seed, s.usage).generator(
+        "nsga", s.scenario, s.index, "random_plan"
+    )
+    return tuple(int(rng.integers(len(t.options))) for t in window.tasks)
 
 
 def greedy_demonstrations(cfg: Config, window: Window) -> Demonstration:

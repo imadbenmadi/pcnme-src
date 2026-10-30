@@ -56,6 +56,7 @@ def _run_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> Non
         "--sweep", default=None, help="16.4 sweep: state-period, alpha, or a sensitivity parameter"
     )
     p.add_argument("--w", type=float, nargs="+", default=None, help="16.4 w sweep: these w values")
+    p.add_argument("--teacher", default="knee", choices=("knee", "random"), help="pcnme: random-plan expert")
     p.add_argument("--variant", default=None, help="label of the runs' directory (default: from the options)")
 
 
@@ -87,7 +88,8 @@ def _points(
         points = w_points(args.w)
     out = []
     for label, over in points:
-        variant = args.variant or "+".join(x for x in (*labels, label) if x)
+        teacher = "random-expert" if args.teacher == "random" else ""
+        variant = args.variant or "+".join(x for x in (*labels, teacher, label) if x)
         out.append((variant, (*fixed, *over)))
     return out
 
@@ -115,6 +117,7 @@ def _run(args: argparse.Namespace) -> int:
                 nsga_population=args.population,
                 nsga_generations=args.generations,
                 workers=args.workers,
+                teacher=args.teacher,
                 overrides=overrides,
                 variant=variant,
             )
