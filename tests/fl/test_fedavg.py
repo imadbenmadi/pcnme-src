@@ -143,19 +143,21 @@ def test_the_agent_installs_the_global_model_and_resets_its_target(cfg: Config) 
 
 
 @pytest.mark.slow
-def test_a_federated_city_runs_rounds_with_real_agents() -> None:
-    # 13.7 end to end (fedavg variant): one 61 s episode (+ 30 s drain), 10 cars; the round at T_fl = 60 s
+@pytest.mark.parametrize("variant", ["fedavg", "finetune"])
+def test_a_federated_city_runs_rounds_with_real_agents(variant: str) -> None:
+    # 13.7 end to end: one 61 s episode (+ 30 s drain), 10 cars; the round at T_fl = 60 s
     # closes at 90 s and the download lands about 0.13 s later: every zone ends on version 1.
     from pcnme.agent.network import make_network
     from pcnme.agent.online import OnlineAgent
     from pcnme.experiments.city import City
 
-    cfg = fixed_delay_config(ablation__federated="fedavg")
+    cfg = fixed_delay_config(ablation__federated=variant)
     agents = {z: OnlineAgent(cfg, z, make_network(cfg, 1)) for z in ("z1", "z2", "z3", "z4")}
     c = City(cfg, "S2", lambda cf, s, z: agents[z], 2000, n_cars=10).run(61.0)
     assert c.fed.version == 1 and set(c.fed.rounds[0][2]) <= set(agents)
     for a in agents.values():  # each installed version 1 (and kept learning online afterwards)
         assert a.global_version == 1 and a.model_version[0] == 1
+        assert (a.personal is not None) == (variant == "finetune")
 
 
 def test_the_download_takes_time_and_a_zone_that_dies_meanwhile_installs_nothing() -> None:

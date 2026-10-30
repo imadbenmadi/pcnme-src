@@ -29,7 +29,7 @@ from pcnme.agent.inputs import Decision
 from pcnme.agent.losses import Batch, dqfd_loss
 from pcnme.agent.network import deterministic, masked_argmax
 from pcnme.agent.nstep import Sample, build
-from pcnme.agent.replay import Replay
+from pcnme.agent.replay import Drawn, Replay
 from pcnme.agent.transitions import Transition
 from pcnme.config import Config, EpsilonSchedule
 from pcnme.sim.rng import RandomStreams
@@ -117,6 +117,12 @@ class OnlineAgent:
         self._fade()
         self._uploaded_at = 0  # new_samples at the last FedAvg upload
         self._installed_at = 0  # updates at the last install
+        # 13.7 FedAvg + local fine-tuning: the personal copy that decides, its target and optimizer
+        self.personal: torch.nn.Module | None = None
+        self.personal_target: torch.nn.Module | None = None
+        self._personal_opt: torch.optim.Optimizer | None = None
+        self._personal_steps = 0
+        self.finetune_steps = 0  # fine-tuning steps at the last install
 
     # --- acting (11.2) -------------------------------------------------------------------------------------
 
@@ -129,7 +135,8 @@ class OnlineAgent:
             a = open_[int(self._eps_rng.integers(len(open_)))]
         else:
             with torch.no_grad():
-                q = self.online(torch.tensor([self.state(ctx)], dtype=torch.float32))
+                net = self.online if self.personal is None else self.personal  # 13.7 table: who decides
+                q = net(torch.tensor([self.state(ctx)], dtype=torch.float32))
                 a = int(masked_argmax(q, torch.tensor([valid]))[0])
         if self.budget is not None:
             self.budget.spend()  # a decision (16.1: the budget counts decisions)
@@ -195,6 +202,33 @@ class OnlineAgent:
         self.target.load_state_dict(weights)
         self.opt = torch.optim.Adam(self.online.parameters(), lr=self.cfg.rl.lr)
         self.global_version, self._installed_at = version, self.updates
+        if self.cfg.ablation.federated == "finetune":
+            self._personalize()
+
+    def _personalize(self) -> None:
+        """13.7 FedAvg + local fine-tuning: a personal copy of the new global model, fine-tuned K steps on
+        the zone's replay buffer, then trained online with the shared one. Fast mode does not time the
+        K steps (QUESTIONS Q51): the copy takes over at once, so decisions never wait."""
+        self.personal = copy.deepcopy(self.online)  # the online network holds the new weights now
+        self.personal_target = copy.deepcopy(self.online)
+        self._personal_opt = torch.optim.Adam(self.personal.parameters(), lr=self.cfg.rl.lr)
+        self._personal_steps = 0
+        self.finetune_steps = self.cfg.fedavg.finetune_k if len(self.replay) else 0
+        for _ in range(self.finetune_steps):
+            self._personal_step(self.replay.draw(self.cfg.rl.batch, self.cfg.dqfd.per.beta_final))
+
+    def _personal_step(self, drawn: Drawn) -> None:
+        """One step of the personal copy on a drawn batch; the priorities stay the shared model's."""
+        assert self.personal is not None and self.personal_target is not None and self._personal_opt
+        parts = dqfd_loss(
+            self.personal, self.personal_target, Batch.of(drawn.samples, drawn.weights), self.loss_config()
+        )
+        self._personal_opt.zero_grad()
+        parts.total.backward()
+        self._personal_opt.step()
+        self._personal_steps += 1
+        if self._personal_steps % self.cfg.rl.target_update_every == 0:
+            self.personal_target.load_state_dict(self.personal.state_dict())
 
     @property
     def model_version(self) -> tuple[int, int]:
@@ -239,6 +273,8 @@ class OnlineAgent:
         parts.total.backward()
         self.opt.step()
         self.replay.update(drawn.index, parts.td_errors.tolist())
+        if self.personal is not None:
+            self._personal_step(drawn)  # 13.7: every transition trains both copies
         self.updates += 1
         self.losses.append(
             (self.updates, parts.td, parts.n_step, parts.margin, float(parts.total.detach()), parts.mean_q)

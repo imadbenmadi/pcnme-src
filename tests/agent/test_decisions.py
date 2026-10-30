@@ -146,6 +146,7 @@ def test_the_run_logs_every_decision_with_its_48_inputs(run_dir: Path) -> None:
     rows = t.to_pylist()
     assert rows and {r["kind"] for r in rows} <= {"first", "redecision", "retry"}
     assert all(r[f"masked_{r['action']}"] == "" for r in rows)  # the action taken was open
+    assert all(r["model_version"] == r["local_updates"] == 0 for r in rows)  # 13.7.5: a rule method, (0, 0)
     tasks = pq.read_table(run_dir / "tasks.parquet").to_pylist()
     pebbles = [r for r in tasks if not r["boulder"] and r["outcome"] != "drop_masked"]
     assert len({(r["anchor"], r["task_id"]) for r in rows}) == len(pebbles)
