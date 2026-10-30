@@ -189,6 +189,8 @@ nsga2:
   T_warmup: 5.0                  # R: greedy run before the window, so it starts loaded
   windows_per_scenario: 20       # R
   expert_filter_margin: 0.0      # ablation sets it > 0 (Maus et al.)
+  knee_reference: {scenarios: [S2, S4], seeds: 5}  # 16.1, QUESTIONS Q45: the knee reference runs only here, on
+                                 # the first `seeds` evaluation seeds (one NSGA-II per seed)
 
 fast_mode:
   episode_length: 60.0           # P: VFC (1 min)

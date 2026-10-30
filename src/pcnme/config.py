@@ -569,6 +569,8 @@ class Nsga2:
     t_warmup: float
     windows_per_scenario: int
     expert_filter_margin: float
+    knee_scenarios: tuple[str, ...]  # the knee reference's scenarios (Q45)
+    knee_seeds: int  # ... and how many of the first evaluation seeds
 
 
 @dataclass(frozen=True, slots=True)
@@ -1219,6 +1221,8 @@ def _dqfd(n: _Node) -> Dqfd:
 def _nsga2(n: _Node) -> Nsga2:
     with n:
         n.marker("mutation_per_gene", "inverse_n")  # final-design 13.2: 1 / number of genes
+        with n.node("knee_reference") as knee:
+            knee_scenarios, knee_seeds = knee.texts("scenarios"), knee.integer("seeds", ge=1)
         return Nsga2(
             population=n.integer("population", ge=2),
             generations=n.integer("generations", ge=1),
@@ -1227,6 +1231,8 @@ def _nsga2(n: _Node) -> Nsga2:
             t_warmup=n.number("T_warmup", ge=0.0),
             windows_per_scenario=n.integer("windows_per_scenario", ge=1),
             expert_filter_margin=n.number("expert_filter_margin", ge=0.0),
+            knee_scenarios=knee_scenarios,
+            knee_seeds=knee_seeds,
         )
 
 

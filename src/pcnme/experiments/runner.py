@@ -128,6 +128,18 @@ def _check(cfg: Config, spec: RunSpec) -> None:
     if spec.method in LEARNING and spec.train_seed is not None:
         check_seeds(cfg, (spec.train_seed,), "training")
     if spec.method == "knee-reference":
+        # Q45: only these scenarios and the first evaluation seeds (one NSGA-II run per seed)
+        nsga = cfg.nsga2
+        if spec.scenario not in nsga.knee_scenarios:
+            raise ValueError(
+                f"the knee reference runs on {', '.join(nsga.knee_scenarios)} only (nsga2.knee_reference)"
+            )
+        first = cfg.fast_mode.seed_split["evaluation"].start
+        allowed = range(first, first + nsga.knee_seeds)
+        if any(s not in allowed for s in spec.seeds):
+            raise ValueError(
+                f"the knee reference runs on seeds {first}-{allowed.stop - 1} only (nsga2.knee_reference)"
+            )
         seconds = cfg.fast_mode.episode_length if spec.seconds is None else spec.seconds
         end = cfg.nsga2.t_warmup + cfg.nsga2.t_win
         if seconds < end:
@@ -301,6 +313,21 @@ def _window_check(cfg: Config, city: City, ref: KneeReference) -> dict[str, Any]
     return {**ref.plan, "replayed": [obj.f1, obj.f2], "applied": applied}
 
 
+def placement(
+    source: Mapping[str, object], cfg: Config, spec: RunSpec, trained: Trained | None, seed: int
+) -> tuple[str | Factory, KneeReference | None]:
+    """What runs in every zone for one evaluation seed: a rule by name, the trained method deployed (Q42),
+    or the knee reference with its plan for this seed's window (Q45)."""
+    if spec.method in RULES:
+        return spec.method, None
+    if spec.method == "knee-reference":
+        ref = knee_reference(source, cfg, spec, seed)
+        return ref.factory, ref
+    if trained is None:
+        raise ValueError(f"{spec.method} must be trained before it is deployed")
+    return deployed(cfg, trained, seed), None
+
+
 def report_constants(cfg: Config, scenario: str) -> dict[str, Any]:
     """What the report needs besides the logs (metrics/stats.py): the idle power of the scenario's nodes for
     the total energy (12: every active fog node and one cloud server, Q46) and the 13.2.4 cost constants for
@@ -411,16 +438,7 @@ def run(source: Mapping[str, object], spec: RunSpec, out: Path) -> RunResult:
             "broker_messages": None,
             **report_constants(cfg, spec.scenario),
         }
-        ref = None
-        method: str | Factory
-        if spec.method in RULES:
-            method = spec.method
-        elif spec.method == "knee-reference":
-            ref = knee_reference(source, cfg, spec, seed)
-            method = ref.factory
-        else:
-            assert result.trained is not None
-            method = deployed(cfg, result.trained, seed)
+        method, ref = placement(source, cfg, spec, result.trained, seed)
         city = City(
             cfg, spec.scenario, method, seed, spec.n_cars, usage="evaluation", method_name=spec.method
         ).run(seconds)
