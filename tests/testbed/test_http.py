@@ -154,3 +154,23 @@ def test_a_car_upload_is_answered_at_t_rx_and_a_cut_one_is_refused() -> None:
         TaskId("c1", 0, 1), "z2"
     )
     assert replies[2].status_code == 409  # cut before its last bit (9.7): nothing left behind
+
+
+def test_on_sent_runs_on_the_callers_loop_once_the_body_is_written() -> None:
+    target = FakeTarget()
+    tclock, http = serve(target)
+    caller = RealClock()
+    calls = HttpCalls(caller, {"z2": ""}, client=http)
+    sent: list[str] = []
+    out: list[object] = []
+    calls.post(
+        "z2",
+        None,
+        TaskRequest(KEY, "T1", "hard", 0.1, 0.07),
+        0.0,
+        out.append,
+        on_sent=lambda: sent.append(threading.current_thread().name),
+    )
+    caller.run_for(0.5)
+    tclock.stop()
+    assert sent == [threading.current_thread().name] and len(out) == 1
