@@ -9,13 +9,13 @@ from typing import Any
 import pytest
 
 pytest.importorskip("fastapi")
-from fastapi.testclient import TestClient
+from fastapi.testclient import TestClient  # noqa: E402
 
-from pcnme.ids import AttemptKey, SnapshotVersion, TaskId
-from pcnme.node.executor import Accepted, TaskRequest
-from pcnme.testbed.clock import RealClock
-from pcnme.testbed.http import HttpCalls, make_app
-from pcnme.zone.statestore import Snapshot
+from pcnme.ids import AttemptKey, SnapshotVersion, TaskId  # noqa: E402
+from pcnme.node.executor import Accepted, TaskRequest  # noqa: E402
+from pcnme.testbed.clock import RealClock  # noqa: E402
+from pcnme.testbed.http import HttpCalls, make_app  # noqa: E402
+from pcnme.zone.statestore import Snapshot  # noqa: E402
 
 KEY = AttemptKey(TaskId("c1", 0, 5), "z1", 1)
 SNAP = Snapshot("z2", SnapshotVersion(0, 1), {}, 0.0, None, 0.0)
@@ -93,3 +93,63 @@ def test_the_server_refuses_a_wrong_payload() -> None:
     from pcnme.testbed.codec import encode
 
     assert http.post("/tasks", content=encode(KEY)).status_code == 422
+
+
+class FakeZone(FakeTarget):
+    zone_id = "z2"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.rx: dict[object, Any] = {}
+        self.uploads: list[tuple[object, float, float]] = []
+
+    def upload(self, task: Any, rate: float, b_car: float, on_rx: Any) -> None:
+        self.uploads.append((task.task_id, rate, b_car))
+        self.rx[task.task_id] = on_rx
+
+    def cut_upload(self, task_id: object) -> bool:
+        return self.rx.pop(task_id, None) is not None
+
+
+def _upload(seq: int) -> Any:
+    from pcnme.car.car import Task
+    from pcnme.ids import TaskId
+    from pcnme.testbed.messages import Upload
+
+    task = Task(TaskId("c1", 0, seq), "c1", "T1", "hard", 0.1, 0.1, 1.2e6, 2.4e4, 0.0)
+    return Upload(task, b_car=0.09, rate=5e8)
+
+
+def test_a_car_upload_is_answered_at_t_rx_and_a_cut_one_is_refused() -> None:
+    from pcnme.ids import TaskId
+    from pcnme.testbed.codec import decode, encode
+    from pcnme.testbed.messages import UploadReply
+
+    zone = FakeZone()
+    tclock, http = serve(zone)
+    replies: dict[int, Any] = {}
+
+    def send(seq: int) -> None:
+        replies[seq] = http.post("/tasks", content=encode(_upload(seq)))
+
+    a, b = threading.Thread(target=send, args=(1,)), threading.Thread(target=send, args=(2,))
+    a.start(), b.start()
+    for _ in range(200):
+        if len(zone.rx) == 2:
+            break
+        threading.Event().wait(0.01)
+    tclock.call_soon(lambda: zone.rx.pop(TaskId("c1", 0, 1))())  # task 1 reaches t_rx
+    assert http.request("DELETE", "/uploads", content=encode(TaskId("c1", 0, 2))).status_code == 200
+    a.join(2), b.join(2)
+    tclock.stop()
+    assert zone.uploads == [
+        (TaskId("c1", 0, 1), 5e8, 0.09),
+        (TaskId("c1", 0, 2), 5e8, 0.09),
+    ] or zone.uploads == [
+        (TaskId("c1", 0, 2), 5e8, 0.09),
+        (TaskId("c1", 0, 1), 5e8, 0.09),
+    ]
+    assert replies[1].status_code == 200 and decode(replies[1].content) == UploadReply(
+        TaskId("c1", 0, 1), "z2"
+    )
+    assert replies[2].status_code == 409  # cut before its last bit (9.7): nothing left behind

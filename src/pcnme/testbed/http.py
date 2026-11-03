@@ -15,10 +15,11 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from pcnme.bus.calls import Target
-from pcnme.ids import AttemptKey
+from pcnme.ids import AttemptKey, TaskId
 from pcnme.node.executor import Reply, Status, TaskRequest
 from pcnme.testbed.clock import RealClock
 from pcnme.testbed.codec import decode, encode
+from pcnme.testbed.messages import Upload, UploadReply
 from pcnme.zone.statestore import Snapshot
 
 WORKERS = 16
@@ -86,6 +87,10 @@ class HttpCalls:
         self._at(arrive_at, lambda: self._send("DELETE", target, "/tasks", encode(key), lambda r: None))
 
 
+class Cut(Exception):
+    """An upload cut by a handover or a gap before its last bit (9.7)."""
+
+
 def make_app(clock: RealClock, target: Target, timeout: float = 5.0) -> Any:
     from fastapi import FastAPI, HTTPException, Request, Response
 
@@ -111,10 +116,45 @@ def make_app(clock: RealClock, target: Target, timeout: float = 5.0) -> Any:
             raise HTTPException(422, f"expected a {kind.__name__}")
         return obj
 
+    uploads: dict[object, concurrent.futures.Future[object]] = {}  # task id -> its reply, until t_rx or a cut
+
     @app.post("/tasks")
     async def post(request: Request) -> Response:
-        req = await body(request, TaskRequest)
-        return await on_loop(lambda: target.handle(req))
+        """A placed attempt from a zone (TaskRequest), or a car's upload (Upload, 5.3, 15.3): the upload runs
+        through the zone's software radio pipe and is answered at t_rx; a cut upload gets 409 (9.7)."""
+        obj = decode(await request.body())
+        if isinstance(obj, TaskRequest):
+            return await on_loop(lambda: target.handle(obj))
+        if not isinstance(obj, Upload):
+            raise HTTPException(422, "expected a TaskRequest or an Upload")
+        zone: Any = target
+        tid = obj.task.task_id
+        fut: concurrent.futures.Future[object] = concurrent.futures.Future()
+        uploads[tid] = fut
+
+        def rx() -> None:
+            uploads.pop(tid, None)
+            fut.set_result(UploadReply(tid, zone.zone_id))
+
+        clock.call_soon(lambda: zone.upload(obj.task, rate=obj.rate, b_car=obj.b_car, on_rx=rx))
+        try:
+            reply = await asyncio.wait_for(asyncio.wrap_future(fut), timeout)
+        except Cut:
+            raise HTTPException(409, "upload cut before its last bit") from None
+        return Response(encode(reply), media_type="application/json")
+
+    @app.delete("/uploads")
+    async def cut(request: Request) -> Response:
+        tid = await body(request, TaskId)
+
+        def run() -> bool:
+            done = bool(target.cut_upload(tid))  # type: ignore[attr-defined]
+            fut = uploads.pop(tid, None)
+            if done and fut is not None:
+                fut.set_exception(Cut())
+            return done
+
+        return await on_loop(run)
 
     @app.get("/tasks")
     async def get(request: Request) -> Response:
