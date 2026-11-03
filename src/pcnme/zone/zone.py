@@ -39,7 +39,7 @@ from pcnme.agent.reward import AttemptReward, RewardParams, dropped, settle
 from pcnme.agent.transitions import TransitionBuffer
 from pcnme.bus import topics
 from pcnme.bus.bus import Bus, Client, Delivery
-from pcnme.bus.calls import call
+from pcnme.bus.calls import Calls, FastCalls, Target
 from pcnme.car.car import Car, Confirm, Result, Task
 from pcnme.config import Config, DeadlineMode, SlotType, StatePlane
 from pcnme.energy import EnergyModel
@@ -320,6 +320,8 @@ class Zone:
         zone alone."""
         self.zone_id = zone_id
         self._bus = bus
+        # 5.3 HTTP calls: the target objects in fast mode; the testbed sets real ones (testbed/http.py)
+        self.calls: Calls = FastCalls(clock, self._target, bus.is_alive, lambda: self.mqtt.alive)
         self.fl: Any = None  # the zone's FedAvg client (13.7), when federated
         self.peers: dict[str, Zone] = {}  # the other zones, for direct calls (5.3); set by the city
         self._fog = dict(fog_classes or {})  # every zone's hardware class: deployment configuration (Q21)
@@ -477,14 +479,22 @@ class Zone:
             if car_id not in self._cars:
                 self.registry.pop(car_id, None)  # 9.6: the anchor drops the car's predictor state
 
-    def upload(self, task: Task, rate: float | None = None) -> None:
+    def upload(
+        self,
+        task: Task,
+        rate: float | None = None,
+        b_car: float | None = None,
+        on_rx: Callable[[], None] | None = None,
+    ) -> None:
         """The car uploads its task over the zone's radio, sharing its airtime with the other uploads in
         progress (6A.2, CHANGES C6), at its current rate (`rate`, from its distance now; by default the rate
-        at its attach); the task exists at t_rx."""
+        at its attach); the task exists at t_rx. On the testbed the car sends R_car and B_car with the upload
+        (5.3 POST /tasks, 15.3) and `on_rx` answers it at t_rx; in fast mode B_car comes from the car."""
         car, attach_rate = self._cars[task.car_id]
         rate = attach_rate if rate is None else rate
         now = self._clock.now
-        b_car = car.budget(task, now)
+        if b_car is None:
+            b_car = car.budget(task, now)
         d = hops.delay(
             self._streams, hops.RADIO_UP, self._cfg.radio.uplink_delay, task.task_id, hops.UPLOAD_ATTEMPT
         )
@@ -496,6 +506,8 @@ class Zone:
             self._uploads.pop(task.task_id, None)
             rec.w_radio = tr.wait  # known exactly at t_rx: the zone runs its uplink (6A.3)
             rec.parts["upload"] = tr.duration
+            if on_rx is not None:
+                on_rx()
             self._intake(rec, b_car)
 
         self._uploads[task.task_id] = self.uplink.send(
@@ -720,27 +732,17 @@ class Zone:
         tr = self.backhaul.send(now=now, size_bits=task.input_bits, delay=d_bh)  # POST /tasks + the input
         self._clock.schedule(tr.delivery, lambda: self._sent(rec, attempt))  # the own send is done (C7)
         back = hops.delay(self._streams, hops.REPLY_BH, self._cfg.links.backhaul_delay, task.task_id, attempt)
-        peer = self.peers[target]
 
-        def at_peer() -> tuple[Reply, Snapshot]:
+        def at_peer() -> None:
             rec.parts["input"] = tr.duration
             rec.t_at_executor, rec.budget = self._clock.now, budget
             info.t_at_executor, info.input = self._clock.now, tr.duration
-            return peer.handle(req)
 
         def replied(r: tuple[Reply, Snapshot]) -> None:
             if self.lose_reply is None or not self.lose_reply(key):
                 self._reply(rec, target, pend, r[0], r[1], w_bh)
 
-        call(
-            self._clock,
-            tr.delivery,
-            lambda: self._bus.is_alive(target),
-            at_peer,
-            lambda r: back,
-            replied,
-            caller_alive=lambda: self.mqtt.alive,
-        )
+        self.calls.post(target, tr.delivery, req, back, replied, at_peer)
 
     def _send_cloud(
         self, rec: TaskRecord, key: AttemptKey, pend: tuple[object, ...], view: OptionView | None, w_bh: float
@@ -767,18 +769,16 @@ class Zone:
             rec.t_at_executor, rec.budget = self._clock.now, req.budget
             info.t_at_executor, info.input = self._clock.now, tr.duration
             self._sent(rec, attempt)  # the own send is done (C7)
-            if not self._bus.is_alive(CLOUD):
-                return  # a dead cloud never replies
-            reply, snap = self.cloud.handle(req)
             back = hops.delay(self._streams, hops.REPLY_WAN, self._cfg.links.wan_delay, task.task_id, attempt)
             back += hops.delay(
                 self._streams, hops.REPLY_BH, self._cfg.links.backhaul_delay, task.task_id, attempt
             )
-            if self.lose_reply is not None and self.lose_reply(key):
-                return
-            self._clock.schedule(
-                self._clock.now + back, lambda: self._reply(rec, CLOUD, pend, reply, snap, w_bh)
-            )
+
+            def replied(r: tuple[Reply, Snapshot]) -> None:
+                if self.lose_reply is None or not self.lose_reply(key):
+                    self._reply(rec, CLOUD, pend, r[0], r[1], w_bh)
+
+            self.calls.post(CLOUD, None, req, back, replied)
 
         self._cloud_path.send(task.input_bits, d_bh, d_wan, arrived)
 
@@ -873,10 +873,10 @@ class Zone:
             return CLOUD
         return self._hw_name if executor_id == self.zone_id else self._fog.get(executor_id, self._hw_name)
 
-    def _executor(self, executor_id: str) -> Executor:
+    def _target(self, executor_id: str) -> Target:
         if executor_id == self.zone_id:
-            return self.executor
-        return self.cloud.executor if executor_id == CLOUD else self.peers[executor_id].executor
+            return self
+        return self.cloud if executor_id == CLOUD else self.peers[executor_id]
 
     def _reply_delay(self, executor_id: str) -> float:
         """δ̂_reply,k (Q20): 0 here, the backhaul to a neighbour, WAN + backhaul from the cloud."""
@@ -965,15 +965,7 @@ class Zone:
         info.probe_timer = self._clock.schedule(
             self._clock.now + self._t_probe[self._kind(e)], lambda: self._probe_answer(rec, attempt, n, None)
         )
-        call(
-            self._clock,
-            self._clock.now + go,
-            lambda: self._bus.is_alive(e),
-            lambda: self._executor(e).probe(key),
-            lambda r: back,
-            lambda r: self._probe_answer(rec, attempt, n, r),
-            caller_alive=lambda: self.mqtt.alive,
-        )
+        self.calls.probe(e, self._clock.now + go, key, back, lambda r: self._probe_answer(rec, attempt, n, r))
 
     def _link(self, e: str, rec: TaskRecord, attempt: int, hop: str) -> float:
         """One-way delay of a GET or DELETE to executor e: none here, the backhaul to a neighbour, backhaul
@@ -1065,14 +1057,7 @@ class Zone:
         self._end_attempt(info)
         e = info.executor
         key = AttemptKey(rec.task.task_id, self.zone_id, attempt)
-        call(
-            self._clock,
-            self._clock.now + self._link(e, rec, attempt, "cancel"),
-            lambda: self._bus.is_alive(e),
-            lambda: self._executor(e).cancel(key),
-            lambda r: 0.0,
-            lambda r: None,
-        )
+        self.calls.cancel(e, self._clock.now + self._link(e, rec, attempt, "cancel"), key)
 
     def _no_ack(self, rec: TaskRecord) -> None:
         """9.5.5: no ack by the end (deadline, or deadline + L_max) is a drop (QUESTIONS Q23: + T_ack)."""
@@ -1193,14 +1178,20 @@ class Zone:
                 rec.parts["queue"] = msg.report.start - info.t_at_executor
                 rec.parts["run"] = msg.report.busy
                 rec.parts["return"] = now - msg.report.finish
-        confirm = car.receive(Result(TaskId(*k.task_id), k.anchor_id, k.attempt), now)  # type: ignore[arg-type]
-        if confirm is None:
-            return
-        self._confirmed.setdefault(car_id, set()).add(k.task_id)  # 9.5.3: this session has it
-        # the car's confirm crosses the radio to this serving zone, which publishes the ack (6D.13)
-        up = hops.delay(self._streams, hops.ACK_UP, self._cfg.radio.uplink_delay, k.task_id, k.attempt)
+        result = Result(TaskId(*k.task_id), k.anchor_id, k.attempt)  # type: ignore[arg-type]
+        confirm = car.receive(result, now)
+        if confirm is not None:  # a remote car (testbed) confirms later, through car_confirmed
+            self.car_confirmed(car_id, result, confirm)
+
+    def car_confirmed(self, car_id: str, result: Result, confirm: Confirm) -> None:
+        """9.5.2-3, 6D.13: the car confirmed a result copy; the confirm crosses the radio to this serving
+        zone, which publishes the ack."""
+        now = self._clock.now
+        tid: tuple[int | str, ...] = result.task_id
+        self._confirmed.setdefault(car_id, set()).add(tid)  # 9.5.3: this session has it
+        up = hops.delay(self._streams, hops.ACK_UP, self._cfg.radio.uplink_delay, tid, result.attempt)
         ack = AckMessage(confirm, self.zone_id)
-        key = (*k.task_id, k.anchor_id, k.attempt, "ack")
+        key = (*tid, result.anchor_id, result.attempt, "ack")
         self._clock.schedule(now + up, lambda: self.mqtt.publish(topics.car_ack(car_id), ack, qos=1, key=key))
 
     def _republish(self, rec: TaskRecord) -> None:

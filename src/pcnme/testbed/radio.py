@@ -1,0 +1,80 @@
+"""The radio on the testbed (PLAN M9.1 step 5; final-design 15.3).
+
+tc cannot give every virtual car its own rate on one interface, so the uplink pipe runs in software at the
+zone's intake with the fast-mode code (Zone.upload with the car's R_car and B_car, net/radio.py), and netem
+adds only the radio's base delays. software_radio() therefore zeroes the modelled radio delays in the zone's
+config and returns them for netem, so they are not counted twice.
+
+RemoteCar stands in for a car in the zone's registry: a result copy is POSTed to the car container
+(/results); the car's Confirm comes back in the HTTP reply and is handed to the zone loop
+(Zone.car_confirmed). No reply (the car left, the radio dropped it): no confirm, the anchor's T_ack timer
+notices (9.5.4), as in fast mode.
+"""
+
+from __future__ import annotations
+
+import concurrent.futures
+import dataclasses
+from typing import Any, Protocol
+
+from pcnme.car.car import Confirm, Result, Task
+from pcnme.config import Config
+from pcnme.testbed.clock import RealClock
+from pcnme.testbed.codec import decode, encode
+from pcnme.testbed.messages import Upload, UploadReply
+
+__all__ = ["RemoteCar", "Upload", "UploadReply", "software_radio"]
+
+
+def software_radio(cfg: Config) -> tuple[Config, dict[str, tuple[float, float]]]:
+    """The zone's config with zero modelled radio delays, and those delays for netem on radio_net (15.3)."""
+    r = cfg.radio
+    netem = {"uplink": r.uplink_delay, "downlink": r.downlink_delay}
+    radio = dataclasses.replace(r, uplink_delay=(0.0, 0.0), downlink_delay=(0.0, 0.0))
+    return dataclasses.replace(cfg, radio=radio), netem
+
+
+class ConfirmSink(Protocol):
+    def car_confirmed(self, car_id: str, result: Result, confirm: Confirm) -> None: ...
+
+
+class RemoteCar:
+    """A car in another container, as the zone's registry sees it (Zone._cars)."""
+
+    def __init__(
+        self,
+        car_id: str,
+        url: str,
+        clock: RealClock,
+        zone: ConfirmSink,
+        *,
+        client: Any = None,
+        timeout: float = 1.0,
+    ) -> None:
+        import httpx
+
+        self.car_id = car_id
+        self._url = url
+        self._clock = clock
+        self._zone = zone
+        self._http = client if client is not None else httpx.Client(timeout=timeout)
+        self._pool = concurrent.futures.ThreadPoolExecutor(2, thread_name_prefix=f"car-{car_id}")
+
+    def budget(self, task: Task, now: float) -> float:
+        raise RuntimeError(
+            "on the testbed B_car comes with the upload (Upload.b_car), never from the zone's clock"
+        )
+
+    def receive(self, result: Result, now: float) -> Confirm | None:
+        def work() -> None:
+            try:
+                r = self._http.request("POST", self._url + "/results", content=encode(result))
+            except Exception:  # no answer: no confirm; the anchor's T_ack timer notices (9.5.4)
+                return
+            if r.status_code == 200:
+                confirm = decode(r.content)
+                if isinstance(confirm, Confirm):
+                    self._clock.call_soon(lambda: self._zone.car_confirmed(self.car_id, result, confirm))
+
+        self._pool.submit(work)
+        return None
