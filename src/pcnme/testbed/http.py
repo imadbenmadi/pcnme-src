@@ -11,7 +11,7 @@
 # No `from __future__ import annotations`: FastAPI must resolve `request: Request`, imported inside make_app.
 import asyncio
 import concurrent.futures
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from typing import Any
 
 from pcnme.bus.calls import Target
@@ -36,14 +36,27 @@ class HttpCalls:
         self._http = client if client is not None else httpx.Client(timeout=timeout)
         self._pool = concurrent.futures.ThreadPoolExecutor(WORKERS, thread_name_prefix="http")
 
+    real_network = True  # netem gives the delays (QUESTIONS Q53): requests leave when the zone calls
+
     def _send(
-        self, method: str, target: str, path: str, body: bytes, on_reply: Callable[[Any], None]
+        self,
+        method: str,
+        target: str,
+        path: str,
+        body: bytes,
+        on_reply: Callable[[Any], None],
+        on_sent: Callable[[], None] | None = None,
     ) -> None:
         url = self._urls[target] + path
 
+        def chunks() -> Iterator[bytes]:
+            yield body
+            if on_sent is not None:  # the body's last chunk has been handed to the socket (C7, Q53)
+                self._clock.call_soon(on_sent)
+
         def work() -> None:
             try:
-                r = self._http.request(method, url, content=body)
+                r = self._http.request(method, url, content=chunks() if on_sent else body)
             except Exception:  # no answer: lost with the target, the caller's timers notice (9.3)
                 return
             if r.status_code == 200:
@@ -51,12 +64,6 @@ class HttpCalls:
                 self._clock.call_soon(lambda: on_reply(reply))
 
         self._pool.submit(work)
-
-    def _at(self, at: float | None, fn: Callable[[], None]) -> None:
-        if at is None:
-            fn()
-        else:
-            self._clock.schedule(at, fn)
 
     def post(
         self,
@@ -66,12 +73,12 @@ class HttpCalls:
         back: float,
         on_reply: Callable[[tuple[Reply, Snapshot]], None],
         at_target: Callable[[], None] = lambda: None,
+        on_sent: Callable[[], None] | None = None,
     ) -> None:
-        def go() -> None:
-            at_target()
-            self._send("POST", target, "/tasks", encode(req), on_reply)
-
-        self._at(arrive_at, go)
+        """`arrive_at` and `back` are the fast-mode model's; on the testbed the request leaves now (Q53).
+        `at_target` runs as it leaves: the caller cannot see the arrival (logging only)."""
+        at_target()
+        self._send("POST", target, "/tasks", encode(req), on_reply, on_sent)
 
     def probe(
         self,
@@ -81,10 +88,10 @@ class HttpCalls:
         back: float,
         on_answer: Callable[[tuple[Status, float | None]], None],
     ) -> None:
-        self._at(arrive_at, lambda: self._send("GET", target, "/tasks", encode(key), on_answer))
+        self._send("GET", target, "/tasks", encode(key), on_answer)
 
     def cancel(self, target: str, arrive_at: float, key: AttemptKey) -> None:
-        self._at(arrive_at, lambda: self._send("DELETE", target, "/tasks", encode(key), lambda r: None))
+        self._send("DELETE", target, "/tasks", encode(key), lambda r: None)
 
 
 class Cut(Exception):

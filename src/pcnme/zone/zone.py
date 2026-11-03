@@ -728,6 +728,15 @@ class Zone:
         budget = rec.d_a - now - t_in - self._est.t_ret_fog()  # 6C.9: B_k = d_A - t_s - T̂_in - T̂_ret
         req = TaskRequest(key, task.task_type, task.cls, task.l_max, budget)
         self.store.add_pending(target, pend, view.slot, task.cls, view.run)  # R1 (9.2)
+
+        def at_peer_real() -> None:
+            rec.t_at_executor, rec.budget = self._clock.now, budget
+
+        def replied_real(r: tuple[Reply, Snapshot]) -> None:
+            self._reply(rec, target, pend, r[0], r[1], w_bh)
+
+        if self._real_send(task.input_bits, target, req, replied_real, at_peer_real, rec, attempt):
+            return
         d_bh = hops.delay(self._streams, hops.BH_OUT, self._cfg.links.backhaul_delay, task.task_id, attempt)
         tr = self.backhaul.send(now=now, size_bits=task.input_bits, delay=d_bh)  # POST /tasks + the input
         self._clock.schedule(tr.delivery, lambda: self._sent(rec, attempt))  # the own send is done (C7)
@@ -763,6 +772,12 @@ class Zone:
         assert row is not None
         self.store.add_pending(CLOUD, pend, slot, task.cls, row.mean)  # R1 (9.2)
 
+        def replied_real(r: tuple[Reply, Snapshot]) -> None:
+            self._reply(rec, CLOUD, pend, r[0], r[1], w_bh)
+
+        if self._real_send(task.input_bits, CLOUD, req, replied_real, lambda: None, rec, attempt):
+            return
+
         def arrived(tr: SeriesTransfer) -> None:
             rec.transfer = tr
             rec.parts["input"] = tr.duration
@@ -781,6 +796,25 @@ class Zone:
             self.calls.post(CLOUD, None, req, back, replied)
 
         self._cloud_path.send(task.input_bits, d_bh, d_wan, arrived)
+
+    def _real_send(
+        self,
+        size_bits: float,
+        target: str,
+        req: TaskRequest,
+        replied: Callable[[tuple[Reply, Snapshot]], None],
+        at_target: Callable[[], None],
+        rec: TaskRecord,
+        attempt: int,
+    ) -> bool:
+        """The testbed (QUESTIONS Q53): netem gives the real delays, so the request leaves now and the
+        upload timeout starts when its body has been written (C7). The own backhaul pipe still books the
+        bits, as the estimate behind the inputs and masks (4.3); it delays nothing. False in fast mode."""
+        if not self.calls.real_network:
+            return False
+        self.backhaul.send(now=self._clock.now, size_bits=size_bits, delay=0.0)
+        self.calls.post(target, None, req, 0.0, replied, at_target, on_sent=lambda: self._sent(rec, attempt))
+        return True
 
     def _cloud_fastest(self, task_type: str) -> SlotType:
         rows = self._cfg.time_table
