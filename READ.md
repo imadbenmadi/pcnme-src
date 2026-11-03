@@ -33,7 +33,7 @@ How to read this code base, in order. Paths are clickable from the repo root.
 | Federated | [`fl/fedavg.py`](src/pcnme/fl/fedavg.py) | 13.7 |
 | Metrics | [`metrics/runlog.py`](src/pcnme/metrics/runlog.py) Parquet + line protocol; [`metrics/stats.py`](src/pcnme/metrics/stats.py); [`metrics/report.py`](src/pcnme/metrics/report.py) | 16.3 |
 | Experiments | [`experiments/city.py`](src/pcnme/experiments/city.py) the whole city in fast mode; [`experiments/runner.py`](src/pcnme/experiments/runner.py) train + evaluate; [`experiments/cli.py`](src/pcnme/experiments/cli.py) `pcnme`; [`experiments/calibrate.py`](src/pcnme/experiments/calibrate.py) map calibration | 16 |
-| Testbed (M9, in progress) | [`testbed/clock.py`](src/pcnme/testbed/clock.py) real clock; [`testbed/codec.py`](src/pcnme/testbed/codec.py) JSON; [`testbed/mqtt.py`](src/pcnme/testbed/mqtt.py); [`testbed/http.py`](src/pcnme/testbed/http.py); [`testbed/radio.py`](src/pcnme/testbed/radio.py) | 15.2–15.4 |
+| Testbed (M9, in progress) | [`testbed/zone.py`](src/pcnme/testbed/zone.py), [`car.py`](src/pcnme/testbed/car.py), [`cloud.py`](src/pcnme/testbed/cloud.py) entry points; [`runner.py`](src/pcnme/testbed/runner.py) one run; [`clock.py`](src/pcnme/testbed/clock.py) real clock; [`mqtt.py`](src/pcnme/testbed/mqtt.py), [`http.py`](src/pcnme/testbed/http.py), [`netloop.py`](src/pcnme/testbed/netloop.py) transport; [`radio.py`](src/pcnme/testbed/radio.py) software radio; [`codec.py`](src/pcnme/testbed/codec.py), [`messages.py`](src/pcnme/testbed/messages.py) payloads; [`docker/`](docker/) | 15.2–15.4, Q53 |
 
 ## 3. One task through the code (fast mode)
 
@@ -73,5 +73,7 @@ methods (`--method pcnme`, …) train first; see `uv run pcnme run --help`.
   `tasks`, `attempts`, `decisions`, `transitions`, `zones`, `pipes`, `positions`, `events` `.parquet`, plus
   `run.json` and `points.lp` (InfluxDB line protocol, for Grafana only). Schema: [`docs/METRICS.md`](docs/METRICS.md).
 - NSGA-II fronts: `results/nsga/<scenario>-w<window>.json` ([`tools/run_nsga.md`](tools/run_nsga.md)).
+- Testbed runs: the same folder, `<scenario>-<method>-<seed>-testbed/`, plus `zones/*.json` and
+  `containers.log` (`python -m pcnme.testbed.runner`; `tools/testbed_gap.py` compares with fast mode).
 - Calibration: [`docs/calibration/`](docs/calibration/) (GTX 1070 measurements, Q52).
 - Reported numbers always come from Parquet, never from Grafana.
