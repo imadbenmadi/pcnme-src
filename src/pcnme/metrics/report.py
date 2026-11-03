@@ -42,6 +42,7 @@ TABLE = (  # the report.md columns: metric, header, scale, digits
     ("wasted_share", "wasted %", 100.0, 2),
     ("jain_load", "Jain", 1.0, 3),
     ("early_on_time", "early on time %", 100.0, 1),
+    ("mean_e_hat", "mean ê", 1.0, 2),
 )
 PLOTS = (("on_time", "on-time share", 1.0), ("latency_mean_s", "mean latency (ms)", 1000.0),
          ("energy_per_task_j", "energy per task (J)", 1.0))  # fmt: skip
