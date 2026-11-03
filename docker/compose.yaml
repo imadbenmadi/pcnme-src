@@ -4,7 +4,7 @@
 #   docker compose -f docker/compose.yaml --profile testbed up -d        # the testbed itself (milestone M9)
 #
 # Networks (final-design 15.4): radio_net cars <-> zones; backhaul_net zones <-> zones <-> broker <-> wan-gw;
-# wan_net wan-gw <-> cloud (the one shared WAN pipe); mgmt_net everything <-> storage and metrics, never shaped.
+# wan_net wan-gw <-> cloud (the one shared WAN pipe); mgmt_net everything <-> metrics, never shaped. Results: the bind-mounted data/ folder (Q55).
 # Shaping: docker/net-setup.sh (tc netem), parameters from the environment; the runner sets them per scenario.
 # Image versions are pinned; MinIO uses a moving tag until M9 pins it (see the comment there).
 
@@ -315,18 +315,6 @@ services:
     networks:
       mgmt_net: {ipv4_address: 10.40.0.5}
 
-  storage:
-    image: quay.io/minio/minio:latest   # pin to a RELEASE tag in M9
-    profiles: ["monitoring", "testbed"]
-    command: ["server", "/data", "--console-address", ":9001"]
-    environment:
-      MINIO_ROOT_USER: ${MINIO_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD}
-    volumes: ["minio-data:/data"]
-    ports: ["9000:9000", "9001:9001"]
-    networks:
-      mgmt_net: {ipv4_address: 10.40.0.2}
-
   influxdb:
     image: influxdb:2.7
     profiles: ["monitoring", "testbed"]
@@ -366,6 +354,5 @@ networks:
   mgmt_net:     {ipam: {config: [{subnet: 10.40.0.0/24}]}}
 
 volumes:
-  minio-data:
   influx-data:
   grafana-data:

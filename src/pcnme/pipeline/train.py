@@ -29,6 +29,7 @@ from typing import Any
 
 from pcnme.paths import REPO, MapPaths
 
+STAGES = ("traces", "nsga", "demos", "learning")
 TRAINED = ("pcnme", "d3qn-scratch", "d3qn-greedy", "vfc-ppo", "tang-wong", "qeco")  # 16.1; rules need none
 
 # Measured on the home desktop (3 Nov): core-seconds per NSGA-II evaluation (S2, no fork) and training
@@ -597,6 +598,12 @@ def parse(argv: list[str] | None, *, evaluate: bool = False) -> argparse.Namespa
         )
         ap.add_argument("--pretrain-updates", type=int, default=None, help="dqfd.pretrain_updates")
         ap.add_argument("--checkpoint-minutes", type=float, default=10.0)
+        ap.add_argument(
+            "--until",
+            choices=STAGES,
+            default="learning",
+            help="stop after this stage (traces: only make a trace map's traces; nsga: NSGA-II and w*)",
+        )
     return ap.parse_args(argv)
 
 
@@ -684,7 +691,11 @@ def main(argv: list[str] | None = None) -> int:
         print("\nnothing to train.")
         return 1
     if not args.yes:
-        input("\nPress Enter to start (Ctrl+C to stop) ")
+        try:
+            input("\nPress Enter to start (Ctrl+C to stop) ")
+        except (EOFError, KeyboardInterrupt):
+            print("\nnot started.")
+            return 1
     for plan in plans:
         paths = MapPaths(plan.map)
         if args.fresh and (dest := archive(paths)):
@@ -705,12 +716,19 @@ def main(argv: list[str] | None = None) -> int:
         paths.logs.mkdir(parents=True, exist_ok=True)
         t0 = time.monotonic()
         with Screen(f"train.py  map {plan.map}{'  (smoke)' if plan.smoke else ''}") as screen:
+            last = STAGES.index(args.until)
             if map_config(plan.map).map.kind == "trace":
                 stage_traces(screen, plan)
-            w = stage_nsga(screen, plan)
-            stage_demos(screen, plan, w)
-            stage_learning(screen, plan, w)
-            screen.say(f"map {plan.map}: training finished in {hms(time.monotonic() - t0)}")
+            w = stage_nsga(screen, plan) if last >= 1 else float("nan")
+            if last >= 2:
+                stage_demos(screen, plan, w)
+            if last >= 3:
+                stage_learning(screen, plan, w)
+            elapsed = hms(time.monotonic() - t0)
+            screen.say(f"map {plan.map}: stages up to '{args.until}' finished in {elapsed}")
+        if last < 3:
+            print(f"\n{plan.map}: stopped after '{args.until}' (--until). Outputs: {paths.root}")
+            continue
         runinfo.update(
             paths.manifest, finished=runinfo.now(), w_star=w, hours=round((time.monotonic() - t0) / 3600, 2)
         )

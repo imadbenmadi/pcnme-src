@@ -222,7 +222,11 @@ def main(argv: list[str] | None = None) -> int:
     if not todo:
         return 1
     if not args.yes:
-        input("\nPress Enter to start (Ctrl+C to stop) ")
+        try:
+            input("\nPress Enter to start (Ctrl+C to stop) ")
+        except (EOFError, KeyboardInterrupt):
+            print("\nnot started.")
+            return 1
     for name, jobs, _ in todo:
         paths = MapPaths(name)
         with Screen(f"evaluate.py  map {name}{'  (smoke)' if args.smoke else ''}") as screen:

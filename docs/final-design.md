@@ -640,7 +640,7 @@ w1 = w and w2 = 1 − w come from the knee (section 13.3). Every reward is B min
 | --- | --- |
 | The car's upload | Every option pays it (the car always uploads to its serving zone). Reported as P_tx · S ÷ R_car (airtime only) |
 | The car's JPEG encoding | The same for every option; reported |
-| The anchor's input copy (memory) | The same for every option. Testbed storage (MinIO) is test equipment |
+| The anchor's input copy (memory) | The same for every option. Testbed storage (a bind-mounted results folder) is test equipment |
 | MQTT state, GPS, status | Paid per second, not per task. Reported as overhead |
 | The agent's inference | Tiny and the same for every option |
 
@@ -841,7 +841,7 @@ Taken: the radio model (path loss + Shannon rate), the city grid and its mobilit
 | broker | 1 | EMQX |
 | wan-gw | 1 | The metro-edge router: all zone → cloud traffic routes through it; shaped on its cloud side (one shared WAN pipe). Fallback if routing fails: a reverse proxy (worse: it splits TCP) |
 | cloud | 1 | Cloud executor (many slots), FedAvg service, model registry |
-| storage | 1 | MinIO: datasets, models, logs (test equipment) |
+| storage | 0 | None: datasets, models and results are a bind-mounted folder, data/ (test equipment; QUESTIONS Q55) |
 | metrics | 1 | InfluxDB + Grafana (test equipment, never on the decision path) |
 | runner | 1 | Starts each scenario, sets delays and seeds, collects results, tears down |
 

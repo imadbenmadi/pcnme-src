@@ -133,11 +133,11 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   6. [x] Entry points `pcnme.testbed.{zone,car,cloud}` (+ `serve.py`), Q53 built (no modelled delays, C7 from the written body, own-backhaul bookkeeping kept); zone endpoints POST /cars, POST /gps, GET /closed, GET /status; `@pytest.mark.testbed` compose test (broker, wan-gw, cloud, 4 zones, car-1 with 20 cars): tasks close on time end to end.
   7. [ ] FedAvg + fine-tuning on the testbed, and the learning methods in the containers: **Q54** (proposal: Greedy for M9.2–M9.4 first; then CPU torch in the zone image).
 - [x] **M9.2** Verify the network (15.4 "to verify"): routing through wan-gw, netem jitter distribution and reordering, `tcp_slow_start_after_idle=0`, one shaped crossing per hop (`tests/testbed/test_network.py`, `pytest -m testbed`). Found and fixed: jitter reordering distorted WAN transfers (netem now keeps packets in order, **Q56**); a warm 1 MB upload fits 4.2's S/B + d. MinIO cannot be pinned: its public images are gone (**Q55**, proposal: bind-mounted results).
-- [~] **M9.3** Runner: per-scenario shaping, zone join / kill / broker restart (15.7), result upload to MinIO.
+- [~] **M9.3** Runner: per-scenario shaping, zone join / kill / broker restart (15.7), results to the bind-mounted data/ (Q55).
   Built (branch `m9-3-runner`): `python -m pcnme.testbed.runner --scenario S2 --seed 3000 --method greedy --seconds 60
   [--containers N]` sets every netem value from the config, starts the stack, applies `testbed.events` (empty:
   **Q57**), waits for the zones' rows, saves `containers.log`, and writes the run's Parquet tables (zones write JSON
-  rows, `record_rows` shared with fast mode). Results go to a bind mount (MinIO: **Q55**).
+  rows, `record_rows` shared with fast mode). Results go to a bind mount (Q55: no MinIO).
   Found and fixed on the full fleet: per-car GPS requests (now one GpsBatch per zone and period); ~250 HTTP threads
   per zone starving its loop (now one asyncio network thread, `testbed/netloop.py`); zone POSTs carried no input
   bytes, so the WAN saw no bulk and ŵ_WAN went negative (greedy sent most tasks to the cloud; now 5.3's input
@@ -153,10 +153,42 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   Q56 the in-order jitter bias (+8–24 %) is reported in the gap.
 - [ ] **M9.4** Same scenario and seed in fast mode and on the testbed, at M9.3's reduced scale, Greedy first (no trained model needed), then the agent: report the gap (16.3). Tool ready: `tools/testbed_gap.py` (fast-mode run with the testbed's fleet and seed, one Markdown table of the 16.3 metrics). Waits on M9.3's open item; the in-order jitter bias (Q56) is part of the gap.
 
+## Resume point (3 Nov, usage limit)
+
+Done: steps 1-5 of the 3 Nov prompt, RUN_TRAINING.md, the doc fixes in CLAUDE.md, METRICS, QUESTIONS (Q54-Q59), CHANGES and
+PLAN. Left: data/DATA.md; READ.md rewrite (pipeline, maps, summary.csv; check every path); README.md table
+(remove tools/run_nsga.md, docs/calibration links); final-design / PLAN / QUESTIONS mentions of docs/calibration;
+verify calibrate_map.py and calibrate_yolo.py commands.
+
+## T — Training and results (the runs behind the paper; the user starts the full runs)
+
+- [x] **T1** `train.py --maps <map>` (src/pcnme/pipeline/train.py): traces (trace maps), NSGA-II windows, knees,
+  w* per map, NSGA-II and greedy demonstrations, DQfD pretraining + online training of PCNME, the learning
+  baselines on the same budget and w* (16.1); live screen, per-episode CSVs, checkpoints, resume, manifests.
+  `evaluate.py --maps <map>`: every scenario x method x seed, summary.csv, tables, figures. `run_testbed.py`:
+  stops until M9.3/M9.4. Smoke-tested on vfc and lust (`--smoke`). Commands: RUN_TRAINING.md.
+- [ ] **T2** VFC: `train.py --maps vfc` then `evaluate.py --maps vfc` (the user runs them, about 14 h + eval).
+- [ ] **T3** LuST: `train.py --maps lust` (generates the traces first, about 30-60 min) then evaluate.
+- [ ] **T4** Results write-up from data/<map>/results/summary.csv: the 16.3 table per map, training curves,
+  the number of seeds, what is missing (knee reference, ablations 16.4, sweeps).
+
+## L — LuST map (Codeca et al. 2015; final-design 16.2, 18)
+
+- [x] **L1** SUMO (eclipse-sumo, the `maps` extra) and the LuST scenario in data/maps/lust/ (MIT licence).
+- [x] **L2** 1.2 x 1.2 km central crop (config maps.lust: centre 6.1319 E, 49.6116 N; the layout's area and
+  zone layout unchanged), one SUMO run per time of day (off-peak S1, peak S3/S5, mid S2/S4/S6: Q58), FCD at
+  100 ms on the crop's edges only (src/pcnme/mobility/lust.py).
+- [x] **L3** Trace replayer with the grid's interface (src/pcnme/mobility/traces.py): fixed fleet, slots of
+  recorded vehicles, seed-chosen slices; City uses it on a trace map; coverage measured on the traces
+  (experiments/calibrate.measure_trace) scales lambda_car per map (data/lust/calibrated.yaml).
+- [x] **L4** Tests: tests/mobility/test_traces.py (slots, interpolation, gaps, seeds, a City episode), a slow
+  real-SUMO test tests/mobility/test_lust.py; `train.py --maps lust --smoke` end to end.
+- [ ] **L5** Full traces (train.py makes them on first use) and a look at the vehicles per crop and coverage.
+
 ## C — Calibration (any time after M0, on the home desktop)
 
 - [x] Measure YOLO run times and energy per run on the GTX 1070 (slot fixed to x16 first), JPEG sizes on BDD100K frames; write the time table; rerun `tools/calc_defaults.py`. Cloud rows from Ultralytics' A100 numbers plus measured pre- and post-processing.
-  Done 3 Nov at PCIe x4 (`tools/calibrate_yolo.py`, `docs/calibration/`), applied per Q52. Mechanism tests run on the frozen placeholder config `tests/data/mechanism.yaml`.
+  Done 3 Nov at PCIe x4 (`tools/calibrate_yolo.py`, `data/calibration/`), applied per Q52. Mechanism tests run on the frozen placeholder config `tests/data/mechanism.yaml`.
 
 ## V — Viewer (not research: it never changes a result)
 
