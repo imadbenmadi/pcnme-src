@@ -137,8 +137,8 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
 
 ## C — Calibration (any time after M0, on the home desktop)
 
-- [~] Measure YOLO run times and energy per run on the GTX 1070 (slot fixed to x16 first), JPEG sizes on BDD100K frames; write the time table; rerun `tools/calc_defaults.py`. Cloud rows from Ultralytics' A100 numbers plus measured pre- and post-processing.
-  Measured 3 Nov at x4 (`tools/calibrate_yolo.py`, `docs/calibration/`); not applied: T2 at 3.87 s breaks its deadlines and the load calibration (**Q52**). After Q52: apply `docs/calibration/calibrated-config.diff` (or its revision) and update the tests that pin placeholder numbers.
+- [x] Measure YOLO run times and energy per run on the GTX 1070 (slot fixed to x16 first), JPEG sizes on BDD100K frames; write the time table; rerun `tools/calc_defaults.py`. Cloud rows from Ultralytics' A100 numbers plus measured pre- and post-processing.
+  Done 3 Nov at PCIe x4 (`tools/calibrate_yolo.py`, `docs/calibration/`), applied per Q52. Mechanism tests run on the frozen placeholder config `tests/data/mechanism.yaml`.
 
 ## V — Viewer (not research: it never changes a result)
 

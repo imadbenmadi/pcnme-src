@@ -13,9 +13,9 @@ from pcnme.sim.clock import EventClock
 
 
 @pytest.fixture(scope="module")
-def bw(default_config_path: Path) -> tuple[float, float]:
+def bw(mechanism_config_path: Path) -> tuple[float, float]:
     """(backhaul, WAN) bandwidths from the config: 1 Gbps and the derived B_WAN, about 515 Mbps."""
-    cfg = load_config(default_config_path)
+    cfg = load_config(mechanism_config_path)
     return cfg.links.backhaul_bw, cfg.derived.b_wan
 
 

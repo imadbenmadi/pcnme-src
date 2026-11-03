@@ -39,3 +39,4 @@ data/
 
 # Docker secrets
 docker/.env
+!tests/data/
