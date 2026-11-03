@@ -123,14 +123,22 @@ Open (not built in M7):
 ## M9 — Docker testbed
 
 Skeleton already in `docker/` (Dockerfile, compose with every container and network of 15.4, `net-setup.sh` shaping, Grafana provisioning). Needs the home desktop (Docker Desktop, WSL2 backend).
-- [ ] **M9.1** Entry points `pcnme.testbed.{zone,car,cloud,runner}` on the same zone/car/cloud code as fast mode, with MQTT and HTTP adapters behind the bus and call interfaces (15.2). FedAvg + fine-tuning (Q51): on the testbed the K fine-tune steps take real time; the personal copy takes over only after they finish, and the old model decides meanwhile (13.7).
+- [~] **M9.1** Entry points `pcnme.testbed.{zone,car,cloud,runner}` on the same zone/car/cloud code as fast mode, with MQTT and HTTP adapters behind the bus and call interfaces (15.2). FedAvg + fine-tuning (Q51): on the testbed the K fine-tune steps take real time; the personal copy takes over only after they finish, and the old model decides meanwhile (13.7).
+  Steps (branch `m9-1-testbed`, one commit each, tests first):
+  1. [x] `testbed/clock.py` RealClock: EventClock's interface on real time; other threads hand work in with `call_soon`.
+  2. [x] `testbed/codec.py` payloads ⇄ JSON (registered types only).
+  3. [x] `testbed/mqtt.py` MqttBus/MqttClient behind the bus client interface (fake-paho tests).
+  4. [x] `bus/calls.py` Calls / FastCalls: the zone's POST/GET/DELETE go through `zone.calls`; `testbed/http.py` HttpCalls + `make_app` (FastAPI). Fast mode unchanged: `tests/zone/test_calls_golden.py` pins an S2 run digest.
+  5. [x] `testbed/radio.py`: the Shannon pipe runs in software at the zone's intake (15.3); the car's POST /tasks carries `Upload(task, b_car, rate)` and is answered at t_rx (409 if cut, 9.7); `software_radio()` leaves the base radio delays to netem; `RemoteCar` posts results to the car container and hands its Confirm to `Zone.car_confirmed`.
+  6. [ ] Entry points `pcnme.testbed.{zone,car,cloud,runner}`; `@pytest.mark.testbed` compose test (broker + cloud + 2 zones + 1 car, one task end to end; Docker Desktop). **Blocked on Q53**: the zone's modelled backhaul and WAN pipes are bypassed on the testbed (netem), and when its own send counts as done (C7).
 - [ ] **M9.2** Verify the network (15.4 "to verify"): routing through wan-gw, netem jitter distribution and reordering, `tcp_slow_start_after_idle=0`, one shaped crossing per hop. Pin the MinIO image.
 - [ ] **M9.3** Runner: per-scenario shaping, zone join / kill / broker restart (15.7), result upload to MinIO.
 - [ ] **M9.4** Same scenario and seed in fast mode and on the testbed: report the gap (16.3).
 
 ## C — Calibration (any time after M0, on the home desktop)
 
-- [ ] Measure YOLO run times and energy per run on the GTX 1070 (slot fixed to x16 first), JPEG sizes on BDD100K frames; write the time table; rerun `tools/calc_defaults.py`. Cloud rows from Ultralytics' A100 numbers plus measured pre- and post-processing.
+- [~] Measure YOLO run times and energy per run on the GTX 1070 (slot fixed to x16 first), JPEG sizes on BDD100K frames; write the time table; rerun `tools/calc_defaults.py`. Cloud rows from Ultralytics' A100 numbers plus measured pre- and post-processing.
+  Measured 3 Nov at x4 (`tools/calibrate_yolo.py`, `docs/calibration/`); not applied: T2 at 3.87 s breaks its deadlines and the load calibration (**Q52**). After Q52: apply `docs/calibration/calibrated-config.diff` (or its revision) and update the tests that pin placeholder numbers.
 
 ## V — Viewer (not research: it never changes a result)
 

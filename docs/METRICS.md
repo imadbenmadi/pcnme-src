@@ -1,8 +1,8 @@
 # Metrics and log schema
 
-Proposed 28 Oct; confirmed or changed when M3.10 is built. The metrics are those of final-design 16.3. Every run writes the same data in both modes:
+Built in M3.10 (QUESTIONS Q28); the tables are `src/pcnme/metrics/runlog.py` (MEASUREMENT, TAGS). The metrics are those of final-design 16.3. Every run writes the same data in both modes:
 
-- **Parquet files** (the source for the paper's numbers, tables and statistics): `results/<run_id>/tasks.parquet`, `attempts.parquet`, `zones.parquet`, `pipes.parquet`, `learning.parquet`, plus `run.json` with the seed and what the report needs: `method`, `usage` (evaluation), `seconds`, `reward_w`, `training` (the learner's budget total and used, its episodes), `idle_w` (Q46), `objective` (the 13.2.4 constants), `broker_messages` (messages that reached the broker: 9.2's broker load), and for a 16.4 ablation or sweep point its `variant` and `overrides` (its runs go to `results/<variant>/<run_id>/`). A knee-reference run also writes `window.json` (its window tasks, front, knee and genome; QUESTIONS Q45), and a learning method `<scenario>-<method>-train/` (training.json, model.pt).
+- **Parquet files** (the source for the paper's numbers, tables and statistics): `results/<run_id>/tasks.parquet`, `attempts.parquet`, `zones.parquet`, `pipes.parquet`, `positions.parquet`, `events.parquet`, `decisions.parquet`, `transitions.parquet`, `learning.parquet`, `episodes.parquet` (each only when the run has rows for it), plus `run.json` with the seed and what the report needs: `method`, `usage` (evaluation), `seconds`, `reward_w`, `training` (the learner's budget total and used, its episodes), `idle_w` (Q46), `objective` (the 13.2.4 constants), `broker_messages` (messages that reached the broker: 9.2's broker load), and for a 16.4 ablation or sweep point its `variant` and `overrides` (its runs go to `results/<variant>/<run_id>/`). A knee-reference run also writes `window.json` (its window tasks, front, knee and genome; QUESTIONS Q45), and a learning method `<scenario>-<method>-train/` (training.json, model.pt).
 - **InfluxDB** (live and replayed views in Grafana only; never the source of a reported number): the same rows as points.
 
 `run_id` = `<scenario>-<method>-<seed>-<mode>`, for example `S2-pcnme-3001-fast`. Fast-mode points are time-stamped at 2026-01-01T00:00:00Z plus the simulated time, so every run starts at the same instant in Grafana.
@@ -21,10 +21,12 @@ Proposed 28 Oct; confirmed or changed when M3.10 is built. The metrics are those
 | `transition` | transition moved to the replay buffer (11.3; PLAN M4.3), time = its decision | `anchor`, `action` | `task_id`, `attempt`, `reward`, `dt_s` (to the anchor's next decision), `next_task_id`, `next_attempt` (that decision; s and s' are its rows in `decision`), `truncated` (moved at the episode end, 11.3.4) |
 | `zone` | zone and state period (100 ms) | `zone`, `slot_type` | `rho` (busy share), `queue_hard`, `queue_soft`, `busy`, `refusals` (count in the period), `wan_wait_est_s` |
 | `pipe` | pipe and 100 ms | `pipe` (radio-z1 … radio-z5, backhaul-z1 … backhaul-z5, wan) | `wait_s`, `bits` (pushed in the period), `ti` (offered / bandwidth over the period) |
-| `mobility` | prediction checked at the car's next attach | `zone` | `next_zone_hit` (0/1), `t_exit_err_s` |
+| `position` | car and 100 ms (Q28) | `car_id`, `zone` (serving zone, empty in a gap) | `x_m`, `y_m`, `speed_mps`, `heading_x`, `heading_y` |
+| `event` | car event (Q28) | `car_id`, `kind` (attach, handover, gap, upload_cut, car_drop, uncovered) | `zone_from`, `zone_to`, `task_id` (cut and drops only) |
+| `mobility` (not written yet: PLAN M7 "missing metrics") | prediction checked at the car's next attach | `zone` | `next_zone_hit` (0/1), `t_exit_err_s` |
 | `learning` | zone and 1 000 updates (PLAN M6.6) | `zone` (global in pretraining), `phase` (pretrain, online) | `update`, `td_loss`, `n_step_loss`, `margin_loss`, `total_loss`, `mean_q` (means over the block), `epsilon`, `expert_agreement` (held-out, pretraining), `demo_upsample_ratio` |
 | `episode` | online training episode (PLAN M6.6) | — | `episode`, `seed`, `on_time` (share, 16.3), `mean_e_hat`, `tasks`, `updates`, `mean_loss` |
-| `nsga` | window | `window` | `hv`, `front_size`, `knee_f1`, `knee_f2`, `w_knee` |
+| `nsga` (not written yet: the fronts are in `results/nsga/*.json`) | window | `window` | `hv`, `front_size`, `knee_f1`, `knee_f2`, `w_knee` |
 
 ## Computed after the run (from Parquet, final-design 16.3)
 
