@@ -490,11 +490,11 @@ class Zone:
         progress (6A.2, CHANGES C6), at its current rate (`rate`, from its distance now; by default the rate
         at its attach); the task exists at t_rx. On the testbed the car sends R_car and B_car with the upload
         (5.3 POST /tasks, 15.3) and `on_rx` answers it at t_rx; in fast mode B_car comes from the car."""
-        car, attach_rate = self._cars[task.car_id]
-        rate = attach_rate if rate is None else rate
         now = self._clock.now
-        if b_car is None:
-            b_car = car.budget(task, now)
+        if rate is None or b_car is None:  # fast mode: the car is attached here; the testbed sends both
+            car, attach_rate = self._cars[task.car_id]
+            rate = attach_rate if rate is None else rate
+            b_car = car.budget(task, now) if b_car is None else b_car
         d = hops.delay(
             self._streams, hops.RADIO_UP, self._cfg.radio.uplink_delay, task.task_id, hops.UPLOAD_ATTEMPT
         )
@@ -1208,10 +1208,13 @@ class Zone:
                 rec.parts.pop("input", None)
                 if info.input:
                     rec.parts["input"] = info.input
-                assert info.t_at_executor is not None
-                rec.parts["queue"] = msg.report.start - info.t_at_executor
                 rec.parts["run"] = msg.report.busy
-                rec.parts["return"] = now - msg.report.finish
+                if (
+                    not self.calls.real_network
+                ):  # testbed: the report's times are another machine's clock (5.4)
+                    assert info.t_at_executor is not None
+                    rec.parts["queue"] = msg.report.start - info.t_at_executor
+                    rec.parts["return"] = now - msg.report.finish
         result = Result(TaskId(*k.task_id), k.anchor_id, k.attempt)  # type: ignore[arg-type]
         confirm = car.receive(result, now)
         if confirm is not None:  # a remote car (testbed) confirms later, through car_confirmed
