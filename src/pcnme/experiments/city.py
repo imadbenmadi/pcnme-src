@@ -105,6 +105,21 @@ def _alive(zone: Zone) -> Callable[[], bool]:
     return lambda: zone.mqtt.alive
 
 
+def trace_movers(
+    cfg: Config, scenario: str, clock: EventClock, fleet: int, streams: RandomStreams
+) -> Callable[[str, bool], Mover]:
+    """A trace map's fleet for one episode: the scenario's time of day, a slice at a seed-drawn offset."""
+    from pcnme.mobility.traces import episode_movers, trace_file
+    from pcnme.paths import MapPaths
+
+    path = trace_file(MapPaths(cfg.map.name).traces, cfg.map.scenario_time[scenario])
+    if not path.exists():
+        raise FileNotFoundError(f"{path}: no traces yet (python train.py --maps {cfg.map.name} makes them)")
+    span = cfg.fast_mode.episode_length + DRAIN
+    movers = episode_movers(clock, path, fleet, span, streams.generator("mobility", "trace-offset"))
+    return lambda car_id, hot: movers[int(car_id[1:])]
+
+
 def record_rows(log: RunLog, cfg: Config, records: Iterable[TaskRecord]) -> None:
     """The tasks and attempts rows of closed records (METRICS.md): fast mode and the testbed (each zone its
     own anchored records) write the same rows."""
@@ -279,6 +294,8 @@ class City:
             + est.t_ret_fog()
             for t, tt in cfg.task_types.items()
         }
+        if mover is None and cfg.map.kind == "trace":  # a trace map: recorded vehicles (mobility/traces.py)
+            mover = trace_movers(cfg, scenario, clock, fleet, streams)
         self.apps: list[CarApp] = []
         for i in range(fleet):
             car_id = f"c{i:03d}"

@@ -8,7 +8,6 @@ milestone.
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -22,8 +21,10 @@ _PENDING: dict[str, str] = {
 
 
 def _results() -> Path:
-    """$PCNME_DATA_DIR/results, default ./results (CLAUDE.md)."""
-    return Path(os.environ.get("PCNME_DATA_DIR", ".")) / "results"
+    """The VFC map's results folder, data/vfc/results (pcnme/paths.py, data/DATA.md)."""
+    from pcnme.paths import MapPaths
+
+    return MapPaths("vfc").results / "runs"
 
 
 def _run_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -34,9 +35,7 @@ def _run_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> Non
     p.add_argument("--method", required=True, choices=METHODS)
     p.add_argument("--seeds", required=True, help="evaluation seeds, for example 3000-3019 or 3000,3002")
     p.add_argument("--config", type=Path, default=None, help="config file (default config/default.yaml)")
-    p.add_argument(
-        "--out", type=Path, default=None, help="results directory (default $PCNME_DATA_DIR/results)"
-    )
+    p.add_argument("--out", type=Path, default=None, help="results directory (default data/vfc/results/runs)")
     p.add_argument("--seconds", type=float, default=None, help="evaluation episode, simulated s")
     p.add_argument("--cars", type=int, default=None, help="fleet size")
     p.add_argument("--budget", type=int, default=None, help="training decisions (learning methods)")

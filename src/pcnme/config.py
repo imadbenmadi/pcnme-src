@@ -13,7 +13,7 @@ from __future__ import annotations
 import difflib
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType, TracebackType
 from typing import Any, Literal, TypeVar, cast
@@ -230,8 +230,6 @@ class Layout:
     joining_zones: tuple[str, ...]
     d_nb_m: float
     handover_hysteresis_m: float
-    map_dev: str
-    map_final: str
 
     @property
     def zones(self) -> tuple[str, ...]:
@@ -638,6 +636,26 @@ class Derived:
     e_bar: float  # the cap on energy ratios (12.3)
 
 
+MAP_KINDS = ("grid", "trace")
+
+
+@dataclass(frozen=True, slots=True)
+class MapSpec:
+    """One city map (final-design 16.2, 18): the VFC grid, built in code, or SUMO traces replayed
+    (mobility/traces.py; LuST, Codeca et al. 2015). Paths are under the data directory (data/DATA.md)."""
+
+    name: str
+    kind: str  # grid | trace
+    source: str = ""  # trace maps: the SUMO scenario folder
+    center_lonlat: tuple[float, float] = (0.0, 0.0)  # trace maps: the crop's centre
+    crop_m: float = 0.0  # trace maps: the square crop's side, the layout's area
+    fcd_period_s: float = 0.0  # trace maps: SUMO's step and the trace's sample period
+    warmup_s: float = 0.0  # trace maps: SUMO time before the trace window (the network fills)
+    trace_s: float = 0.0  # trace maps: the length of each time of day's trace
+    time_of_day_s: Mapping[str, float] = field(default_factory=dict)  # name -> s after midnight
+    scenario_time: Mapping[str, str] = field(default_factory=dict)  # scenario -> time of day
+
+
 @dataclass(frozen=True, slots=True)
 class Config:
     layout: Layout
@@ -659,6 +677,8 @@ class Config:
     nsga2: Nsga2
     fast_mode: FastMode
     testbed: Testbed
+    maps: Mapping[str, MapSpec]
+    map: MapSpec  # the active map (train.py / evaluate.py --maps)
     scenarios: Mapping[str, Scenario]
     fedavg: FedAvg
     derived: Derived
@@ -726,6 +746,8 @@ def config_from_mapping(data: Mapping[str, object]) -> Config:
             nsga2=_nsga2(root.node("nsga2")),
             fast_mode=_fast_mode(root.node("fast_mode")),
             testbed=_testbed(root.node("testbed")),
+            maps=(maps := _maps(root.node("maps"), set(scenarios))),
+            map=_active_map(root, maps),
             scenarios=scenarios,
             fedavg=_fedavg(root.node("fedavg")),
             derived=_derive(layout, task_types, hardware, time_table, energy, tof, scenarios, e_strong),
@@ -753,8 +775,6 @@ def _layout(n: _Node) -> Layout:
                 raise ConfigError(n.key("joining_zones"), f"{zone!r} is not in zone_positions_m")
         if len(set(joining)) == len(positions):
             raise ConfigError(n.key("joining_zones"), "at least one zone must be active at the start")
-        with n.node("maps") as maps:
-            map_dev, map_final = maps.text("dev"), maps.text("final")
         return Layout(
             area_m=(area[0], area[1]),
             zone_radius_m=n.number("zone_radius_m", gt=0.0),
@@ -762,8 +782,6 @@ def _layout(n: _Node) -> Layout:
             joining_zones=joining,
             d_nb_m=n.number("d_nb_m", ge=0.0),
             handover_hysteresis_m=n.number("handover_hysteresis_m", ge=0.0),
-            map_dev=map_dev,
-            map_final=map_final,
         )
 
 
@@ -1274,6 +1292,52 @@ def _nsga2(n: _Node) -> Nsga2:
 
 
 _SEED_RANGE = re.compile(r"^(\d+)-(\d+)$")
+
+
+def _maps(n: _Node, scenarios: set[str]) -> Mapping[str, MapSpec]:
+    out: dict[str, MapSpec] = {}
+    with n:
+        for name in n.names():
+            with n.node(name) as m:
+                kind = m.text("kind", MAP_KINDS)
+                m.raw("overrides") if m.has("overrides") else None  # merged by pcnme.maps before loading
+                if kind == "grid":
+                    out[name] = MapSpec(name, kind)
+                    continue
+                centre = m.numbers("center_lonlat")
+                if len(centre) != 2:
+                    raise ConfigError(m.key("center_lonlat"), f"must be [lon, lat], got {list(centre)}")
+                times: dict[str, float] = {}
+                with m.node("time_of_day_s") as t:
+                    for k in t.names():
+                        times[k] = t.number(k, ge=0.0)
+                when: dict[str, str] = {}
+                with m.node("scenario_time") as st:
+                    for s in st.names():
+                        if s not in scenarios:
+                            raise ConfigError(st.key(s), "is not a scenario")
+                        when[s] = st.text(s, tuple(times))
+                missing = scenarios - set(when)
+                if missing:
+                    raise ConfigError(m.key("scenario_time"), f"misses {sorted(missing)}")
+                out[name] = MapSpec(
+                    name,
+                    kind,
+                    source=m.text("source"),
+                    center_lonlat=(centre[0], centre[1]),
+                    crop_m=m.number("crop_m", gt=0.0),
+                    fcd_period_s=m.number("fcd_period_s", gt=0.0),
+                    warmup_s=m.number("warmup_s", ge=0.0),
+                    trace_s=m.number("trace_s", gt=0.0),
+                    time_of_day_s=_frozen(times),
+                    scenario_time=_frozen(when),
+                )
+    return _frozen(out)
+
+
+def _active_map(root: _Node, maps: Mapping[str, MapSpec]) -> MapSpec:
+    name = root.text("map", tuple(maps))
+    return maps[name]
 
 
 def _testbed(n: _Node) -> Testbed:

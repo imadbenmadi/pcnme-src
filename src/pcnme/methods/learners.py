@@ -74,6 +74,103 @@ def _seed(cfg: Config, method: str, use: str, seed: int) -> tuple[int, np.random
     )
 
 
+@dataclass
+class Session:
+    """One learning method's training, resumable at an episode boundary (train.py checkpoints it): the zones'
+    agents (networks, optimisers, replay, random generators), the shared budget, the episodes so far and the
+    next training seed. Seeds run in order from the first, so a resumed session continues exactly."""
+
+    method: str
+    scenario: str
+    agents: dict[str, Any]
+    out: Trained
+    next_seed: int
+    length: float
+    n_cars: int | None
+    online: bool = True  # ablation.online false: pretraining only, no online episode
+
+    @property
+    def finished(self) -> bool:
+        return not self.online or self.out.budget.exhausted
+
+
+def run_session(
+    cfg: Config,
+    session: Session,
+    *,
+    on_episode: Callable[[Episode], None] | None = None,
+    checkpoint: Callable[[Session], None] | None = None,
+) -> Trained:
+    """Online episodes until the budget is used, then each zone's final weights (16.1, 13.5)."""
+    from pcnme.agent.online import train_online
+
+    while not session.finished:
+        seed = session.next_seed
+        (ep,) = train_online(cfg, session.agents, session.scenario, [seed], session.length, session.n_cars)
+        session.next_seed = seed + 1
+        session.out.episodes.append(ep)
+        if on_episode is not None:
+            on_episode(ep)
+        if checkpoint is not None:
+            checkpoint(session)
+    session.out.states = {z: copy.deepcopy(_net(a).state_dict()) for z, a in session.agents.items()}
+    return session.out
+
+
+def _net(agent: Any) -> Any:
+    """The network a zone deploys: the online Q network, or PPO's actor-critic."""
+    return agent.online if hasattr(agent, "online") else agent.net
+
+
+def d3qn_session(
+    cfg: Config,
+    method: str,
+    scenario: str,
+    zones: Sequence[str],
+    budget_decisions: int,
+    *,
+    demos: Demos = (),
+    seconds: float | None = None,
+    seed: int | None = None,
+    n_cars: int | None = None,
+    pretrain_updates: int | None = None,
+    on_pretrain: Callable[[int, int, float, float], None] | None = None,
+) -> Session:
+    """PCNME, D3QN from scratch, or D3QN + greedy expert (16.1), pretrained if it has demonstrations (13.5).
+    16.4 ablations: the expert data cleared after pretraining (ablation.expert clear), or pretraining only
+    (ablation.online false: no online episode, the budget unused)."""
+    from pcnme.agent.dqfd import pretrain
+    from pcnme.agent.network import make_network
+    from pcnme.agent.online import OnlineAgent
+
+    if method not in D3QN_FAMILY:
+        raise ValueError(f"{method} is not a D3QN method")
+    if not cfg.ablation.online and method == "d3qn-scratch":
+        raise ValueError("pretraining only needs a method that pretrains (pcnme, d3qn-greedy)")
+    first = next(iter(training_seeds(cfg, seed)))
+    init, rng = _seed(cfg, method, "init", first)
+    agreement = None
+    expert: tuple[Sample, ...]
+    if method == "d3qn-scratch":
+        net, expert = make_network(cfg, init), ()
+    else:
+        if not demos:
+            raise ValueError(
+                f"{method} needs demonstrations ({'knee' if method == 'pcnme' else 'greedy'} plans)"
+            )
+        pre = pretrain(cfg, demos, rng, init, updates=pretrain_updates, on_measure=on_pretrain)
+        net, agreement = pre.network, pre.best_agreement
+        expert = () if cfg.ablation.expert == "clear" else tuple(s for _, s in demos)
+    budget = Budget(budget_decisions)
+    schedule = cfg.rl.epsilon_baselines if method == "d3qn-scratch" else None  # 18: baselines 1 -> 0.01
+    agents = {
+        z: OnlineAgent(cfg, z, net, expert, seed=first, budget=budget, schedule=schedule) for z in zones
+    }
+    out = Trained(method, {}, expert, budget, agreement=agreement, schedule=schedule)
+    length = cfg.fast_mode.episode_length if seconds is None else seconds
+    return Session(method, scenario, agents, out, first, length, n_cars, online=cfg.ablation.online)
+
+
 def train_d3qn(
     cfg: Config,
     method: str,
@@ -88,46 +185,12 @@ def train_d3qn(
     pretrain_updates: int | None = None,
     episode_hook: Callable[[Episode], None] | None = None,
 ) -> Trained:
-    """PCNME, D3QN from scratch, or D3QN + greedy expert (16.1). 16.4 ablations: the expert data cleared
-    after pretraining (ablation.expert clear), or pretraining only (ablation.online false: no online
-    episode, the budget unused)."""
-    from pcnme.agent.dqfd import pretrain
-    from pcnme.agent.network import make_network
-    from pcnme.agent.online import OnlineAgent, train_online
-
-    if method not in D3QN_FAMILY:
-        raise ValueError(f"{method} is not a D3QN method")
-    if not cfg.ablation.online and method == "d3qn-scratch":
-        raise ValueError("pretraining only needs a method that pretrains (pcnme, d3qn-greedy)")
-    seeds = iter(training_seeds(cfg, seed))
-    first = next(iter(training_seeds(cfg, seed)))
-    init, rng = _seed(cfg, method, "init", first)
-    agreement = None
-    expert: tuple[Sample, ...]
-    if method == "d3qn-scratch":
-        net, expert = make_network(cfg, init), ()
-    else:
-        if not demos:
-            raise ValueError(
-                f"{method} needs demonstrations ({'knee' if method == 'pcnme' else 'greedy'} plans)"
-            )
-        pre = pretrain(cfg, demos, rng, init, updates=pretrain_updates)
-        net, agreement = pre.network, pre.best_agreement
-        expert = () if cfg.ablation.expert == "clear" else tuple(s for _, s in demos)
-    budget = Budget(budget_decisions)
-    schedule = cfg.rl.epsilon_baselines if method == "d3qn-scratch" else None  # 18: baselines 1 -> 0.01
-    agents = {
-        z: OnlineAgent(cfg, z, net, expert, seed=first, budget=budget, schedule=schedule) for z in zones
-    }
-    out = Trained(method, {}, expert, budget, agreement=agreement, schedule=schedule)
-    length = cfg.fast_mode.episode_length if seconds is None else seconds
-    while cfg.ablation.online and not budget.exhausted:
-        (ep,) = train_online(cfg, agents, scenario, [next(seeds)], length, n_cars)
-        out.episodes.append(ep)
-        if episode_hook is not None:
-            episode_hook(ep)
-    out.states = {z: copy.deepcopy(a.online.state_dict()) for z, a in agents.items()}
-    return out
+    """d3qn_session, run to the end of its budget."""
+    session = d3qn_session(
+        cfg, method, scenario, zones, budget_decisions, demos=demos, seconds=seconds, seed=seed,
+        n_cars=n_cars, pretrain_updates=pretrain_updates,
+    )  # fmt: skip
+    return run_session(cfg, session, on_episode=episode_hook)
 
 
 def deployed_d3qn(cfg: Config, trained: Trained, zones: Sequence[str], seed: int) -> dict[str, OnlineAgent]:

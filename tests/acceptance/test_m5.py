@@ -3,9 +3,9 @@
 - Knee and w on synthetic fronts with known answers: tests/expert/test_knee.py.
 - Front check (16.5): S2 fronts hold at least 5 distinct points. With the small budget of the cloud session
   (population 10 x 5 generations) they do not (1-4 points, Q38): a strict xfail below, run with -m slow; the
-  full budget runs on the desktop (tools/nsga_runs.py).
+  full budget runs on the desktop (train.py's NSGA-II stage).
 - Replaying a plan reproduces its objective values exactly (same seed): the scripted tests below and
-  tests/expert/test_demos.py; tools/make_demos.py checks it on every front plan it stores.
+  tests/expert/test_demos.py; train.py's demonstration stage checks it on every front plan it stores.
 """
 
 # ruff: noqa: E501  (the references are full test names, which cannot be wrapped)

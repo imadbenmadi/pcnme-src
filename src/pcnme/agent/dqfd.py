@@ -17,7 +17,7 @@ budget.
 from __future__ import annotations
 
 import copy
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -80,7 +80,9 @@ def pretrain(
     seed: int,
     *,
     updates: int | None = None,
+    on_measure: Callable[[int, int, float, float], None] | None = None,
 ) -> Pretrained:
+    """`on_measure(update, budget, held-out agreement, loss)`: progress for a live screen; changes nothing."""
     deterministic()
     held = split([g for g, _ in demos], cfg.dqfd.holdout_share, rng)
     train = [s for g, s in demos if g not in held]
@@ -108,6 +110,8 @@ def pretrain(
         if u % cfg.dqfd.eval_every == 0:
             a = agreement(online, test)
             curve.agreement.append((u, a))
+            if on_measure is not None:
+                on_measure(u, budget, a, float(parts.total.detach()))
             curve.upsample.append((u, replay.upsample_ratio(drawn)))
             if a > best:
                 best, best_state, since = a, copy.deepcopy(online.state_dict()), 0
