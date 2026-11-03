@@ -13,8 +13,8 @@ from pathlib import Path
 
 # Each subcommand not built yet names the PLAN.md milestone that implements it.
 _PENDING: dict[str, str] = {
-    "plan": "M5: NSGA-II plans and demonstrations (tools/nsga_runs.py, tools/make_demos.py for now)",
-    "pretrain": "M6: DQfD pretraining (tools/pretrain.py for now)",
+    "plan": "M5: NSGA-II plans and demonstrations (train.py does it per map)",
+    "pretrain": "M6: DQfD pretraining (train.py does it per map)",
     "calibrate": "C: measure the time table on the GPU",
     "testbed": "M9: start a scenario on the Docker testbed",
 }

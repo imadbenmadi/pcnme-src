@@ -10,8 +10,9 @@ Predictive task offloading for connected cars across fog zones and the cloud. MS
 | Every number | [`config/default.yaml`](config/default.yaml), checked by `python tools/calc_defaults.py` |
 | Log and metrics schema | [`docs/METRICS.md`](docs/METRICS.md) |
 | Design issues found while coding | [`docs/CHANGES.md`](docs/CHANGES.md), [`docs/QUESTIONS.md`](docs/QUESTIONS.md) |
-| Calibration (time table) | `tools/calibrate_yolo.py`, [`docs/calibration/`](docs/calibration/) |
-| First full NSGA-II run (WSL) | [`tools/run_nsga.md`](tools/run_nsga.md) |
+| Calibration (time table) | `tools/calibrate_yolo.py`, [`data/calibration/`](data/calibration/) |
+| Training, evaluation, testbed: every command | [`RUN_TRAINING.md`](RUN_TRAINING.md) |
+| Data folders: what each file is, how to rebuild it | [`data/DATA.md`](data/DATA.md) |
 | Rules for Claude Code | [`CLAUDE.md`](CLAUDE.md), skills in `.claude/skills/` |
 
 ## Setup

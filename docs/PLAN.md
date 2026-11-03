@@ -153,13 +153,6 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   Q56 the in-order jitter bias (+8–24 %) is reported in the gap.
 - [ ] **M9.4** Same scenario and seed in fast mode and on the testbed, at M9.3's reduced scale, Greedy first (no trained model needed), then the agent: report the gap (16.3). Tool ready: `tools/testbed_gap.py` (fast-mode run with the testbed's fleet and seed, one Markdown table of the 16.3 metrics). Waits on M9.3's open item; the in-order jitter bias (Q56) is part of the gap.
 
-## Resume point (3 Nov, usage limit)
-
-Done: steps 1-5 of the 3 Nov prompt, RUN_TRAINING.md, the doc fixes in CLAUDE.md, METRICS, QUESTIONS (Q54-Q59), CHANGES and
-PLAN. Left: data/DATA.md; READ.md rewrite (pipeline, maps, summary.csv; check every path); README.md table
-(remove tools/run_nsga.md, docs/calibration links); final-design / PLAN / QUESTIONS mentions of docs/calibration;
-verify calibrate_map.py and calibrate_yolo.py commands.
-
 ## T — Training and results (the runs behind the paper; the user starts the full runs)
 
 - [x] **T1** `train.py --maps <map>` (src/pcnme/pipeline/train.py): traces (trace maps), NSGA-II windows, knees,
