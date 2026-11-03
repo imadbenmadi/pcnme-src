@@ -9,7 +9,7 @@ from pcnme.car.car import Task
 from pcnme.ids import TaskId
 from pcnme.sim.clock import EventClock
 from pcnme.testbed.car import CarFleet
-from pcnme.testbed.messages import Attach, Gps, Upload, UploadReply
+from pcnme.testbed.messages import Attach, GpsBatch, Upload, UploadReply
 from tests.zone.harness import fixed_delay_config
 
 
@@ -72,7 +72,7 @@ def test_a_car_attaches_sends_gps_and_uploads_with_its_budget_and_rate() -> None
     f, clock, net, _ = fleet([z1])
     clock.run_until(0.25)
     kinds = [type(b).__name__ for _, _, _, b in net.sent]
-    assert kinds[0] == "Attach" and "Gps" in kinds
+    assert kinds[0] == "Attach" and "GpsBatch" in kinds
     att = net.sent[0][3]
     assert isinstance(att, Attach) and att.url == "http://car-1:8000" and net.sent[0][0] == "z1"
     app = f.apps[0]
@@ -98,7 +98,20 @@ def test_a_handover_cuts_the_open_upload_and_re_uploads_it_to_the_new_zone() -> 
     ups = [z for z, _, _, b in net.sent if isinstance(b, Upload) and b.task == task]
     assert ups == ["z1", "z2"]  # the same task id to the next zone (9.7)
     assert any(isinstance(b, Attach) and z == "z2" for z, _, _, b in net.sent)
-    assert all(not isinstance(b, Gps) or z == "z2" for z, _, _, b in net.sent[-2:])
+    assert all(not isinstance(b, GpsBatch) or z == "z2" for z, _, _, b in net.sent[-2:])
+
+
+def test_one_gps_request_per_zone_and_period_carries_every_car_there() -> None:
+    """Transport only: the cars of one container share the request; each fix is still its own (5.2, 10)."""
+    z1 = fixed_delay_config().layout.zone_positions_m["z1"]
+    cfg = fixed_delay_config()
+    clock = EventClock()
+    net = Net()
+    f = CarFleet(cfg, "S2", 3000, clock, ["c000", "c001", "c002"], net, "u", mover=lambda c, h: Mover([z1]))
+    clock.run_until(0.05)
+    batches = [b for z, _, _, b in net.sent if isinstance(b, GpsBatch)]
+    assert len(batches) == 1 and sorted(g.car_id for g in batches[0].fixes) == ["c000", "c001", "c002"]
+    assert f.apps[0].serving == "z1"
 
 
 def test_started_cars_make_tasks_and_upload_them() -> None:
@@ -107,3 +120,11 @@ def test_started_cars_make_tasks_and_upload_them() -> None:
     f.start(20.0)
     clock.run_until(20.0)
     assert any(isinstance(b, Upload) for _, _, _, b in net.sent)  # lambda_car > 0 (18)
+
+
+def test_a_smaller_fleet_keeps_its_ids_inside_the_fleet() -> None:
+    from pcnme.testbed.car import car_ids
+
+    assert car_ids("0-199/10:3")[:2] == ["c003", "c013"] and len(car_ids("0-199/10:3")) == 20
+    assert car_ids("0-199/10:0", 20) == [f"c{i:03d}" for i in range(20)]  # one container: c000..c019
+    assert car_ids("0-199/10:1", 40)[:2] == ["c001", "c003"] and car_ids("0-199/10:5", 40) == []

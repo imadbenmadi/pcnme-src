@@ -2,8 +2,9 @@
 fast-mode code (Car, mobility, zone choice with hysteresis), talking HTTP over radio_net to the zones.
 
 Per GPS period (10, C13): move, choose the zone; on a change, cut the open uploads to the old zone (DELETE
-/uploads, 9.7) and attach to the new one (POST /cars); then POST /gps. A task uploads to the serving zone
-(POST /tasks with B_car and R_car, 15.3) or is held in a gap; a held or cut frame goes to the next zone with
+/uploads, 9.7) and attach to the new one (POST /cars); then one POST /gps per zone with its cars' fixes
+(GpsBatch). A task uploads to the serving zone (POST /tasks with B_car and R_car, 15.3) or is held in a gap;
+a held or cut frame goes to the next zone with
 the same task id, until it is hopeless (9.7.3). Results arrive on POST /results and are confirmed in the
 reply (9.5). `send` is the network: tests pass a fake, main() passes HTTP.
 
@@ -27,7 +28,7 @@ from pcnme.ids import TaskId
 from pcnme.mobility.grid import RoadGrid, Walker
 from pcnme.net.radio import MIN_DISTANCE, shannon_rate
 from pcnme.sim.rng import RandomStreams
-from pcnme.testbed.messages import Attach, Gps, Upload, UploadReply
+from pcnme.testbed.messages import Attach, Gps, GpsBatch, Upload, UploadReply
 from pcnme.zone.estimates import PathEstimates
 from pcnme.zone.statestore import StateStore
 
@@ -109,6 +110,7 @@ class CarFleet:
     def _tick(self) -> None:
         now = self.clock.now
         lay = self.cfg.layout
+        fixes: dict[str, list[Gps]] = {}
         for app in self.apps:
             pos = app.mover.position(now)
             app.car.position = pos
@@ -118,8 +120,9 @@ class CarFleet:
             self._give_up(app, now)
             if app.serving is not None:
                 vx, vy = app.mover.velocity(now)
-                gps = Gps(app.car.car_id, pos[0], pos[1], vx, vy, now)
-                self._send(app.serving, "POST", "/gps", gps, _ignore)
+                fixes.setdefault(app.serving, []).append(Gps(app.car.car_id, pos[0], pos[1], vx, vy, now))
+        for zone, batch in fixes.items():  # one request per zone and period (GpsBatch: transport only)
+            self._send(zone, "POST", "/gps", GpsBatch(tuple(batch)), _ignore)
         self.clock.schedule(now + self._period, self._tick)
 
     def _switch(self, app: CarApp, new: str | None) -> None:
@@ -219,12 +222,17 @@ def http_send(clock: Any, urls: dict[str, str], timeout: float = 5.0) -> Send:
     return send
 
 
-def car_ids(spec: str) -> list[str]:
-    """ "c000,c001" or "0-199/10:3" (every 10th id from 3 in 0..199)."""
+def car_ids(spec: str, fleet: int | None = None) -> list[str]:
+    """ "c000,c001", or "0-199/10:3": container 3 of 10, every 10th id from 3. With a smaller `fleet` the
+    run has fleet / (ids per container) containers and container k holds k, k + n, ... below the fleet, so
+    the ids stay 0..fleet-1 (the first n_hot are the hotspot cars, 16.2)."""
     if "/" in spec:
         span, step = spec.split("/")
         lo, hi = (int(x) for x in span.split("-"))
         k, start = (int(x) for x in step.split(":"))
+        if fleet is not None and fleet < hi - lo + 1:
+            n = max(1, fleet // ((hi - lo + 1) // k))
+            return [f"c{i:03d}" for i in range(lo + start, lo + fleet, n)] if start < n else []
         return [f"c{i:03d}" for i in range(lo + start, hi + 1, k)]
     return [c for c in spec.split(",") if c]
 
@@ -242,7 +250,7 @@ def main() -> None:  # pragma: no cover - runs in the container (the compose tes
         os.environ.get("PCNME_SCENARIO", "S2"),
         int(os.environ.get("PCNME_SEED", "3000")),
         clock,
-        car_ids(os.environ.get("PCNME_CARS", "c000")),
+        car_ids(os.environ.get("PCNME_CARS", "c000"), int(os.environ.get("PCNME_FLEET", "200"))),
         http_send(clock, urls),
         os.environ["PCNME_SELF_URL"],
         fleet_size=int(os.environ["PCNME_FLEET"]) if "PCNME_FLEET" in os.environ else None,
@@ -250,7 +258,7 @@ def main() -> None:  # pragma: no cover - runs in the container (the compose tes
     seconds = float(os.environ.get("PCNME_SECONDS", "3600"))
     serve(results_app(clock, fleet))
     fleet.start(seconds)
-    clock.run_for(seconds + 30.0)  # then drain (as the fast-mode city)
+    clock.run_for(seconds + float(os.environ.get("PCNME_DRAIN", "30")))  # then drain (testbed.drain_s)
 
 
 if __name__ == "__main__":  # pragma: no cover

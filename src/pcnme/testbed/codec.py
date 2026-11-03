@@ -16,7 +16,7 @@ from pcnme.car.car import Confirm, Result, Task
 from pcnme.ids import AttemptKey, SnapshotVersion, TaskId
 from pcnme.node.executor import Accepted, Ignored, Refused, Report, TaskRequest
 from pcnme.node.state import SlotState
-from pcnme.testbed.messages import Attach, Gps, Upload, UploadReply
+from pcnme.testbed.messages import Attach, Gps, GpsBatch, Upload, UploadReply
 from pcnme.zone.statestore import Snapshot
 from pcnme.zone.zone import AckMessage, GpsMessage, ResultMessage, ZoneStatus
 
@@ -44,6 +44,7 @@ _TYPES: dict[str, type] = {
         UploadReply,
         Attach,
         Gps,
+        GpsBatch,
     )
 }
 

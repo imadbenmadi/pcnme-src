@@ -514,3 +514,24 @@ def test_energy_needs_a_positive_number(raw: dict[str, Any]) -> None:
 
     with pytest.raises(ConfigError, match="energy_j"):
         edited(raw, edit)
+
+
+# --- the testbed runner (PLAN M9.3; final-design 15.4, 15.7) ---------------------------------------------
+
+
+def test_the_testbed_section_has_a_drain_and_scheduled_events(raw: dict[str, Any]) -> None:
+    def edit(d: dict[str, Any]) -> None:
+        d["testbed"]["events"] = [{"at_s": 20.0, "action": "kill", "service": "zone-3"}]
+
+    c = edited(raw, edit)
+    assert c.testbed.drain_s > 0
+    (e,) = c.testbed.events
+    assert (e.at_s, e.action, e.service) == (20.0, "kill", "zone-3")
+
+
+def test_a_testbed_event_needs_a_known_action(raw: dict[str, Any]) -> None:
+    def edit(d: dict[str, Any]) -> None:
+        d["testbed"]["events"] = [{"at_s": 5.0, "action": "explode", "service": "broker"}]
+
+    with pytest.raises(ConfigError, match="action"):
+        edited(raw, edit)
