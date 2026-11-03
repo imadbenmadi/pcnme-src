@@ -53,11 +53,22 @@ def serve(target: FakeTarget) -> tuple[RealClock, Any]:
     return clock, TestClient(make_app(clock, target))
 
 
+def calls_to(target: FakeTarget, caller: RealClock) -> tuple[RealClock, HttpCalls]:
+    """HttpCalls on a NetLoop whose clients reach the target's app in-process (httpx.ASGITransport)."""
+    import httpx
+
+    from pcnme.testbed.netloop import NetLoop
+
+    tclock = RealClock()
+    threading.Thread(target=tclock.run_for, args=(2.0,), name="target-loop", daemon=True).start()
+    net = NetLoop(caller, transport=httpx.ASGITransport(app=make_app(tclock, target)))
+    return tclock, HttpCalls(caller, {"z2": "http://z2"}, net)
+
+
 def test_post_get_delete_end_to_end() -> None:
     target = FakeTarget()
-    tclock, http = serve(target)
     caller = RealClock()
-    calls = HttpCalls(caller, {"z2": ""}, client=http)
+    tclock, calls = calls_to(target, caller)
     out: list[object] = []
     seen_on: list[str] = []
     req = TaskRequest(KEY, "T1", "hard", 0.1, 0.07)
@@ -81,8 +92,10 @@ def test_post_get_delete_end_to_end() -> None:
 
 
 def test_a_dead_target_never_replies() -> None:
+    from pcnme.testbed.netloop import NetLoop
+
     caller = RealClock()
-    calls = HttpCalls(caller, {"z9": "http://127.0.0.1:9"}, timeout=0.2)
+    calls = HttpCalls(caller, {"z9": "http://127.0.0.1:9"}, NetLoop(caller, timeout=0.2))
     out: list[object] = []
     calls.post("z9", None, TaskRequest(KEY, "T1", "hard", 0.1, 0.07), 0.0, out.append)
     caller.run_for(0.6)
@@ -158,9 +171,8 @@ def test_a_car_upload_is_answered_at_t_rx_and_a_cut_one_is_refused() -> None:
 
 def test_on_sent_runs_on_the_callers_loop_once_the_body_is_written() -> None:
     target = FakeTarget()
-    tclock, http = serve(target)
     caller = RealClock()
-    calls = HttpCalls(caller, {"z2": ""}, client=http)
+    tclock, calls = calls_to(target, caller)
     sent: list[str] = []
     out: list[object] = []
     calls.post(
@@ -179,3 +191,33 @@ def test_on_sent_runs_on_the_callers_loop_once_the_body_is_written() -> None:
 def test_a_body_that_is_not_a_payload_is_refused_not_crashed() -> None:
     _, http = serve(FakeTarget())
     assert http.post("/tasks", content=b"x" * 10_000).status_code == 422
+
+
+def test_a_post_carries_the_tasks_input_bytes_and_the_target_reads_the_request() -> None:
+    """5.3: POST /tasks carries the request + the input, so the shaped links see the real transfer (4.2)."""
+    import httpx
+
+    from pcnme.testbed.netloop import NetLoop
+
+    seen: list[int] = []
+    target = FakeTarget()
+    tclock = RealClock()
+    threading.Thread(target=tclock.run_for, args=(2.0,), name="target-loop", daemon=True).start()
+    app = make_app(tclock, target)
+
+    async def measuring(scope: Any, receive: Any, send: Any) -> None:
+        async def counted() -> Any:
+            m = await receive()
+            seen.append(len(m.get("body", b"")))
+            return m
+
+        await app(scope, counted, send)
+
+    caller = RealClock()
+    net = NetLoop(caller, transport=httpx.ASGITransport(app=measuring))
+    calls = HttpCalls(caller, {"z2": "http://z2"}, net, input_bytes={"T1": 76_000})
+    out: list[object] = []
+    calls.post("z2", None, TaskRequest(KEY, "T1", "hard", 0.1, 0.07), 0.0, out.append)
+    caller.run_for(0.5)
+    tclock.stop()
+    assert sum(seen) > 76_000 and target.got and len(out) == 1

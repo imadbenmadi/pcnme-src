@@ -29,24 +29,30 @@ x-zone-env: &zone-env
   MQTT_HOST: 10.20.0.2
   CLOUD_URL: http://10.30.0.10:8000
   PCNME_URLS: "z1=http://10.20.0.11:8000,z2=http://10.20.0.12:8000,z3=http://10.20.0.13:8000,z4=http://10.20.0.14:8000,z5=http://10.20.0.15:8000,cloud=http://10.30.0.10:8000"   # peers on backhaul_net; the cloud through wan-gw (net-setup.sh)
-  PCNME_SCENARIO: S2
-  PCNME_SEED: "3000"
-  PCNME_METHOD: greedy
-  BACKHAUL_DELAY_MS: "3"
-  BACKHAUL_JITTER_MS: "2"
-  BACKHAUL_RATE: 1gbit
-  RADIO_DELAY_MS: "3"
-  RADIO_JITTER_MS: "2"
+  PCNME_SCENARIO: ${PCNME_SCENARIO:-S2}
+  PCNME_SEED: ${PCNME_SEED:-3000}
+  PCNME_METHOD: ${PCNME_METHOD:-greedy}
+  BACKHAUL_DELAY_MS: ${BACKHAUL_DELAY_MS:-3}     # the runner sets every shaping value from the config (M9.3)
+  BACKHAUL_JITTER_MS: ${BACKHAUL_JITTER_MS:-2}
+  BACKHAUL_RATE: ${BACKHAUL_RATE:-1gbit}
+  RADIO_DELAY_MS: ${RADIO_DOWN_DELAY_MS:-3}     # the zone's radio egress carries the downlink
+  RADIO_JITTER_MS: ${RADIO_DOWN_JITTER_MS:-2}
+  PCNME_RESULTS: /results
+  PCNME_PROFILE: ${PCNME_PROFILE:-}
+  PCNME_DRAIN: ${PCNME_DRAIN:-30}
+  PCNME_SECONDS: ${PCNME_SECONDS:-3600}
 
 x-car-env: &car-env
   PCNME_ROLE: car
   PCNME_CONFIG: /app/config/default.yaml
   PCNME_ZONE_URLS: "z1=http://10.10.0.11:8000,z2=http://10.10.0.12:8000,z3=http://10.10.0.13:8000,z4=http://10.10.0.14:8000,z5=http://10.10.0.15:8000"
-  PCNME_SCENARIO: S2
-  PCNME_SEED: "3000"
-  PCNME_FLEET: "200"
-  RADIO_DELAY_MS: "3"
-  RADIO_JITTER_MS: "2"
+  PCNME_SCENARIO: ${PCNME_SCENARIO:-S2}
+  PCNME_SEED: ${PCNME_SEED:-3000}
+  PCNME_FLEET: ${PCNME_FLEET:-200}
+  PCNME_DRAIN: ${PCNME_DRAIN:-30}
+  PCNME_SECONDS: ${PCNME_SECONDS:-3600}
+  RADIO_DELAY_MS: ${RADIO_UP_DELAY_MS:-3}       # the car's radio egress carries the uplink
+  RADIO_JITTER_MS: ${RADIO_UP_JITTER_MS:-2}
 
 x-zone: &zone
   <<: *pcnme
@@ -54,9 +60,11 @@ x-zone: &zone
   depends_on:
     broker: {condition: service_healthy}
     wan-gw: {condition: service_started}
+  volumes:
+    - ${PCNME_RESULTS_HOST:-../results}:/results   # each zone's rows for the runner (M9.3)
   deploy:
     resources:
-      limits: {cpus: "1.0"}      # --cpus limits only the zone's own work (final-design 15.5)
+      limits: {cpus: "${ZONE_CPUS:-1.0}"}   # --cpus limits only the zone's own work (final-design 15.5)
 
 x-car: &car
   <<: *pcnme
@@ -82,7 +90,8 @@ services:
     <<: *pcnme
     profiles: ["testbed"]
     network_mode: service:broker
-    environment: {PCNME_ROLE: broker-net}
+    environment: {PCNME_ROLE: broker-net, BACKHAUL_DELAY_MS: "${BACKHAUL_DELAY_MS:-3}",
+                  BACKHAUL_JITTER_MS: "${BACKHAUL_JITTER_MS:-2}"}
     command: ["sleep", "infinity"]
     sysctls: {}
 
@@ -90,7 +99,9 @@ services:
     <<: *pcnme
     profiles: ["testbed"]
     hostname: wan-gw
-    environment: {PCNME_ROLE: wan-gw, WAN_DELAY_MS: "62.5", WAN_JITTER_MS: "37.5", WAN_RATE: 36mbit}
+    environment: {PCNME_ROLE: wan-gw, WAN_DELAY_MS: "${WAN_DELAY_MS:-62.5}", WAN_JITTER_MS: "${WAN_JITTER_MS:-37.5}",
+                  WAN_RATE: "${WAN_RATE:-36mbit}", BACKHAUL_DELAY_MS: "${BACKHAUL_DELAY_MS:-3}",
+                  BACKHAUL_JITTER_MS: "${BACKHAUL_JITTER_MS:-2}"}
     command: ["sleep", "infinity"]
     sysctls:
       net.ipv4.ip_forward: 1
@@ -105,7 +116,8 @@ services:
     profiles: ["testbed"]
     hostname: cloud
     environment: {PCNME_ROLE: cloud, PCNME_CONFIG: /app/config/default.yaml, MQTT_HOST: 10.20.0.2,
-                  WAN_DELAY_MS: "62.5", WAN_JITTER_MS: "37.5"}
+                  WAN_DELAY_MS: "${WAN_DELAY_MS:-62.5}", WAN_JITTER_MS: "${WAN_JITTER_MS:-37.5}",
+                  PCNME_SEED: "${PCNME_SEED:-3000}", PCNME_SECONDS: "${PCNME_SECONDS:-3600}"}
     command: ["python", "-m", "pcnme.testbed.cloud"]
     depends_on:
       broker: {condition: service_healthy}
