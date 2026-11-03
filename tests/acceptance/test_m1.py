@@ -158,8 +158,8 @@ def event_log_hash(cfg: Config, seed: int, seconds: float = 5.0) -> str:
 
 
 @pytest.fixture(scope="module")
-def cfg(default_config_path: Path) -> Config:
-    return load_config(default_config_path)
+def cfg(mechanism_config_path: Path) -> Config:
+    return load_config(mechanism_config_path)
 
 
 def test_the_same_seed_gives_the_same_event_log_hash(cfg: Config) -> None:

@@ -39,6 +39,13 @@ def mean_of(row: float | dict) -> float:
     return row["mean"] if isinstance(row, dict) else row
 
 
+def power_of(row: float | dict, slot_w: float) -> float:
+    """12.2: a measured row's dynamic power = its energy per run / its mean; otherwise the slot's power."""
+    if isinstance(row, dict) and "energy_j" in row:
+        return row["energy_j"] / row["mean"]
+    return slot_w
+
+
 def p95_of(row: float | dict, factors: dict) -> float:
     """A measured p95 wins; the placeholder factor fills it only when the row has none (QUESTIONS Q2)."""
     if isinstance(row, dict) and "p95" in row:
@@ -110,14 +117,19 @@ def main(path: Path) -> None:
         rows = tt[name][ref]
         q_ref = min(rows, key=lambda q: mean_of(rows[q]))  # fastest slot type on the reference class (12.3)
         e_ret_here = (2 * e_bh + e_down) * s_out
-        e_ref = energy["pue_fog"] * p_fog[f"{q_ref}_slot"] * mean_of(rows[q_ref]) + e_ret_here
-        opts = {"fog GPU": energy["pue_fog"] * p_fog["gpu_slot"] * p95_of(rows["gpu"], factors)}
+        p_ref = power_of(rows[q_ref], p_fog[f"{q_ref}_slot"])
+        e_ref = energy["pue_fog"] * p_ref * mean_of(rows[q_ref]) + e_ret_here
+        p_gpu = power_of(rows["gpu"], p_fog["gpu_slot"])
+        opts = {"fog GPU": energy["pue_fog"] * p_gpu * p95_of(rows["gpu"], factors)}
         if "cpu" in rows:
-            opts["fog CPU"] = energy["pue_fog"] * p_fog["cpu_slot"] * p95_of(rows["cpu"], factors)
+            p_cpu = power_of(rows["cpu"], p_fog["cpu_slot"])
+            opts["fog CPU"] = energy["pue_fog"] * p_cpu * p95_of(rows["cpu"], factors)
         for k in opts:
             opts[k] += e_bh * s_in + e_ret_here
         opts["cloud"] = (
-            energy["pue_cloud"] * p_cl["gpu_slot"] * p95_of(tt[name]["cloud"]["gpu"], factors)
+            energy["pue_cloud"]
+            * power_of(tt[name]["cloud"]["gpu"], p_cl["gpu_slot"])
+            * p95_of(tt[name]["cloud"]["gpu"], factors)
             + (e_bh + e_wan) * s_in
             + (e_wan + e_bh + e_down) * s_out
         )

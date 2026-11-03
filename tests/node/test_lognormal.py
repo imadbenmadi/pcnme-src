@@ -18,8 +18,8 @@ Z95 = stats.norm.ppf(0.95)  # 1.6449
 
 
 @pytest.fixture(scope="module")
-def cfg(default_config_path: Path) -> Config:
-    return load_config(default_config_path)
+def cfg(mechanism_config_path: Path) -> Config:
+    return load_config(mechanism_config_path)
 
 
 def test_sigma_and_mu_by_hand() -> None:
@@ -80,9 +80,9 @@ def test_e_bar_is_still_11_7(cfg: Config) -> None:
     assert round(cfg.derived.e_bar, 2) == 11.70
 
 
-def test_the_p5_report_puts_the_fitted_p5_next_to_the_rows_p5(default_config_path: Path) -> None:
+def test_the_p5_report_puts_the_fitted_p5_next_to_the_rows_p5(mechanism_config_path: Path) -> None:
     # C5: for measured rows, report the fitted p5 next to the measured one. One row is made "measured".
-    data: dict[str, Any] = copy.deepcopy(load_yaml(default_config_path))
+    data: dict[str, Any] = copy.deepcopy(load_yaml(mechanism_config_path))
     data["time_table_placeholder"]["T1"]["F-GPU"]["gpu"] = {"mean": 0.008, "p5": 0.0065, "p95": 0.0110}
     table = RunTimeTable.from_config(config_from_mapping(data), lognormal)
     report = {(r.task, r.hw, r.slot): r for r in table.p5_report()}

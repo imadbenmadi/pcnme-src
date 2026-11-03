@@ -7,9 +7,10 @@ import pytest
 
 from pcnme.config import ConfigError, load_config
 from pcnme.experiments.city import City
+from tests.conftest import MECHANISM_CONFIG
 from tests.zone.harness import fixed_delay_config
 
-BASE = load_config()
+BASE = load_config(MECHANISM_CONFIG)  # the same config as fixed_delay_config (tests/zone/harness.py)
 
 
 def test_the_default_changes_nothing() -> None:

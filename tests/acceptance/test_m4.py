@@ -33,8 +33,8 @@ TESTS = {
 
 
 @pytest.fixture(scope="module")
-def cfg(default_config_path: Path) -> Config:
-    return load_config(default_config_path)
+def cfg(mechanism_config_path: Path) -> Config:
+    return load_config(mechanism_config_path)
 
 
 @pytest.mark.parametrize("ref", TESTS.values())

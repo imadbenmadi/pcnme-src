@@ -7,10 +7,11 @@ import hashlib
 
 from pcnme.config import load_config
 from pcnme.experiments.city import City
+from tests.conftest import MECHANISM_CONFIG
 
 
 def digest() -> str:
-    c = City(load_config(), "S2", "greedy", 2000, n_cars=60).run(3.0)
+    c = City(load_config(MECHANISM_CONFIG), "S2", "greedy", 2000, n_cars=60).run(3.0)
     rows = sorted(
         (str(r.task.task_id), r.anchor, r.executor, r.outcome, repr(r.closed_at), len(r.attempts))
         for r in c.records

@@ -18,8 +18,8 @@ CENTRES = {"z1": (300.0, 300.0), "z2": (900.0, 300.0), "z3": (300.0, 900.0), "z4
 
 
 @pytest.fixture(scope="module")
-def cfg(default_config_path: Path) -> Config:
-    return load_config(default_config_path)
+def cfg(mechanism_config_path: Path) -> Config:
+    return load_config(mechanism_config_path)
 
 
 class Line:

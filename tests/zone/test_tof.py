@@ -14,8 +14,8 @@ from pcnme.zone.tof import TofBroker
 
 
 @pytest.fixture(scope="module")
-def cfg(default_config_path: Path) -> Config:
-    return load_config(default_config_path)
+def cfg(mechanism_config_path: Path) -> Config:
+    return load_config(mechanism_config_path)
 
 
 @pytest.fixture(scope="module")
@@ -122,10 +122,10 @@ def test_a_soft_boulder_is_dropped_only_past_its_time_left_plus_l_max(
     )
 
 
-def test_a_hard_boulder_the_cloud_cannot_make_is_dropped_at_intake(default_config_path: Path) -> None:
+def test_a_hard_boulder_the_cloud_cannot_make_is_dropped_at_intake(mechanism_config_path: Path) -> None:
     # Make T1 a boulder (tight D = 5 ms: 8 ms >= 0.8 x 5). Its cloud path takes about 141 ms > 5 ms left:
     # dropped at intake, with no agent decision (7.1.3: "no transition is stored").
-    data: dict[str, Any] = copy.deepcopy(load_yaml(default_config_path))
+    data: dict[str, Any] = copy.deepcopy(load_yaml(mechanism_config_path))
     data["task_types"]["T1"]["deadline"]["tight"] = 0.005
     cfg = config_from_mapping(data)
     tof = TofBroker(cfg, PathEstimates(cfg, wan_wait=ZeroWanWait()))

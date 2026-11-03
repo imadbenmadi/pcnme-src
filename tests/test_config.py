@@ -20,7 +20,8 @@ import pytest
 
 from pcnme.config import Config, ConfigError, config_from_mapping, load_config, load_yaml
 
-# Hand calculations from config/default.yaml (placeholders of 27 Oct).
+# Hand calculations of the derivation rules, on tests/data/mechanism.yaml (the placeholders of 27 Oct). The
+# default config's own numbers are checked against tools/calc_defaults.py (test_derived_values_*).
 MEAN_GPU_RUN = 0.73 * 0.008 + 0.15 * 0.010 + 0.10 * 0.025 + 0.02 * 0.720  # 0.02424 s, whole mix (16.2, Q1)
 ZONE_CAPACITY = 2 / MEAN_GPU_RUN  # c_GPU of F-GPU / mean: 82.5 tasks/s
 ACTIVE_ZONES = 4  # z1-z4; z5 joins
@@ -41,13 +42,13 @@ E_BAR = (1.5 * 20 * 1.3 * 0.090 + E_BH * 150 * 8000 + E_RET_HERE_SMALL) / E_REF[
 
 
 @pytest.fixture(scope="module")
-def raw(default_config_path: Path) -> dict[str, Any]:
-    return load_yaml(default_config_path)
+def raw(mechanism_config_path: Path) -> dict[str, Any]:
+    return load_yaml(mechanism_config_path)
 
 
 @pytest.fixture(scope="module")
-def cfg(default_config_path: Path) -> Config:
-    return load_config(default_config_path)
+def cfg(mechanism_config_path: Path) -> Config:
+    return load_config(mechanism_config_path)
 
 
 def edited(raw: dict[str, Any], edit: Callable[[dict[str, Any]], None]) -> Config:
@@ -100,8 +101,8 @@ def test_yaml_reads_exponent_floats_as_numbers(tmp_path: Path) -> None:
     assert isinstance(data["a"], float) and isinstance(data["c"], int)
 
 
-def test_default_path_loads_the_repo_config(cfg: Config) -> None:
-    assert load_config() == cfg
+def test_default_path_loads_the_repo_config(default_config_path: Path) -> None:
+    assert load_config() == load_config(default_config_path)
 
 
 def test_loading_twice_gives_equal_configs(default_config_path: Path) -> None:
@@ -242,10 +243,14 @@ def test_network_energy_per_bit_and_pue(cfg: Config) -> None:
     assert cfg.energy.e_down == pytest.approx(E_DOWN, rel=1e-12)
 
 
-def test_derived_values_equal_calc_defaults_output(cfg: Config, repo_root: Path) -> None:
-    # PLAN M0.2: the loader and tools/calc_defaults.py (an independent implementation) agree.
+@pytest.mark.parametrize("which", ["default", "mechanism"])
+def test_derived_values_equal_calc_defaults_output(which: str, repo_root: Path) -> None:
+    # PLAN M0.2: the loader and tools/calc_defaults.py (an independent implementation) agree, on the default
+    # (calibrated) config and on the frozen placeholder one.
+    path = repo_root / ("config/default.yaml" if which == "default" else "tests/data/mechanism.yaml")
+    cfg = load_config(path)
     out = subprocess.run(
-        [sys.executable, str(repo_root / "tools" / "calc_defaults.py")],
+        [sys.executable, str(repo_root / "tools" / "calc_defaults.py"), str(path)],
         capture_output=True,
         text=True,
         check=True,
@@ -471,3 +476,41 @@ def test_every_task_type_needs_a_row_on_the_strongest_class(raw: dict[str, Any])
 def test_the_knee_weight_is_read_from_the_config(cfg: Config) -> None:
     # 13.3: w* from the small M5.3 NSGA-II runs (it replaced the Q32 stand-in 0.5); the full runs redo it.
     assert cfg.reward.w == 0.0788
+
+
+# --- one dynamic power per time-table row (final-design 12.2, 14.4; Q52 c) ---------------------------------
+
+
+def test_a_measured_row_carries_its_own_power_energy_per_run_over_mean(raw: dict[str, Any]) -> None:
+    def edit(d: dict[str, Any]) -> None:
+        d["time_table_placeholder"]["T1"]["F-GPU"]["gpu"] = {"mean": 0.020, "p95": 0.025, "energy_j": 0.8}
+
+    c = edited(raw, edit)
+    row = c.time_table.rows[("T1", "F-GPU", "gpu")]
+    assert row.p_dyn_w == pytest.approx(40.0) and row.energy_measured
+
+
+def test_a_row_without_energy_takes_its_slot_power(raw: dict[str, Any]) -> None:
+    c = edited(raw, lambda d: None)
+    hw = c.hardware["F-CPU"]
+    row = c.time_table.rows[("T1", "F-CPU", "cpu")]
+    if not row.energy_measured:
+        assert row.p_dyn_w == hw.p_dyn_w["cpu"]
+
+
+def test_e_ref_and_e_bar_use_the_rows_power(raw: dict[str, Any]) -> None:
+    def edit(d: dict[str, Any]) -> None:
+        d["time_table_placeholder"]["T1"]["F-GPU"]["gpu"] = {"mean": 0.020, "p95": 0.025, "energy_j": 0.8}
+
+    c = edited(raw, edit)
+    e = c.energy
+    ret_here = (2 * e.e_bh + e.e_down) * c.task_types["T1"].result_bits
+    assert c.derived.e_ref["T1"] == pytest.approx(e.pue_fog * 40.0 * 0.020 + ret_here)
+
+
+def test_energy_needs_a_positive_number(raw: dict[str, Any]) -> None:
+    def edit(d: dict[str, Any]) -> None:
+        d["time_table_placeholder"]["T1"]["F-GPU"]["gpu"] = {"mean": 0.020, "energy_j": 0.0}
+
+    with pytest.raises(ConfigError, match="energy_j"):
+        edited(raw, edit)

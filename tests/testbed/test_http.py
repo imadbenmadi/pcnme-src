@@ -8,14 +8,13 @@ from typing import Any
 
 import pytest
 
-pytest.importorskip("fastapi")
-from fastapi.testclient import TestClient  # noqa: E402
+from pcnme.ids import AttemptKey, SnapshotVersion, TaskId
+from pcnme.node.executor import Accepted, TaskRequest
+from pcnme.testbed.clock import RealClock
+from pcnme.testbed.http import HttpCalls, make_app
+from pcnme.zone.statestore import Snapshot
 
-from pcnme.ids import AttemptKey, SnapshotVersion, TaskId  # noqa: E402
-from pcnme.node.executor import Accepted, TaskRequest  # noqa: E402
-from pcnme.testbed.clock import RealClock  # noqa: E402
-from pcnme.testbed.http import HttpCalls, make_app  # noqa: E402
-from pcnme.zone.statestore import Snapshot  # noqa: E402
+pytest.importorskip("fastapi")
 
 KEY = AttemptKey(TaskId("c1", 0, 5), "z1", 1)
 SNAP = Snapshot("z2", SnapshotVersion(0, 1), {}, 0.0, None, 0.0)
@@ -46,7 +45,9 @@ class FakeTarget:
         return Accepted("gpu", 0.01), SNAP
 
 
-def serve(target: FakeTarget) -> tuple[RealClock, TestClient]:
+def serve(target: FakeTarget) -> tuple[RealClock, Any]:
+    from fastapi.testclient import TestClient
+
     clock = RealClock()
     threading.Thread(target=clock.run_for, args=(2.0,), name="target-loop", daemon=True).start()
     return clock, TestClient(make_app(clock, target))
