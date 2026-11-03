@@ -26,7 +26,7 @@ case "$ROLE" in
     ;;
   wan-gw)
     # The metro-edge router: the one shared WAN pipe, shaped on its cloud side. U(25, 100) ms one way.
-    shape "$(iface_for 10.30.0.)" "${WAN_DELAY_MS:-62.5}" "${WAN_JITTER_MS:-37.5}" "${WAN_RATE:-515mbit}"
+    shape "$(iface_for 10.30.0.)" "${WAN_DELAY_MS:-62.5}" "${WAN_JITTER_MS:-37.5}" "${WAN_RATE:-36mbit}"
     # Return direction (cloud -> broker / zones): one backhaul crossing (final-design 12.2: 1 WAN + 1 backhaul).
     shape "$(iface_for 10.20.0.)" "${BACKHAUL_DELAY_MS:-3}" "${BACKHAUL_JITTER_MS:-2}" "10gbit"
     ;;

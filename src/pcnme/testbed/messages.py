@@ -20,3 +20,24 @@ class Upload:
 class UploadReply:
     task_id: TaskId
     anchor_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class Attach:
+    """POST /cars, car -> the zone it now uses (9.6): its distance for the radio session, where results go."""
+
+    car_id: str
+    distance_m: float
+    url: str  # the car container's address for POST /results (radio_net)
+
+
+@dataclass(frozen=True, slots=True)
+class Gps:
+    """POST /gps, car -> its serving zone every GPS period (5.2, 10); car_time is the car's own clock."""
+
+    car_id: str
+    x: float
+    y: float
+    vx: float
+    vy: float
+    car_time: float
