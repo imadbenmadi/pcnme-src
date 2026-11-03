@@ -174,3 +174,8 @@ def test_on_sent_runs_on_the_callers_loop_once_the_body_is_written() -> None:
     caller.run_for(0.5)
     tclock.stop()
     assert sent == [threading.current_thread().name] and len(out) == 1
+
+
+def test_a_body_that_is_not_a_payload_is_refused_not_crashed() -> None:
+    _, http = serve(FakeTarget())
+    assert http.post("/tasks", content=b"x" * 10_000).status_code == 422

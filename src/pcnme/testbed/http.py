@@ -117,8 +117,15 @@ def make_app(clock: RealClock, target: Target, timeout: float = 5.0) -> Any:
         result = await asyncio.wait_for(asyncio.wrap_future(fut), timeout)
         return Response(encode(result), media_type="application/json")
 
+    async def payload(request: Request) -> object:
+        """The body as a registered payload; anything else is the caller's error (422), never a crash."""
+        try:
+            return decode(await request.body())
+        except (ValueError, TypeError, KeyError) as e:
+            raise HTTPException(422, f"not a payload: {type(e).__name__}") from None
+
     async def body(request: Request, kind: type) -> Any:
-        obj = decode(await request.body())
+        obj = await payload(request)
         if not isinstance(obj, kind):
             raise HTTPException(422, f"expected a {kind.__name__}")
         return obj
@@ -129,7 +136,7 @@ def make_app(clock: RealClock, target: Target, timeout: float = 5.0) -> Any:
     async def post(request: Request) -> Response:
         """A placed attempt from a zone (TaskRequest), or a car's upload (Upload, 5.3, 15.3): the upload runs
         through the zone's software radio pipe and is answered at t_rx; a cut upload gets 409 (9.7)."""
-        obj = decode(await request.body())
+        obj = await payload(request)
         if isinstance(obj, TaskRequest):
             return await on_loop(lambda: target.handle(obj))
         if not isinstance(obj, Upload):
