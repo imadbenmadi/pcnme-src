@@ -20,7 +20,7 @@ COPY config ./config
 RUN uv sync --locked --extra testbed
 
 COPY docker/net-setup.sh /usr/local/bin/net-setup.sh
-RUN chmod +x /usr/local/bin/net-setup.sh
+RUN sed -i 's/\r$//' /usr/local/bin/net-setup.sh && chmod +x /usr/local/bin/net-setup.sh   # CRLF from a Windows checkout
 
 # The venv's python first, so compose's `python -m pcnme.testbed.<role>` runs with the locked libraries.
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONUTF8=1

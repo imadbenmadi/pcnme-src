@@ -123,3 +123,18 @@ def test_killing_a_client_stops_it() -> None:
     assert client.alive and bus.is_alive("z1") and bus.is_alive("z2")  # peers: HTTP answers decide (step 4)
     bus.kill("z1")
     assert not client.alive and not bus.is_alive("z1")
+
+
+def test_the_first_connect_waits_for_a_broker_that_is_still_starting() -> None:
+    refusals = [2]
+
+    class Slow(FakePaho):
+        def connect(self, host: str, port: int) -> None:
+            if refusals[0]:
+                refusals[0] -= 1
+                raise ConnectionRefusedError
+            super().connect(host, port)
+
+    bus = MqttBus(RealClock(), "broker", paho_factory=Slow, connect_wait=0.01)
+    client = bus.connect("z1", (0.0, 0.0), lambda d: None)
+    assert client.alive and refusals == [0]

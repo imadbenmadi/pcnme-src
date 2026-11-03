@@ -91,8 +91,16 @@ class MqttBus:
     """One process's connection to the broker (one client per zone, car app or cloud, 3)."""
 
     def __init__(
-        self, clock: RealClock, host: str, port: int = 1883, paho_factory: Callable[[str], Any] = _paho
+        self,
+        clock: RealClock,
+        host: str,
+        port: int = 1883,
+        paho_factory: Callable[[str], Any] = _paho,
+        *,
+        connect_wait: float = 1.0,
+        connect_timeout: float = 60.0,
     ) -> None:
+        self._wait, self._timeout = connect_wait, connect_timeout
         self._clock = clock
         self._host, self._port = host, port
         self._factory = paho_factory
@@ -121,12 +129,27 @@ class MqttBus:
             self._clock.call_soon(lambda: self._deliver(client_id, on_message, d))
 
         paho.on_message = received
-        paho.connect(self._host, self._port)
+        self._first_connect(paho)
         paho.loop_start()
         client = MqttClient(self, client_id, paho)
         self._clients[client_id] = client
         self._dead.discard(client_id)
         return client
+
+    def _first_connect(self, paho: Any) -> None:
+        """The broker may still be starting (EMQX takes some seconds): retry the first connect for up to
+        `connect_timeout`; after it, paho's loop reconnects by itself (a broker restart, 15.7)."""
+        import time
+
+        end = time.monotonic() + self._timeout
+        while True:
+            try:
+                paho.connect(self._host, self._port)
+                return
+            except OSError:
+                if time.monotonic() >= end:
+                    raise
+                time.sleep(self._wait)
 
     def _deliver(self, client_id: str, on_message: Callable[[Delivery], None], d: Delivery) -> None:
         if self.is_alive(client_id):
