@@ -8,8 +8,8 @@
   runs on a server thread. Bodies are testbed/codec.py JSON.
 """
 
-from __future__ import annotations
-
+# No `from __future__ import annotations`: FastAPI must resolve `request: Request`, imported inside make_app.
+import asyncio
 import concurrent.futures
 from collections.abc import Callable, Mapping
 from typing import Any
@@ -91,7 +91,7 @@ def make_app(clock: RealClock, target: Target, timeout: float = 5.0) -> Any:
 
     app = FastAPI()
 
-    def on_loop(fn: Callable[[], object]) -> Response:
+    async def on_loop(fn: Callable[[], object]) -> Response:
         fut: concurrent.futures.Future[object] = concurrent.futures.Future()
 
         def run() -> None:
@@ -101,7 +101,9 @@ def make_app(clock: RealClock, target: Target, timeout: float = 5.0) -> Any:
                 fut.set_exception(e)
 
         clock.call_soon(run)
-        return Response(encode(fut.result(timeout)), media_type="application/json")
+        # Awaited, not blocking: the server keeps taking requests while the zone loop works.
+        result = await asyncio.wait_for(asyncio.wrap_future(fut), timeout)
+        return Response(encode(result), media_type="application/json")
 
     async def body(request: Request, kind: type) -> Any:
         obj = decode(await request.body())
@@ -112,16 +114,16 @@ def make_app(clock: RealClock, target: Target, timeout: float = 5.0) -> Any:
     @app.post("/tasks")
     async def post(request: Request) -> Response:
         req = await body(request, TaskRequest)
-        return on_loop(lambda: target.handle(req))
+        return await on_loop(lambda: target.handle(req))
 
     @app.get("/tasks")
     async def get(request: Request) -> Response:
         key = await body(request, AttemptKey)
-        return on_loop(lambda: target.executor.probe(key))
+        return await on_loop(lambda: target.executor.probe(key))
 
     @app.delete("/tasks")
     async def delete(request: Request) -> Response:
         key = await body(request, AttemptKey)
-        return on_loop(lambda: target.executor.cancel(key))
+        return await on_loop(lambda: target.executor.cancel(key))
 
     return app
