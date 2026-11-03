@@ -1,0 +1,54 @@
+diff --git a/config/default.yaml b/config/default.yaml
+index b9208c9..8e9be9d 100644
+--- a/config/default.yaml
++++ b/config/default.yaml
+@@ -54,11 +54,11 @@ links:
+   wan_bw: calibrated             # C: B_WAN = cloud-eligible bits/s at S2 / 0.9 (about 515 Mbps with placeholders)
+   broker_extra_delay: 0.001      # R: EMQX processing, added to the backhaul delay
+
+-task_types:                      # sizes M (BDD100K JPEG at quality 80); run times M
+-  T1: {model: yolov8n, cls: hard, share: 0.73, input_kb: 150, result_kb: 3, deadline: {loose: 0.100, tight: 0.050}}
+-  T3: {model: yolov8n-seg, cls: hard, share: 0.15, input_kb: 150, result_kb: 3, deadline: {loose: 0.100, tight: 0.070}}
+-  T4: {model: detector+ocr, cls: soft, share: 0.10, input_kb: 150, result_kb: 3, deadline: {loose: 1.0, tight: 0.5}}
+-  T2: {model: yolov8l x60 frames, cls: soft, share: 0.02, input_kb: 9000, result_kb: 10,
++task_types:                      # sizes M: BDD100K 720p re-encoded at quality 80, 300 frames, mean 76 KB (p5 34, p95 127); calibration 3 Nov 2026
++  T1: {model: yolov8n, cls: hard, share: 0.73, input_kb: 76, result_kb: 3, deadline: {loose: 0.100, tight: 0.050}}
++  T3: {model: yolov8n-seg, cls: hard, share: 0.15, input_kb: 76, result_kb: 3, deadline: {loose: 0.100, tight: 0.070}}
++  T4: {model: detector+ocr, cls: soft, share: 0.10, input_kb: 76, result_kb: 3, deadline: {loose: 1.0, tight: 0.5}}
++  T2: {model: yolov8l x60 frames, cls: soft, share: 0.02, input_kb: 4572, result_kb: 10,
+        deadline: {loose: 3.0, tight: 1.1x_E_strong}}   # C: tight D = 1.1 x mean run on the strongest fog class -> a boulder at alpha = 0.8
+   T5: {enabled: false}           # optional stress test (PointPillars)
+   L_max: equal_to_D              # final doc
+@@ -68,7 +68,7 @@ hardware:                        # run times and powers are M; placeholders belo
+     c_gpu: 2
+     c_cpu: 2                     # 4 cores per CPU slot
+     queue: {gpu: 32, cpu: 16}    # R: hard 'late' binds before 'full' (32 T1 = 128 ms of work > D)
+-    p_dyn_w: {gpu_slot: 25, cpu_slot: 20}
++    p_dyn_w: {gpu_slot: 41, cpu_slot: 20}  # gpu M: share-weighted energy/run / run time, 2 streams (T1 40.5, T3 42.4, T2 58.3 W); cpu placeholder (no RAPL on Windows)
+     p_idle_w: 83.4               # P: iFogSim default via Jafari & Rezvani (reporting only)
+   F-CPU:                         # S6 only
+     c_gpu: 0
+@@ -88,10 +88,20 @@ time_table_placeholder:          # run per task (s), per type / hardware class /
+   # The factors fill only the values a row does not give: a measured p5, p95 or longest step always wins.
+   factors: {p5: 0.75, p95: 1.3, longest_step: 0.5}  # x the mean (final doc 18, Time table); p5 = the p5 of
+                                                      # the lognormal fitted to mean and p95 (CHANGES C5)
+-  T1: {F-GPU: {gpu: 0.008, cpu: 0.090}, F-CPU: {cpu: 0.090}, cloud: {gpu: 0.004, cpu: 0.045}}
+-  T3: {F-GPU: {gpu: 0.010, cpu: 0.110}, F-CPU: {cpu: 0.110}, cloud: {gpu: 0.005, cpu: 0.055}}
++  # M (calibration 3 Nov 2026, tools/calibrate_yolo.py): GTX 1070 at PCIe x4, 2 GPU streams and 2 CPU slots (4 threads)
++  # busy at once, one process per slot; run = JPEG decode + preprocess + inference + postprocess. F-CPU rows = the
++  # same CPU slot. Cloud GPU = Ultralytics A100 TensorRT inference (v8n 0.99, v8n-seg 1.21, v8l 2.39 ms) + the measured
++  # decode, pre- and post-processing. Cloud CPU rows and T4 (no OCR model named) stay placeholders.
++  T1: {F-GPU: {gpu: {mean: 0.0226, p5: 0.0202, p95: 0.0257, longest_step: 0.0130},
++               cpu: {mean: 0.0695, p5: 0.0636, p95: 0.0785, longest_step: 0.0599}},
++       F-CPU: {cpu: {mean: 0.0695, p5: 0.0636, p95: 0.0785, longest_step: 0.0599}},
++       cloud: {gpu: 0.0091, cpu: 0.045}}
++  T3: {F-GPU: {gpu: {mean: 0.0265, p5: 0.0235, p95: 0.0299, longest_step: 0.0156},
++               cpu: {mean: 0.0933, p5: 0.0800, p95: 0.1118, longest_step: 0.0765}},
++       F-CPU: {cpu: {mean: 0.0933, p5: 0.0800, p95: 0.1118, longest_step: 0.0765}},
++       cloud: {gpu: 0.0103, cpu: 0.055}}
+   T4: {F-GPU: {gpu: 0.025, cpu: 0.200}, F-CPU: {cpu: 0.200}, cloud: {gpu: 0.012, cpu: 0.100}}
+-  T2: {F-GPU: {gpu: 0.720}, cloud: {gpu: 0.200}}   # GPU only
++  T2: {F-GPU: {gpu: {mean: 3.869, p5: 3.829, p95: 3.909, longest_step: 0.0655}}, cloud: {gpu: 0.661}}   # GPU only
+
+ energy:
+   pue_fog: 1.5                   # R: between Behbehani's 1.0 (open edge) and the Uptime 2023 average
