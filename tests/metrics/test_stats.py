@@ -194,3 +194,22 @@ def test_summary_over_seeds_by_hand(tmp_path: Path) -> None:
     assert s[("S2", "random")]["on_time"].n == 1
     with pytest.raises(ValueError, match="twice"):
         summarise([runs[0], runs[0]])
+
+
+def test_mean_e_hat_counts_a_drop_as_e_bar(tmp_path: Path) -> None:
+    """13.2.4 / 12.3: ê = min(E / E_ref, ē) per delivered task, ē for a drop; nan without the constants."""
+    rows = [
+        task("a", "on_time", 0.05, energy=1.0),
+        task("b", "late", 0.2, energy=10.0),
+        task("c", "drop_late", None),
+    ]
+    for r in rows:
+        r["type"] = "T1"
+    d = write_run(tmp_path, 3000, rows)
+    info = json.loads((d / "run.json").read_text(encoding="utf-8"))
+    info["objective"] = {"e_ref": {"T1": 2.0}, "e_bar": 4.0, "w3": 1.0, "c_drop": 5.0}
+    (d / "run.json").write_text(json.dumps(info), encoding="utf-8")
+    m = run_metrics(d, 10).metrics
+    assert m["mean_e_hat"] == pytest.approx((0.5 + 4.0 + 4.0) / 3)
+    plain = write_run(tmp_path / "x", 3001, rows)
+    assert math.isnan(run_metrics(plain, 10).metrics["mean_e_hat"])
