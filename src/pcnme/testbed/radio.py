@@ -13,15 +13,14 @@ notices (9.5.4), as in fast mode.
 
 from __future__ import annotations
 
-import concurrent.futures
 import dataclasses
-from typing import Any, Protocol
+from typing import Protocol
 
 from pcnme.car.car import Confirm, Result, Task
 from pcnme.config import Config
-from pcnme.testbed.clock import RealClock
 from pcnme.testbed.codec import decode, encode
 from pcnme.testbed.messages import Upload, UploadReply
+from pcnme.testbed.netloop import NetLoop
 
 __all__ = ["RemoteCar", "Upload", "UploadReply", "software_radio"]
 
@@ -41,40 +40,22 @@ class ConfirmSink(Protocol):
 class RemoteCar:
     """A car in another container, as the zone's registry sees it (Zone._cars)."""
 
-    def __init__(
-        self,
-        car_id: str,
-        url: str,
-        clock: RealClock,
-        zone: ConfirmSink,
-        *,
-        client: Any = None,
-        timeout: float = 1.0,
-    ) -> None:
-        import httpx
-
+    def __init__(self, car_id: str, url: str, zone: ConfirmSink, net: NetLoop) -> None:
         self.car_id = car_id
         self._url = url
-        self._clock = clock
         self._zone = zone
-        self._http = client if client is not None else httpx.Client(timeout=timeout)
-        self._pool = concurrent.futures.ThreadPoolExecutor(2, thread_name_prefix=f"car-{car_id}")
+        self._net = net  # the zone process's one network thread (testbed/netloop.py)
 
     def budget(self, task: Task, now: float) -> float:
-        raise RuntimeError(
-            "on the testbed B_car comes with the upload (Upload.b_car), never from the zone's clock"
-        )
+        raise RuntimeError("testbed: B_car comes with the upload (Upload.b_car), never from the zone's clock")
 
     def receive(self, result: Result, now: float) -> Confirm | None:
-        def work() -> None:
-            try:
-                r = self._http.request("POST", self._url + "/results", content=encode(result))
-            except Exception:  # no answer: no confirm; the anchor's T_ack timer notices (9.5.4)
-                return
-            if r.status_code == 200:
-                confirm = decode(r.content)
-                if isinstance(confirm, Confirm):
-                    self._clock.call_soon(lambda: self._zone.car_confirmed(self.car_id, result, confirm))
+        def done(status: int, content: bytes) -> None:
+            if status != 200:
+                return  # no answer: no confirm; the anchor's T_ack timer notices (9.5.4)
+            confirm = decode(content)
+            if isinstance(confirm, Confirm):
+                self._zone.car_confirmed(self.car_id, result, confirm)
 
-        self._pool.submit(work)
+        self._net.request("POST", self._url, "/results", encode(result), done)
         return None

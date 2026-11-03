@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import functools
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -103,6 +103,70 @@ class CarDrop:
 
 def _alive(zone: Zone) -> Callable[[], bool]:
     return lambda: zone.mqtt.alive
+
+
+def record_rows(log: RunLog, cfg: Config, records: Iterable[TaskRecord]) -> None:
+    """The tasks and attempts rows of closed records (METRICS.md): fast mode and the testbed (each zone its
+    own anchored records) write the same rows."""
+    em = EnergyModel(cfg)
+    for r in records:
+        p = r.parts
+        log.add(
+            "tasks",
+            r.task.created,
+            anchor=r.anchor,
+            task_id=str(r.task.task_id),
+            type=r.task.task_type,
+            cls=r.task.cls,
+            outcome=r.outcome,
+            boulder=r.route == "cloud",
+            latency_s=r.confirm.latency if r.confirm else None,
+            deadline_s=r.task.deadline,
+            attempts=len(r.attempts),
+            energy_j=em.of_record(r).total + em.earlier(r),
+            energy_wasted_j=em.earlier(r),
+            upload_s=p.get("upload"),
+            forward_s=p.get("input"),
+            wait_s=p.get("queue"),
+            run_s=p.get("run"),
+            return_s=p.get("return"),
+            zone_changed=int(r.delivered_by is not None and r.delivered_by != r.anchor),
+            reward=r.drop_reward,  # a drop before any attempt (7.3): logged, no transition
+        )
+        for a, i in sorted(r.attempts.items()):
+            last = a == max(r.attempts)
+            if a == r.result_attempt:
+                result = "delivered"
+            elif not last:
+                e = next((x for x in r.earlier if x.attempt == a), None)
+                result = (
+                    f"refused_{e.reply}" if e and e.reply in ("full", "late") else (e.reply if e else "lost")
+                )
+            else:
+                result = r.reply if r.reply in ("lost", "no_reply") else (r.outcome or "")
+            rep_ = r.report if r.report is not None and r.report.key.attempt == a else None
+            rw = r.rewards.get(a)  # 11.4, final at close + G
+            log.add(
+                "attempts",
+                i.t_send,
+                anchor=r.anchor,
+                executor=i.executor,
+                slot_type=rep_.slot if rep_ else "",
+                result=result,
+                option=i.option,
+                attempt=a,
+                task_id=str(r.task.task_id),
+                t_send_s=i.t_send,
+                t_at_executor_s=i.t_at_executor,
+                t_start_s=rep_.start if rep_ else None,
+                t_finish_s=rep_.finish if rep_ else None,
+                t_result_at_car_s=r.result_at_car if a == r.result_attempt else None,
+                reward=rw.reward if rw else None,
+                reward_kind=rw.kind if rw else "",
+                energy_j=rw.energy if rw else None,
+                t_waste_s=rw.t_waste if rw else None,
+                decided=i.decided,
+            )
 
 
 class City:
@@ -401,67 +465,7 @@ class City:
         self.clock.schedule(now + period, self._sample)
 
     def _task_rows(self) -> None:
-        em = EnergyModel(self.cfg)
-        for r in self.records:
-            p = r.parts
-            self.log.add(
-                "tasks",
-                r.task.created,
-                anchor=r.anchor,
-                task_id=str(r.task.task_id),
-                type=r.task.task_type,
-                cls=r.task.cls,
-                outcome=r.outcome,
-                boulder=r.route == "cloud",
-                latency_s=r.confirm.latency if r.confirm else None,
-                deadline_s=r.task.deadline,
-                attempts=len(r.attempts),
-                energy_j=em.of_record(r).total + em.earlier(r),
-                energy_wasted_j=em.earlier(r),
-                upload_s=p.get("upload"),
-                forward_s=p.get("input"),
-                wait_s=p.get("queue"),
-                run_s=p.get("run"),
-                return_s=p.get("return"),
-                zone_changed=int(r.delivered_by is not None and r.delivered_by != r.anchor),
-                reward=r.drop_reward,  # a drop before any attempt (7.3): logged, no transition
-            )
-            for a, i in sorted(r.attempts.items()):
-                last = a == max(r.attempts)
-                if a == r.result_attempt:
-                    result = "delivered"
-                elif not last:
-                    e = next((x for x in r.earlier if x.attempt == a), None)
-                    result = (
-                        f"refused_{e.reply}"
-                        if e and e.reply in ("full", "late")
-                        else (e.reply if e else "lost")
-                    )
-                else:
-                    result = r.reply if r.reply in ("lost", "no_reply") else (r.outcome or "")
-                rep_ = r.report if r.report is not None and r.report.key.attempt == a else None
-                rw = r.rewards.get(a)  # 11.4, final at close + G
-                self.log.add(
-                    "attempts",
-                    i.t_send,
-                    anchor=r.anchor,
-                    executor=i.executor,
-                    slot_type=rep_.slot if rep_ else "",
-                    result=result,
-                    option=i.option,
-                    attempt=a,
-                    task_id=str(r.task.task_id),
-                    t_send_s=i.t_send,
-                    t_at_executor_s=i.t_at_executor,
-                    t_start_s=rep_.start if rep_ else None,
-                    t_finish_s=rep_.finish if rep_ else None,
-                    t_result_at_car_s=r.result_at_car if a == r.result_attempt else None,
-                    reward=rw.reward if rw else None,
-                    reward_kind=rw.kind if rw else "",
-                    energy_j=rw.energy if rw else None,
-                    t_waste_s=rw.t_waste if rw else None,
-                    decided=i.decided,
-                )
+        record_rows(self.log, self.cfg, self.records)
 
     def _decision_rows(self) -> None:
         """One row per decision (16.3, PLAN M4.1): x_<input> for the 48 inputs in the order of 11.1,

@@ -133,8 +133,20 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   6. [x] Entry points `pcnme.testbed.{zone,car,cloud}` (+ `serve.py`), Q53 built (no modelled delays, C7 from the written body, own-backhaul bookkeeping kept); zone endpoints POST /cars, POST /gps, GET /closed, GET /status; `@pytest.mark.testbed` compose test (broker, wan-gw, cloud, 4 zones, car-1 with 20 cars): tasks close on time end to end.
   7. [ ] FedAvg + fine-tuning on the testbed, and the learning methods in the containers: **Q54** (proposal: Greedy for M9.2–M9.4 first; then CPU torch in the zone image).
 - [x] **M9.2** Verify the network (15.4 "to verify"): routing through wan-gw, netem jitter distribution and reordering, `tcp_slow_start_after_idle=0`, one shaped crossing per hop (`tests/testbed/test_network.py`, `pytest -m testbed`). Found and fixed: jitter reordering distorted WAN transfers (netem now keeps packets in order, **Q56**); a warm 1 MB upload fits 4.2's S/B + d. MinIO cannot be pinned: its public images are gone (**Q55**, proposal: bind-mounted results).
-- [ ] **M9.3** Runner: per-scenario shaping, zone join / kill / broker restart (15.7), result upload to MinIO.
-- [ ] **M9.4** Same scenario and seed in fast mode and on the testbed: report the gap (16.3).
+- [~] **M9.3** Runner: per-scenario shaping, zone join / kill / broker restart (15.7), result upload to MinIO.
+  Built (branch `m9-3-runner`): `python -m pcnme.testbed.runner --scenario S2 --seed 3000 --method greedy --seconds 60
+  [--containers N]` sets every netem value from the config, starts the stack, applies `testbed.events` (empty:
+  **Q57**), waits for the zones' rows, saves `containers.log`, and writes the run's Parquet tables (zones write JSON
+  rows, `record_rows` shared with fast mode). Results go to a bind mount (MinIO: **Q55**).
+  Found and fixed on the full fleet: per-car GPS requests (now one GpsBatch per zone and period); ~250 HTTP threads
+  per zone starving its loop (now one asyncio network thread, `testbed/netloop.py`); zone POSTs carried no input
+  bytes, so the WAN saw no bulk and ŵ_WAN went negative (greedy sent most tasks to the cloud; now 5.3's input
+  rides with the request).
+  **Open (resume here):** at full S2 load (200 cars) the zone loops still lag: 654 of 9 121 tasks on time vs about
+  100 % in fast mode (masks stale, probes find attempts lost, acks late). Next: profile again with
+  `PCNME_PROFILE=1` (writes `results/profile-<zone>.prof`) and move the zone onto the asyncio loop of its network
+  I/O (one thread), then rerun `tools/testbed_gap.py`.
+- [ ] **M9.4** Same scenario and seed in fast mode and on the testbed: report the gap (16.3). Tool ready: `tools/testbed_gap.py` (fast-mode run with the testbed's fleet and seed, one Markdown table of the 16.3 metrics). Waits on M9.3's open item; the in-order jitter bias (Q56) is part of the gap.
 
 ## C — Calibration (any time after M0, on the home desktop)
 

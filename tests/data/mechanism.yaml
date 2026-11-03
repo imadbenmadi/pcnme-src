@@ -228,6 +228,10 @@ ablation:                        # final-design 16.4 switches; every default is 
   federated: none                # 13.7 variants: none (no federated learning) | fedavg | finetune (FedAvg +
                                  # local fine-tuning); phase 2, so phase-1 runs default to none
 
+testbed:                         # the M9.3 runner (final-design 15.4, 15.7)
+  drain_s: 30.0                  # R: after the last arrival, as the fast-mode city (experiments/city.py DRAIN)
+  events: []                     # STAND-IN (QUESTIONS Q57): [{at_s, action: start | kill | restart, service}]
+
 scenarios:                       # rho_fog = per-zone arrival rate x mean F-GPU GPU run of the whole mix / c_gpu
                                  # (boulders included, final doc 16.2): S4-S6 keep S2's arrival rate
   S1: {rho_fog: 0.5, deadlines: loose, mobility: low, fog: [F-GPU]}
