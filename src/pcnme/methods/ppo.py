@@ -28,10 +28,10 @@ from pcnme.agent.budget import Budget
 from pcnme.agent.inputs import N_INPUTS, Decision
 from pcnme.agent.network import N_ACTIONS, deterministic
 from pcnme.agent.nstep import Sample
-from pcnme.agent.online import OnlineChain, train_online
+from pcnme.agent.online import OnlineChain
 from pcnme.agent.transitions import Transition
 from pcnme.config import Config
-from pcnme.methods.learners import Trained, _seed, training_seeds
+from pcnme.methods.learners import Session, Trained, _seed, run_session, training_seeds
 from pcnme.sim.rng import RandomStreams
 from pcnme.zone.decision import OPTIONS, DecisionContext, Option
 
@@ -211,7 +211,21 @@ def train_ppo(
     n_cars: int | None = None,
 ) -> Trained:
     """VFC PPO on the shared budget (16.1). `cfg` must carry its reward (w = 1, Q43)."""
-    seeds = iter(training_seeds(cfg, seed))
+    session = ppo_session(cfg, scenario, zones, budget_decisions, seconds=seconds, seed=seed, n_cars=n_cars)
+    return run_session(cfg, session)
+
+
+def ppo_session(
+    cfg: Config,
+    scenario: str,
+    zones: Sequence[str],
+    budget_decisions: int,
+    *,
+    seconds: float | None = None,
+    seed: int | None = None,
+    n_cars: int | None = None,
+) -> Session:
+    """VFC PPO (16.1) as a resumable session: no demonstrations. `cfg` must carry its reward (w = 1, Q43)."""
     first = next(iter(training_seeds(cfg, seed)))
     init, _ = _seed(cfg, "vfc-ppo", "init", first)
     net = make_actor_critic(cfg, init)
@@ -219,11 +233,7 @@ def train_ppo(
     agents = {z: PpoAgent(cfg, z, net, seed=first, budget=budget) for z in zones}
     out = Trained("vfc-ppo", {}, (), budget)
     length = cfg.fast_mode.episode_length if seconds is None else seconds
-    while not budget.exhausted:
-        (ep,) = train_online(cfg, agents, scenario, [next(seeds)], length, n_cars)  # type: ignore[arg-type]
-        out.episodes.append(ep)
-    out.states = {z: copy.deepcopy(a.net.state_dict()) for z, a in agents.items()}
-    return out
+    return Session("vfc-ppo", scenario, agents, out, first, length, n_cars)
 
 
 def deployed_ppo(cfg: Config, trained: Trained, zones: Sequence[str], seed: int) -> dict[str, PpoAgent]:

@@ -4,19 +4,18 @@ Run the testbed first (python -m pcnme.testbed.runner ...), then:
     python tools/testbed_gap.py --scenario S2 --method greedy --seed 3000 --seconds 60
 
 It runs the fast-mode city with the testbed's fleet (200 cars: 10 containers x 20) on the same evaluation
-seed, writes it next to the testbed run under $PCNME_DATA_DIR/results/, and prints one Markdown table of the
+seed, writes it next to the testbed run under data/vfc/results/, and prints one Markdown table of the
 16.3 metrics for both modes and their difference. Numbers come from the Parquet files only (CLAUDE.md).
 """
 
 from __future__ import annotations
 
 import argparse
-import os
-from pathlib import Path
 
 from pcnme.config import load_config
 from pcnme.experiments.city import City
 from pcnme.metrics.stats import run_metrics
+from pcnme.paths import MapPaths
 
 ROWS = (
     ("on_time", "on-time share", "{:.3f}"),
@@ -40,7 +39,7 @@ def main() -> None:
     p.add_argument("--cars", type=int, default=200)
     a = p.parse_args()
     cfg = load_config()
-    results = Path(os.environ.get("PCNME_DATA_DIR", ".")).resolve() / "results"
+    results = MapPaths("vfc").results
     testbed = results / f"{a.scenario}-{a.method}-{a.seed}-testbed"
     if not (testbed / "tasks.parquet").exists():
         raise SystemExit(f"no testbed run at {testbed}: run python -m pcnme.testbed.runner first")

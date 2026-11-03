@@ -6,7 +6,7 @@ It sets every container's shaping from the config (netem: backhaul, WAN with B_W
 the testbed with the run's scenario, seed and method, applies the scheduled events (config `testbed.events`,
 15.7: a zone joins, zones are killed, the broker restarts), waits for the zones to finish (the run, then the
 drain), and merges the rows each zone wrote (its anchored tasks, METRICS.md) into
-$PCNME_DATA_DIR/results/<scenario>-<method>-<seed>-testbed/, the same tables as fast mode. A killed zone
+data/vfc/results/<scenario>-<method>-<seed>-testbed/, the same tables as fast mode. A killed zone
 writes nothing: the tasks it anchored are lost (15.7).
 """
 
@@ -21,6 +21,7 @@ from pathlib import Path
 
 from pcnme.config import Config, load_config
 from pcnme.metrics.runlog import TABLES, RunLog
+from pcnme.paths import MapPaths
 
 ROOT = Path(__file__).resolve().parents[3]
 COMPOSE = ["docker", "compose", "-f", str(ROOT / "docker" / "compose.yaml"), "--profile", "testbed"]
@@ -125,8 +126,7 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - drives Do
     p.add_argument("--config", type=Path, default=None)
     a = p.parse_args(argv)
     cfg = load_config(a.config) if a.config else load_config()
-    data = Path(os.environ.get("PCNME_DATA_DIR", ".")).resolve()
-    print(run(cfg, a.scenario, a.seed, a.method, a.seconds, data, a.containers))
+    print(run(cfg, a.scenario, a.seed, a.method, a.seconds, MapPaths("vfc").root, a.containers))
 
 
 if __name__ == "__main__":  # pragma: no cover

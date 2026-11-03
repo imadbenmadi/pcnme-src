@@ -142,11 +142,16 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   per zone starving its loop (now one asyncio network thread, `testbed/netloop.py`); zone POSTs carried no input
   bytes, so the WAN saw no bulk and ŵ_WAN went negative (greedy sent most tasks to the cloud; now 5.3's input
   rides with the request).
-  **Open (resume here):** at full S2 load (200 cars) the zone loops still lag: 654 of 9 121 tasks on time vs about
-  100 % in fast mode (masks stale, probes find attempts lost, acks late). Next: profile again with
-  `PCNME_PROFILE=1` (writes `results/profile-<zone>.prof`) and move the zone onto the asyncio loop of its network
-  I/O (one thread), then rerun `tools/testbed_gap.py`.
-- [ ] **M9.4** Same scenario and seed in fast mode and on the testbed: report the gap (16.3). Tool ready: `tools/testbed_gap.py` (fast-mode run with the testbed's fleet and seed, one Markdown table of the 16.3 metrics). Waits on M9.3's open item; the in-order jitter bias (Q56) is part of the gap.
+  **Left (paused until training finishes: no Docker load runs during training):**
+  1. Reduced scale the containers can hold: 40–60 cars (`python -m pcnme.testbed.runner --containers 2` or 3), the
+     same per-zone load (lambda_car scales with the fleet, 18). Check on-time against fast mode at that fleet.
+  2. If it still lags, one timeboxed session: move the zone onto the asyncio loop of its network I/O (one thread),
+     profile with `PCNME_PROFILE=1`. If it still does not hold, stop and report (the paper states the scale limit).
+  3. Topology runs (Q57, low priority, last): three separate 120 s runs, event at 40 s: `start zone-5`;
+     `kill zone-3` + `kill zone-4`; `restart broker`.
+  Decided: Q54 Greedy first, then the agent with CPU-only torch in the zone image; Q55 bind mount, MinIO removed;
+  Q56 the in-order jitter bias (+8–24 %) is reported in the gap.
+- [ ] **M9.4** Same scenario and seed in fast mode and on the testbed, at M9.3's reduced scale, Greedy first (no trained model needed), then the agent: report the gap (16.3). Tool ready: `tools/testbed_gap.py` (fast-mode run with the testbed's fleet and seed, one Markdown table of the 16.3 metrics). Waits on M9.3's open item; the in-order jitter bias (Q56) is part of the gap.
 
 ## C — Calibration (any time after M0, on the home desktop)
 

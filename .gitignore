@@ -23,14 +23,28 @@ weights/*
 *.egg-info/
 dist/
 
-# Experiment outputs (kept out of git; stored on the desktop's data drive)
-results/
-runs/
-demos/
+# Old experiment output folders at the repo root (everything now lives under data/, data/DATA.md)
+/results/
+/runs/
+/demos/
 checkpoints/
 
-# Local data (BDD100K frames, LuST traces) - never commit
-data/
+# data/ (data/DATA.md): the big files are ignored, the small important ones are committed
+/data/smoke/
+/data/_archive/
+/data/*/_archive/
+/data/*/traces/work/
+/data/calibration/frames/
+/data/calibration/weights/
+/data/maps/lust/LuST*/
+/data/maps/lust/*.zip
+/data/*/traces/
+/data/*/nsga/*-w*.json
+/data/*/demos/*.parquet
+/data/*/train/**/*.pt
+/data/*/results/runs/
+/data/**/*.parquet
+/data/**/*.prof
 *.zip.part
 
 # Tools
@@ -39,4 +53,3 @@ data/
 
 # Docker secrets
 docker/.env
-!tests/data/

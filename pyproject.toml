@@ -12,6 +12,7 @@ dependencies = [
   "numpy>=1.26",
   "pyyaml>=6.0",
   "scipy>=1.11",          # Erlang C / Student t in tests and statistics
+  "rich>=13.7",           # the live screen of train.py / evaluate.py / run_testbed.py
 ]
 
 [project.optional-dependencies]

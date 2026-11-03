@@ -18,9 +18,6 @@ layout:                          # R: the same zone layout on both maps
   joining_zones: [z5]            # final doc 18: z5 is off at the start and joins (topology experiment, 15.7)
   d_nb_m: 900                   # R: makes diagonal zones neighbours; every zone gets <= 4
   handover_hysteresis_m: 20      # R: switch only when the new access point is 20 m closer
-  maps:
-    dev: vfc_grid                # P: VFC (200 m blocks), extended with lights and stops
-    final: lust_crop             # P: LuST (Codeca et al. 2015); 1.2 x 1.2 km central crop, SUMO FCD at 0.1 s
 
 cars:
   count: [200, 1000]             # final doc 15.1
@@ -231,6 +228,22 @@ ablation:                        # final-design 16.4 switches; every default is 
 testbed:                         # the M9.3 runner (final-design 15.4, 15.7)
   drain_s: 30.0                  # R: after the last arrival, as the fast-mode city (experiments/city.py DRAIN)
   events: []                     # STAND-IN (QUESTIONS Q57): [{at_s, action: start | kill | restart, service}]
+
+maps:                            # the city maps (final-design 16.2, 18); train.py / evaluate.py --maps <name>
+  vfc: {kind: grid}              # P: the VFC grid (cars.grid), extended with lights and stops; built in code
+  lust:                          # P: LuST (Codeca et al. 2015), SUMO traces replayed (mobility/traces.py)
+    kind: trace
+    source: lust/LuSTScenario-master/scenario   # under data/maps/ (data/DATA.md)
+    center_lonlat: [6.1319, 49.6116]   # R: central Luxembourg (Ville Haute)
+    crop_m: 1200                 # final doc 18: a 1.2 x 1.2 km crop, the layout's area_m
+    fcd_period_s: 0.1            # final doc 18: SUMO FCD at 100 ms
+    warmup_s: 900                # R: 15 min of SUMO before the trace, so the network is full
+    trace_s: 1800                # R: 30 min of trace per time of day; each episode replays a seed-chosen slice
+    time_of_day_s: {off_peak: 39600, mid: 54000, peak: 28800}   # STAND-IN (QUESTIONS Q58): 11:00, 15:00, 08:00
+    scenario_time: {S1: off_peak, S2: mid, S3: peak, S4: mid, S5: peak, S6: mid}   # STAND-IN (Q58)
+    overrides: {}                # config values that differ on this map; train.py adds the measured
+                                 # coverage (data/lust/calibrated.yaml) the way tools/calibrate_map.py set the grid's
+map: vfc                         # the active map; train.py and evaluate.py set it per --maps
 
 scenarios:                       # rho_fog = per-zone arrival rate x mean F-GPU GPU run of the whole mix / c_gpu
                                  # (boulders included, final doc 16.2): S4-S6 keep S2's arrival rate

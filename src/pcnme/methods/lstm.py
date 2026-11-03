@@ -13,7 +13,6 @@ uniform replay of rl.replay_agent own transitions, one update per 4 transitions,
 
 from __future__ import annotations
 
-import copy
 from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
@@ -25,10 +24,10 @@ from pcnme.agent.budget import Budget
 from pcnme.agent.inputs import N_INPUTS, Decision
 from pcnme.agent.network import N_ACTIONS
 from pcnme.agent.nstep import Sample, discount
-from pcnme.agent.online import OnlineAgent, train_online
+from pcnme.agent.online import OnlineAgent
 from pcnme.agent.transitions import Transition
 from pcnme.config import Config
-from pcnme.methods.learners import LSTM_FAMILY, Trained, _seed, training_seeds
+from pcnme.methods.learners import LSTM_FAMILY, Session, Trained, _seed, run_session, training_seeds
 from pcnme.zone.decision import DecisionContext
 
 Key = tuple[object, int]
@@ -129,9 +128,26 @@ def train_lstm(
     n_cars: int | None = None,
 ) -> Trained:
     """Tang & Wong or QECO from random play on the shared budget (16.1)."""
+    session = lstm_session(
+        cfg, method, scenario, zones, budget_decisions, seconds=seconds, seed=seed, n_cars=n_cars
+    )
+    return run_session(cfg, session)
+
+
+def lstm_session(
+    cfg: Config,
+    method: str,
+    scenario: str,
+    zones: Sequence[str],
+    budget_decisions: int,
+    *,
+    seconds: float | None = None,
+    seed: int | None = None,
+    n_cars: int | None = None,
+) -> Session:
+    """Tang & Wong or QECO (16.1, Q44) as a resumable session: no demonstrations, as in their papers."""
     if method not in LSTM_FAMILY:
         raise ValueError(f"{method} is not an LSTM baseline")
-    seeds = iter(training_seeds(cfg, seed))
     first = next(iter(training_seeds(cfg, seed)))
     init, _ = _seed(cfg, method, "init", first)
     net = make_lstm(cfg, method, init)
@@ -140,11 +156,7 @@ def train_lstm(
     agents = {z: LstmAgent(cfg, z, net, (), seed=first, budget=budget, schedule=sched) for z in zones}
     out = Trained(method, {}, (), budget, schedule=sched)
     length = cfg.fast_mode.episode_length if seconds is None else seconds
-    while not budget.exhausted:
-        (ep,) = train_online(cfg, agents, scenario, [next(seeds)], length, n_cars)  # type: ignore[arg-type]
-        out.episodes.append(ep)
-    out.states = {z: copy.deepcopy(a.online.state_dict()) for z, a in agents.items()}
-    return out
+    return Session(method, scenario, agents, out, first, length, n_cars)
 
 
 def deployed_lstm(cfg: Config, trained: Trained, zones: Sequence[str], seed: int) -> dict[str, LstmAgent]:

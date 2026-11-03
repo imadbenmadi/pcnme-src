@@ -11,6 +11,9 @@ Run once per map and mobility by tools/calibrate_map.py; the results are config 
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from pathlib import Path
+
 from pcnme.config import Config
 from pcnme.experiments.city import choose_zone
 from pcnme.mobility.grid import RoadGrid, Walker
@@ -74,3 +77,29 @@ def calibrate(
     coverage, share = measure(cfg, mobility, h, seconds, seed, fleet)
     n = len([z for z in cfg.layout.zones if z not in cfg.layout.joining_zones])
     return {"coverage": coverage, "hotspot_h": h, "z1_share": share, "z1_over_mean": share * n}
+
+
+def measure_trace(cfg: Config, path: Path, seconds: float, seeds: Sequence[int], fleet: int) -> float:
+    """A trace map's coverage (Q29 on traces): the share of the fleet's GPS samples inside an active zone,
+    over episodes at the seeds' offsets. Idle slots (fewer vehicles than the fleet) count as gaps, so
+    lambda_car / coverage keeps the scenario's per-zone load."""
+    from pcnme.mobility.traces import episode_movers
+
+    lay = cfg.layout
+    centres = {z: lay.zone_positions_m[z] for z in lay.zones if z not in lay.joining_zones}
+    covered = total = 0
+    for seed in seeds:
+        clock = EventClock()
+        rng = RandomStreams.from_config(cfg, seed, "training").generator("mobility", "trace-offset")
+        movers = episode_movers(clock, path, fleet, seconds, rng)
+        serving: list[str | None] = [None] * fleet
+        t = 0.0
+        while t <= seconds:
+            for i, m in enumerate(movers):
+                serving[i] = choose_zone(
+                    m.position(t), serving[i], centres, lay.zone_radius_m, lay.handover_hysteresis_m
+                )
+                total += 1
+                covered += serving[i] is not None
+            t += cfg.cars.gps_period
+    return covered / total if total else 0.0
