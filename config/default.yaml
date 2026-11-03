@@ -252,8 +252,8 @@ maps:                            # the city maps (final-design 16.2, 18); train.
     fcd_period_s: 0.1            # final doc 18: SUMO FCD at 100 ms
     warmup_s: 900                # R: 15 min of SUMO before the trace, so the network is full
     trace_s: 1800                # R: 30 min of trace per time of day; each episode replays a seed-chosen slice
-    time_of_day_s: {off_peak: 39600, mid: 54000, peak: 28800}   # STAND-IN (QUESTIONS Q58): 11:00, 15:00, 08:00
-    scenario_time: {S1: off_peak, S2: mid, S3: peak, S4: mid, S5: peak, S6: mid}   # STAND-IN (Q58)
+    time_of_day_s: {off_peak: 39600, mid: 54000, peak: 28800}   # R (QUESTIONS Q58, agreed): 11:00, 15:00, 08:00
+    scenario_time: {S1: off_peak, S2: mid, S3: peak, S4: mid, S5: peak, S6: mid}   # Q58, agreed
     overrides: {}                # config values that differ on this map; train.py adds the measured
                                  # coverage (data/lust/calibrated.yaml) the way tools/calibrate_map.py set the grid's
 map: vfc                         # the active map; train.py and evaluate.py set it per --maps
