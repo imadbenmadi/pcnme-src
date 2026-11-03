@@ -101,3 +101,13 @@ def test_an_upload_and_its_reply_travel_as_registered_payloads() -> None:
     assert decode(encode(up)) == up
     rep = UploadReply(TaskId("c01", 0, 1), "z1")
     assert decode(encode(rep)) == rep
+
+
+def test_an_upload_that_brings_b_car_and_rate_needs_no_registry_entry() -> None:
+    """Testbed: the car's attach and its upload travel on separate requests; either may arrive first."""
+    s = one_zone(fixed_delay_config(), Fixed("here"))
+    s.zone.detach("c01")
+    task = task_now(s, "T1")
+    s.zone.upload(task, rate=4e8, b_car=0.08)
+    s.clock.run_until(1.0)
+    assert [r.task.task_id for r in s.closed] == [task.task_id]

@@ -73,3 +73,20 @@ def test_the_upload_timer_starts_when_the_body_is_written() -> None:
     p["sent"]()
     assert info.timer is not cap_timer
     assert info.timer.time == pytest.approx(c.clock.now + info.t_up)
+
+
+def test_a_result_on_a_real_network_reaches_the_car_without_mixing_clocks() -> None:
+    """5.4: the executor's report times are on another machine's clock; on the testbed the latency parts that
+    would subtract them from this zone's clock are not reported (logging only)."""
+    s = one_zone(fixed_delay_config(), Fixed("cloud"))
+    s.zone.calls = calls = RealCalls()  # type: ignore[assignment]
+    task = task_now(s, "T4")
+    s.zone.upload(task)
+    s.clock.run_until(0.006)
+    (p,) = calls.posts
+    p["sent"]()
+    p["reply"](s.zone.cloud.handle(p["req"]))  # the cloud accepts; its report comes back over the bus
+    s.clock.run_until(2.0)
+    rec = s.zone.records[task.task_id]
+    assert rec.result_at_car is not None and "run" in rec.parts
+    assert "queue" not in rec.parts and "return" not in rec.parts
