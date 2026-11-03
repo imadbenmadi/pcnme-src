@@ -421,7 +421,7 @@ def _new_session(
 
             kind = "nsga" if method == "pcnme" else "greedy"
             files = sorted(paths.demos.glob(f"{kind}-{scenario}-w*.parquet"))
-            if len(files) < 2:  # STAND-IN (QUESTIONS Q59): the held-out split needs 2 windows
+            if len(files) < 2:  # QUESTIONS Q59 (agreed): the held-out split needs 2 windows
                 files = sorted(paths.demos.glob(f"{kind}-*-w*.parquet"))
                 note(
                     f"{scenario} has fewer than 2 windows with {kind} demonstrations: "
