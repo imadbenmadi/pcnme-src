@@ -343,7 +343,9 @@ class TimeRow:
     p5: float
     p95: float
     longest_step: float
+    p_dyn_w: float  # W: measured energy per run / mean (12.2); without a measurement, the slot's power (18)
     p5_measured: bool = False  # False: the placeholder factor filled p5 (QUESTIONS Q2, CHANGES C5)
+    energy_measured: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -970,26 +972,39 @@ def _time_table(n: _Node, specs: Mapping[str, _TaskSpec], hardware: Mapping[str,
                             if q not in hardware[hw].slot_types:
                                 raise ConfigError(h.key(q), f"{hw} has no {q.upper()} slot")
                             slot = cast(SlotType, q)
-                            rows[(task, hw, slot)] = _time_row(h, q, p5_f, p95_f, step_f)
+                            power = hardware[hw].p_dyn_w[slot]
+                            rows[(task, hw, slot)] = _time_row(h, q, p5_f, p95_f, step_f, power)
         return TimeTable(rows=_frozen(rows))
 
 
-def _time_row(h: _Node, q: str, p5_f: float, p95_f: float, step_f: float) -> TimeRow:
-    """A mean alone, or measured values; the placeholder factors fill only what is not measured (Q2)."""
+def _time_row(h: _Node, q: str, p5_f: float, p95_f: float, step_f: float, slot_w: float) -> TimeRow:
+    """A mean alone, or measured values; the placeholder factors fill only what is not measured (Q2). A row's
+    dynamic power is its measured energy per run / its mean (12.2), else the slot's power `slot_w`."""
     value = h.raw(q)
     key = h.key(q)
     if not isinstance(value, dict):
         mean = _number(value, key, gt=0.0)
-        return TimeRow(mean=mean, p5=p5_f * mean, p95=p95_f * mean, longest_step=step_f * mean)
+        return TimeRow(
+            mean=mean, p5=p5_f * mean, p95=p95_f * mean, longest_step=step_f * mean, p_dyn_w=slot_w
+        )
     with _Node(value, key) as r:
         mean = r.number("mean", gt=0.0)
         measured_p5 = r.has("p5")
         p5 = r.number("p5", gt=0.0) if measured_p5 else p5_f * mean
         p95 = r.number("p95", gt=0.0) if r.has("p95") else p95_f * mean
         step = r.number("longest_step", gt=0.0) if r.has("longest_step") else step_f * mean
+        energy = r.number("energy_j", gt=0.0) if r.has("energy_j") else None
     if not p5 <= mean <= p95:
         raise ConfigError(key, f"needs p5 <= mean <= p95, got {p5}, {mean}, {p95}")
-    return TimeRow(mean=mean, p5=p5, p95=p95, longest_step=step, p5_measured=measured_p5)
+    return TimeRow(
+        mean=mean,
+        p5=p5,
+        p95=p95,
+        longest_step=step,
+        p_dyn_w=slot_w if energy is None else energy / mean,
+        p5_measured=measured_p5,
+        energy_measured=energy is not None,
+    )
 
 
 def _e_strong(specs: Mapping[str, _TaskSpec], table: TimeTable, strongest: str) -> Mapping[str, float]:
@@ -1392,10 +1407,10 @@ def _e_ret(task: TaskType, executor: HardwareClass, energy: Energy) -> float:
 def _e_ref(task: TaskType, table: TimeTable, ref: HardwareClass, energy: Energy) -> float:
     """final-design 12.3: PUE_fog x p x T on the reference class's fastest slot type + E_ret here.
 
-    p = dynamic energy per run / run time; with placeholder rows it is the slot's dynamic power (18).
+    p = dynamic energy per run / run time (the row's p_dyn_w; the slot's power for a placeholder row, 18).
     """
-    q_ref, row = table.fastest(task.name, ref.name)
-    return energy.pue_fog * ref.p_dyn_w[q_ref] * row.mean + _e_ret(task, ref, energy)
+    _, row = table.fastest(task.name, ref.name)
+    return energy.pue_fog * row.p_dyn_w * row.mean + _e_ret(task, ref, energy)
 
 
 def _e_bar(
@@ -1416,6 +1431,6 @@ def _e_bar(
             fwd = (energy.e_bh + energy.e_wan) * t.input_bits if hw.is_cloud else energy.e_bh * t.input_bits
             for q in table.slot_types(name, hw.name):
                 row = table.rows[(name, hw.name, q)]
-                e_k = fwd + energy.pue(hw) * hw.p_dyn_w[q] * row.p95 + _e_ret(t, hw, energy)
+                e_k = fwd + energy.pue(hw) * row.p_dyn_w * row.p95 + _e_ret(t, hw, energy)
                 worst = max(worst, e_k / e_ref[name])
     return worst

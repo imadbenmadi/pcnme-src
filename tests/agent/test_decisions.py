@@ -132,8 +132,8 @@ def test_the_registry_follows_the_serving_and_the_anchor_roles() -> None:
 
 
 @pytest.fixture(scope="module")
-def run_dir(default_config_path: Path, tmp_path_factory: pytest.TempPathFactory) -> Path:
-    cfg: Config = load_config(default_config_path)
+def run_dir(mechanism_config_path: Path, tmp_path_factory: pytest.TempPathFactory) -> Path:
+    cfg: Config = load_config(mechanism_config_path)
     return City(cfg, "S2", "greedy", 2000, n_cars=40).run(2.0).write(tmp_path_factory.mktemp("results"))
 
 

@@ -164,7 +164,7 @@ class RunTimeTable:
                 low=r.p5,
                 high=r.p95,
                 longest_step=r.longest_step,
-                energy_per_run=config.hardware[hw].p_dyn_w[slot] * r.mean,
+                energy_per_run=r.p_dyn_w * r.mean,  # the measured energy per run, or slot power x mean
                 distribution=distribution(r),
                 p5_measured=r.p5_measured,
             )
