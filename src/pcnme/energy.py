@@ -68,7 +68,8 @@ class EnergyModel:
         """Ê_k before placing (12.4): E_fwd + PUE_k p Ê + E_ret, with `run` the time-table estimate on q*."""
         t = self._cfg.task_types[task_type]
         node = self._cfg.hardware[hw]
-        execution = self._e.pue(node) * node.p_dyn_w[slot] * run  # p = slot power for placeholder rows (18)
+        p = self._cfg.time_table.rows[(task_type, hw, slot)].p_dyn_w  # the row's power (12.2)
+        execution = self._e.pue(node) * p * run
         executor: Executor = "cloud" if node.is_cloud else "fog"
         return self.forwarding(destination, t.input_bits) + execution + self.ret(executor, t.result_bits)
 

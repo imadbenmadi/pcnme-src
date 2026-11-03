@@ -103,8 +103,8 @@ def test_cloud_only_at_ti_0_5_the_wan_wait_stays_bounded() -> None:
 
 
 @pytest.fixture(scope="module")
-def cfg(default_config_path: Path) -> Config:
-    return load_config(default_config_path)
+def cfg(mechanism_config_path: Path) -> Config:
+    return load_config(mechanism_config_path)
 
 
 @pytest.mark.parametrize("scenario", ["S1", "S2"])
@@ -178,9 +178,9 @@ def test_check_invariants_catches_negative_energy(cfg: Config, monkeypatch: pyte
         assert any("negative energy" in v for v in check_invariants(run)), part
 
 
-def test_with_an_encode_time_l_holds_it_and_the_invariants_still_hold(default_config_path: Path) -> None:
+def test_with_an_encode_time_l_holds_it_and_the_invariants_still_hold(mechanism_config_path: Path) -> None:
     # 14.3, Q14: L = encode + upload + input + queue + run + return; the upload starts after the encode.
-    data = load_yaml(default_config_path)
+    data = load_yaml(mechanism_config_path)
     data["timing"]["encode"] = 0.004
     cfg4 = config_from_mapping(data)
     run = run_one_zone(cfg4, "S1", "greedy", 2.0, 2000)

@@ -20,8 +20,8 @@ TASK = ("c03-047", 0, 1187)  # task_id = (car_id, epoch, seq), final-design 5.5
 
 
 @pytest.fixture(scope="module")
-def cfg(default_config_path: Path) -> Config:
-    return load_config(default_config_path)
+def cfg(mechanism_config_path: Path) -> Config:
+    return load_config(mechanism_config_path)
 
 
 @pytest.fixture
@@ -170,9 +170,21 @@ def test_exponential_inverse_cdf_is_increasing_and_has_the_right_quantiles() -> 
 # --- R4: quantiles (14.4: the table's p5 and p95 give E_low and E_high) -------------------------------------
 
 
-def test_config_quantiles_must_be_the_tables_p5_and_p95(default_config_path: Path) -> None:
-    data: dict[str, Any] = copy.deepcopy(load_yaml(default_config_path))
+def test_config_quantiles_must_be_the_tables_p5_and_p95(mechanism_config_path: Path) -> None:
+    data: dict[str, Any] = copy.deepcopy(load_yaml(mechanism_config_path))
     data["timing"]["quantiles"] = {"low": 0.10, "high": 0.90}
     with pytest.raises(ConfigError) as err:
         RunTimeTable.from_config(config_from_mapping(data), exponential)
     assert err.value.key == "timing.quantiles"
+
+
+def test_the_energy_per_run_is_the_rows_measured_energy() -> None:
+    data = load_yaml(_default())
+    data["time_table_placeholder"]["T1"]["F-GPU"]["gpu"] = {"mean": 0.020, "p95": 0.025, "energy_j": 0.8}
+    t = RunTimeTable.from_config(config_from_mapping(data), deterministic)
+    r = t.row("T1", "F-GPU", "gpu")
+    assert r is not None and r.energy_per_run == pytest.approx(0.8) and r.power == pytest.approx(40.0)
+
+
+def _default() -> Path:
+    return Path(__file__).resolve().parents[2] / "config" / "default.yaml"

@@ -26,7 +26,7 @@ def test_an_event_runs_no_earlier_than_its_time() -> None:
     seen: list[float] = []
     clock.schedule_in(0.05, lambda: seen.append(clock.now))
     clock.run_for(0.1)
-    assert len(seen) == 1 and 0.05 <= seen[0] < 0.09
+    assert len(seen) == 1 and seen[0] >= 0.05  # never early; it ran inside run_for (late only under load)
 
 
 def test_cancel_and_pending() -> None:

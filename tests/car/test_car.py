@@ -19,8 +19,8 @@ from pcnme.sim.rng import RandomStreams
 
 
 @pytest.fixture(scope="module")
-def cfg(default_config_path: Path) -> Config:
-    return load_config(default_config_path)
+def cfg(mechanism_config_path: Path) -> Config:
+    return load_config(mechanism_config_path)
 
 
 def make_car(
@@ -119,10 +119,10 @@ def test_arrival_gaps_are_whole_nanoseconds(cfg: Config) -> None:
     assert all(round(c * 1e9) == pytest.approx(c * 1e9, abs=1e-3) for c in created)
 
 
-def test_the_upload_starts_after_the_encode_time_and_counts_it_once(default_config_path: Path) -> None:
+def test_the_upload_starts_after_the_encode_time_and_counts_it_once(mechanism_config_path: Path) -> None:
     # 14.3, QUESTIONS Q14: L holds the encode time. The upload starts at creation + encode, and B_car = D -
     # time since creation then already holds it: with encode 4 ms, B_car = D - 4 ms (not D - 8 ms).
-    data = load_yaml(default_config_path)
+    data = load_yaml(mechanism_config_path)
     data["timing"]["encode"] = 0.004
     cfg4 = config_from_mapping(data)
     clock = EventClock()

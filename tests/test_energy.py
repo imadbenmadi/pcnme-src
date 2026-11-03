@@ -17,8 +17,8 @@ E_BH, E_WAN, E_DOWN = 0.141e-9 * 1.5, 0.228e-9 * 1.5, 4.2e-9  # J/bit (18; e_dow
 
 
 @pytest.fixture(scope="module")
-def cfg(default_config_path: Path) -> Config:
-    return load_config(default_config_path)
+def cfg(mechanism_config_path: Path) -> Config:
+    return load_config(mechanism_config_path)
 
 
 @pytest.fixture(scope="module")
@@ -52,10 +52,10 @@ def test_e_hat_is_capped_at_e_bar(em: EnergyModel, cfg: Config) -> None:
 
 
 def test_e_ref_and_the_worst_ratios_equal_calc_defaults(
-    cfg: Config, em: EnergyModel, repo_root: Path
+    cfg: Config, em: EnergyModel, repo_root: Path, mechanism_config_path: Path
 ) -> None:
     out = subprocess.run(
-        [sys.executable, str(repo_root / "tools" / "calc_defaults.py")],
+        [sys.executable, str(repo_root / "tools" / "calc_defaults.py"), str(mechanism_config_path)],
         capture_output=True,
         text=True,
         check=True,

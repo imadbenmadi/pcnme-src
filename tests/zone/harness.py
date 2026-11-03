@@ -17,7 +17,7 @@ from pcnme.sim.clock import EventClock
 from pcnme.sim.rng import RandomStreams
 from pcnme.zone.zone import Cloud, DecisionContext, Option, TaskRecord, Zone
 
-CONFIG = Path(__file__).resolve().parents[2] / "config" / "default.yaml"
+CONFIG = Path(__file__).resolve().parents[2] / "tests" / "data" / "mechanism.yaml"  # placeholder numbers
 
 
 def fixed_delay_config(**overrides: Any) -> Config:

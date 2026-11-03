@@ -23,8 +23,8 @@ from tests.zone.harness import fixed_delay_config, one_zone, task_now
 
 
 @pytest.fixture(scope="module")
-def cfg(default_config_path: Path) -> Config:
-    return load_config(default_config_path)
+def cfg(mechanism_config_path: Path) -> Config:
+    return load_config(mechanism_config_path)
 
 
 def empty(cfg: Config, hw: str) -> dict[str, SlotState]:
