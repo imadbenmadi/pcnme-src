@@ -4,11 +4,14 @@ Predictive task offloading for connected cars across fog zones and the cloud. MS
 
 | What | Where |
 | --- | --- |
+| Reading guide (start here) | [`READ.md`](READ.md) |
 | Design (the specification) | [`docs/final-design.md`](docs/final-design.md), printable [`docs/PCNME-Final-Design.pdf`](docs/PCNME-Final-Design.pdf) |
 | Build plan, one milestone at a time | [`docs/PLAN.md`](docs/PLAN.md) |
 | Every number | [`config/default.yaml`](config/default.yaml), checked by `python tools/calc_defaults.py` |
 | Log and metrics schema | [`docs/METRICS.md`](docs/METRICS.md) |
 | Design issues found while coding | [`docs/CHANGES.md`](docs/CHANGES.md), [`docs/QUESTIONS.md`](docs/QUESTIONS.md) |
+| Calibration (time table) | `tools/calibrate_yolo.py`, [`docs/calibration/`](docs/calibration/) |
+| First full NSGA-II run (WSL) | [`tools/run_nsga.md`](tools/run_nsga.md) |
 | Rules for Claude Code | [`CLAUDE.md`](CLAUDE.md), skills in `.claude/skills/` |
 
 ## Setup
@@ -43,7 +46,7 @@ pytest -m slow -n auto    # statistical tests (M/M/1, Erlang C)
 ruff check src tests tools   # lint
 mypy                      # types
 python tools/calc_defaults.py
-pcnme --help              # experiment commands (filled in milestone by milestone)
+pcnme run --help          # train and evaluate a method (fast mode); pcnme report for tables
 ```
 
 ## Monitoring and testbed (Docker Desktop, WSL2 backend)
