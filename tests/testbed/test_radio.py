@@ -73,19 +73,18 @@ def test_a_remote_car_posts_the_result_and_hands_the_confirm_to_the_zone_loop() 
 
     confirm = Confirm(TaskId("c01", 0, 1), "z1", 1, 0.02)
 
-    class Http:
-        def request(self, method: str, url: str, content: bytes) -> Any:
-            from pcnme.testbed.codec import decode, encode
+    import httpx
 
-            assert (method, url) == ("POST", "http://car-1/results") and isinstance(decode(content), Result)
+    from pcnme.testbed.codec import decode, encode
+    from pcnme.testbed.netloop import NetLoop
 
-            class R:
-                status_code = 200
+    def car_app(request: httpx.Request) -> httpx.Response:
+        assert (request.method, str(request.url)) == ("POST", "http://car-1/results")
+        assert isinstance(decode(request.content), Result)
+        return httpx.Response(200, content=encode(confirm))
 
-            R.content = encode(confirm)  # type: ignore[attr-defined]
-            return R()
-
-    car = RemoteCar("c01", "http://car-1", clock, Zone(), client=Http())
+    net = NetLoop(clock, transport=httpx.MockTransport(car_app))
+    car = RemoteCar("c01", "http://car-1", Zone(), net)
     res = Result(TaskId("c01", 0, 1), "z1", 1)
     assert car.receive(res, 0.0) is None
     clock.run_for(0.3)

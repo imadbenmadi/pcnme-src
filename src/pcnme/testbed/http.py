@@ -1,7 +1,7 @@
 """The HTTP adapter (PLAN M9.1 step 4; final-design 5.3, 15.2): the zone's calls interface over real HTTP.
 
-- HttpCalls (the caller): POST /tasks, GET /tasks (probe), DELETE /tasks (cancel), each sent from a worker
-  thread at the request's time; the reply is handed back to the caller's loop thread (RealClock.call_soon).
+- HttpCalls (the caller): POST /tasks, GET /tasks (probe), DELETE /tasks (cancel), sent when the zone calls,
+  on the process's network thread (testbed/netloop.py); the reply runs on the caller's loop thread.
   A target that does not answer (dead, unreachable, timed out) gives no reply: the caller's own timers (upload
   timeout, probe timeout, 9.3) notice, as in fast mode. `back` is unused: the reply's delay is real.
 - make_app (the target): a FastAPI app; each request runs on the target's loop thread, so zone code never
@@ -11,7 +11,7 @@
 # No `from __future__ import annotations`: FastAPI must resolve `request: Request`, imported inside make_app.
 import asyncio
 import concurrent.futures
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from pcnme.bus.calls import Target
@@ -20,21 +20,27 @@ from pcnme.node.executor import Reply, Status, TaskRequest
 from pcnme.testbed.clock import RealClock
 from pcnme.testbed.codec import decode, encode
 from pcnme.testbed.messages import Upload, UploadReply
+from pcnme.testbed.netloop import NetLoop
 from pcnme.zone.statestore import Snapshot
 
-WORKERS = 16
+SEP = b"\n"  # request JSON, then the task's input bytes (codec JSON never holds a raw newline)
 
 
 class HttpCalls:
     def __init__(
-        self, clock: RealClock, urls: Mapping[str, str], *, client: Any = None, timeout: float = 5.0
+        self,
+        clock: RealClock,
+        urls: Mapping[str, str],
+        net: NetLoop,
+        *,
+        input_bytes: Mapping[str, int] | None = None,
     ) -> None:
-        import httpx
-
+        """`input_bytes`: each task type's input size; a POST /tasks carries it (5.3), so the shaped links
+        carry the real transfer (4.2, C7's end of send, the ŵ_WAN sample of 4.3)."""
         self._clock = clock
         self._urls = dict(urls)
-        self._http = client if client is not None else httpx.Client(timeout=timeout)
-        self._pool = concurrent.futures.ThreadPoolExecutor(WORKERS, thread_name_prefix="http")
+        self._net = net  # one network thread for the process (testbed/netloop.py)
+        self._input = dict(input_bytes or {})
 
     real_network = True  # netem gives the delays (QUESTIONS Q53): requests leave when the zone calls
 
@@ -47,23 +53,11 @@ class HttpCalls:
         on_reply: Callable[[Any], None],
         on_sent: Callable[[], None] | None = None,
     ) -> None:
-        url = self._urls[target] + path
+        def done(status: int, content: bytes) -> None:
+            if status == 200:  # anything else: no reply, the caller's timers notice (9.3)
+                on_reply(decode(content))
 
-        def chunks() -> Iterator[bytes]:
-            yield body
-            if on_sent is not None:  # the body's last chunk has been handed to the socket (C7, Q53)
-                self._clock.call_soon(on_sent)
-
-        def work() -> None:
-            try:
-                r = self._http.request(method, url, content=chunks() if on_sent else body)
-            except Exception:  # no answer: lost with the target, the caller's timers notice (9.3)
-                return
-            if r.status_code == 200:
-                reply = decode(r.content)
-                self._clock.call_soon(lambda: on_reply(reply))
-
-        self._pool.submit(work)
+        self._net.request(method, self._urls[target], path, body, done, on_sent)
 
     def post(
         self,
@@ -78,7 +72,8 @@ class HttpCalls:
         """`arrive_at` and `back` are the fast-mode model's; on the testbed the request leaves now (Q53).
         `at_target` runs as it leaves: the caller cannot see the arrival (logging only)."""
         at_target()
-        self._send("POST", target, "/tasks", encode(req), on_reply, on_sent)
+        body = encode(req) + SEP + bytes(self._input.get(req.task_type, 0))
+        self._send("POST", target, "/tasks", body, on_reply, on_sent)
 
     def probe(
         self,
@@ -120,7 +115,7 @@ def make_app(clock: RealClock, target: Target, timeout: float = 5.0) -> Any:
     async def payload(request: Request) -> object:
         """The body as a registered payload; anything else is the caller's error (422), never a crash."""
         try:
-            return decode(await request.body())
+            return decode((await request.body()).split(SEP, 1)[0])  # the input bytes after it: carried only
         except (ValueError, TypeError, KeyError) as e:
             raise HTTPException(422, f"not a payload: {type(e).__name__}") from None
 
