@@ -29,13 +29,14 @@ Use the `implement-step` skill. In short: read the PLAN item → read every fina
 ## Environment
 
 - Python 3.12 (3.11–3.13 supported, not 3.14). Dev machine: Windows 10, repo on drive F:. Also used from Claude Code cloud sessions (Linux, no GPU, no Docker).
-- Install from the lock only: `uv sync --locked --extra dev` (desktop: `scripts/setup-windows.ps1`; cloud: `scripts/setup.sh`). Never `pip install` into the venv: `uv.lock` pins every version for the venv, CI and Docker (PLAN M0.4); a new or changed dependency means `uv lock` and committing `uv.lock`, in its own PR. Add extras as milestones need them: `ml` (PyTorch, pymoo; M5–M6), `nsga` (pymoo alone, for CI and cloud sessions; M5), `analysis` (pandas, Parquet, plots; M3.10+), `testbed` (MQTT, HTTP, InfluxDB, MinIO clients; M9), `maps` (SUMO tools; LuST). Never add a dependency outside `pyproject.toml`.
+- Install from the lock only: `uv sync --locked --extra dev` (desktop: `scripts/setup-windows.ps1`; cloud: `scripts/setup.sh`). Never `pip install` into the venv: `uv.lock` pins every version for the venv, CI and Docker (PLAN M0.4); a new or changed dependency means `uv lock` and committing `uv.lock`, in its own PR. Add extras as milestones need them: `ml` (PyTorch, pymoo; M5–M6), `nsga` (pymoo alone, for CI and cloud sessions; M5), `analysis` (pandas, Parquet, plots; M3.10+), `testbed` (MQTT, HTTP, InfluxDB clients; M9), `maps` (SUMO tools; LuST). Never add a dependency outside `pyproject.toml`.
 - Tests: `pytest -q` (fast suite). Long statistical tests carry `@pytest.mark.slow` and run with `pytest -m slow`; Docker tests `@pytest.mark.testbed`; GPU tests `@pytest.mark.gpu`. Parallel: `pytest -n auto`.
 - Lint and types: `ruff check src tests tools`, `ruff format src tests tools`, `mypy` (strict on new code).
 - CI (GitHub Actions, `.github/workflows/ci.yml`) runs lint + tests on Linux and Windows for every PR; keep it green.
 - Config arithmetic: `python tools/calc_defaults.py`.
-- Results: every run writes Parquet under `$PCNME_DATA_DIR/results/<run_id>/` (default `./results`, git-ignored), schema in `docs/METRICS.md`. Grafana is only for viewing; reported numbers always come from Parquet.
-- Docker (M9 only, home desktop): `docker/compose.yaml`, profiles `monitoring` (InfluxDB, Grafana, MinIO) and `testbed`. Do not change networks, addresses or shaping without checking final-design 15.4.
+- Data and results: everything under `data/` (`$PCNME_DATA_DIR`), one folder per map, `data/<map>/` (layout in `data/DATA.md`, code in `src/pcnme/paths.py`). Big files are git-ignored, the small important ones (CSV summaries, w*, manifests, calibration) are committed. Run schema in `docs/METRICS.md`. Grafana is only for viewing; reported numbers always come from Parquet / `summary.csv`.
+- Training and evaluation: `train.py`, `evaluate.py`, `run_testbed.py` at the root (`RUN_TRAINING.md`); each has `--smoke` (2–3 min, writes to `data/smoke/`). Never start a full run unasked: the user starts those.
+- Docker (M9 only, home desktop): `docker/compose.yaml`, profiles `monitoring` (InfluxDB, Grafana) and `testbed`. No Docker load while training runs. Do not change networks, addresses or shaping without checking final-design 15.4.
 - Fast mode must run on Windows and Linux alike: use `pathlib`, no shell-specific code; multiprocessing must work with the `spawn` start method; set `PYTHONUTF8=1` on Windows.
 
 ## Layout
@@ -49,7 +50,7 @@ src/pcnme/
   node/            time table, slots, queues, scheduler, wait estimates          8, 14.4
   zone/            intake, TOF-Broker, masks, anchor table, state store          6, 7, 9
   car/             car app: tasks, uploads, GPS, duplicate filter                6, 9.5, 10
-  mobility/        grid / LuST traces, attach + hysteresis, predictor            10
+  mobility/        grid, LuST traces (SUMO) + replayer, predictor               10, 16.2
   bus/             fast-mode in-process bus and calls (testbed later: MQTT/HTTP) 5, 15.2
   agent/           48 inputs, reward, D3QN, DQfD, replay                        11, 13.5
   expert/          NSGA-II plans, knee, demonstrations                           13.2–13.4
@@ -57,9 +58,13 @@ src/pcnme/
   energy.py        energy accounting                                             12
   metrics/         logs, metrics, statistics (docs/METRICS.md)                   16.3
   fl/              federated learning, phase 2                                   13.7
-  experiments/     scenario runner, CLI `pcnme`                                  16
+  experiments/     the city, scenario runner, CLI `pcnme`, map calibration       16
+  pipeline/        train.py / evaluate.py / run_testbed.py stages, screen, resume 16
+  paths.py, maps.py   data/<map>/ layout; a map's config (overrides, hash)        18
   testbed/         Docker entry points: zone, car, cloud, wan-gw, runner (M9)    15.4
 tests/             mirrors src/ ; one test file per module
-tools/             calc_defaults.py and small scripts
+tools/             calc_defaults.py, calibrate_yolo.py, calibrate_map.py, small scripts
+data/              calibration, maps (LuST), per-map outputs (data/DATA.md)
+train.py, evaluate.py, run_testbed.py   the entry points (RUN_TRAINING.md)
 docker/            Dockerfile, compose.yaml, net-setup.sh (tc netem), Grafana provisioning
 ```
