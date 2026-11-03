@@ -9,7 +9,11 @@ ROLE="${PCNME_ROLE:-none}"
 
 shape() {  # shape <interface> <mean_delay_ms> <jitter_ms> <rate>
   # netem jitter without a named distribution is uniform: delay mean +- jitter = U(mean-jitter, mean+jitter).
-  tc qdisc replace dev "$1" root netem delay "${2}ms" "${3}ms" rate "$4"
+  # The pfifo child keeps packets in order (M9.2, QUESTIONS Q56): netem's own tfifo reorders packets under
+  # jitter, and TCP's recovery then made a warm 1 MB WAN transfer 50 % slower than 4.2's S/B + d.
+  tc qdisc del dev "$1" root 2>/dev/null || true
+  tc qdisc add dev "$1" root handle 1: netem delay "${2}ms" "${3}ms" rate "$4"
+  tc qdisc add dev "$1" parent 1:1 pfifo limit 10000
 }
 
 iface_for() {  # iface_for <ip prefix>, e.g. 10.20.0.
