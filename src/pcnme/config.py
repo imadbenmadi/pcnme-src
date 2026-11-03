@@ -586,6 +586,24 @@ class FastMode:
     seed_split: Mapping[str, range]
 
 
+TESTBED_ACTIONS = ("start", "kill", "restart")  # docker compose verbs the runner applies (15.7)
+
+
+@dataclass(frozen=True, slots=True)
+class TestbedEvent:
+    """A scheduled change on the testbed (15.7): start a joining zone, kill a zone, restart the broker."""
+
+    at_s: float  # s after the run starts
+    action: str  # one of TESTBED_ACTIONS
+    service: str  # the compose service
+
+
+@dataclass(frozen=True, slots=True)
+class Testbed:
+    drain_s: float  # s after the last arrival before the run ends (as the fast-mode city)
+    events: tuple[TestbedEvent, ...]
+
+
 @dataclass(frozen=True, slots=True)
 class Scenario:
     """One scenario (final-design 16.2). `fog` gives every zone's fog class, joining zones included."""
@@ -640,6 +658,7 @@ class Config:
     dqfd: Dqfd
     nsga2: Nsga2
     fast_mode: FastMode
+    testbed: Testbed
     scenarios: Mapping[str, Scenario]
     fedavg: FedAvg
     derived: Derived
@@ -706,6 +725,7 @@ def config_from_mapping(data: Mapping[str, object]) -> Config:
             dqfd=_dqfd(root.node("dqfd")),
             nsga2=_nsga2(root.node("nsga2")),
             fast_mode=_fast_mode(root.node("fast_mode")),
+            testbed=_testbed(root.node("testbed")),
             scenarios=scenarios,
             fedavg=_fedavg(root.node("fedavg")),
             derived=_derive(layout, task_types, hardware, time_table, energy, tof, scenarios, e_strong),
@@ -1254,6 +1274,25 @@ def _nsga2(n: _Node) -> Nsga2:
 
 
 _SEED_RANGE = re.compile(r"^(\d+)-(\d+)$")
+
+
+def _testbed(n: _Node) -> Testbed:
+    with n:
+        drain = n.number("drain_s", gt=0.0)
+        raw = n.raw("events")
+        if not isinstance(raw, list):
+            raise ConfigError(n.key("events"), f"must be a list, got {_kind(raw)} {raw!r}")
+        events = []
+        for i, item in enumerate(raw):
+            with _Node(item, n.key(f"events[{i}]")) as e:
+                events.append(
+                    TestbedEvent(
+                        at_s=e.number("at_s", ge=0.0),
+                        action=e.text("action", TESTBED_ACTIONS),
+                        service=e.text("service"),
+                    )
+                )
+        return Testbed(drain_s=drain, events=tuple(sorted(events, key=lambda ev: ev.at_s)))
 
 
 def _fast_mode(n: _Node) -> FastMode:

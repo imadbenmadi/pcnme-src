@@ -41,3 +41,11 @@ class Gps:
     vx: float
     vy: float
     car_time: float
+
+
+@dataclass(frozen=True, slots=True)
+class GpsBatch:
+    """POST /gps: the fixes of one car container's cars in one zone for one GPS period. Transport only (the
+    zone handles each fix as its own message, 5.2); it keeps the zones' HTTP load to the testbed's means."""
+
+    fixes: tuple[Gps, ...]
