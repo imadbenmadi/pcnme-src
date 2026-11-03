@@ -48,6 +48,7 @@ METRICS = (
     "wasted_share",
     "jain_load",
     "early_on_time",
+    "mean_e_hat",
 )
 
 
@@ -215,6 +216,16 @@ def run_metrics(d: Path, early_decisions: int) -> Run:
     m["energy_total_j"] = dyn + info.get("idle_w", math.nan) * info["seconds"]
     wasted = sum(t["energy_wasted_j"] for t in tasks)
     m["wasted_share"] = wasted / dyn if dyn > 0 else math.nan
+    obj = info.get("objective")
+    if obj and tasks:  # 13.2.4 / 12.3: ê = min(E / E_ref, ē), a drop counts ē
+        e_ref, e_bar = obj["e_ref"], obj["e_bar"]
+        e_hats = [
+            min(t["energy_j"] / e_ref[t["type"]], e_bar) if k in ("on_time", "late") else e_bar
+            for t, k in zip(tasks, kinds, strict=True)
+        ]
+        m["mean_e_hat"] = float(np.mean(e_hats))
+    else:
+        m["mean_e_hat"] = math.nan
     attempts = read_table(d, "attempts")
     refused = sum(str(a["result"]).startswith("refused_") for a in attempts)
     m["refusal_rate"] = refused / len(attempts) if attempts else math.nan
