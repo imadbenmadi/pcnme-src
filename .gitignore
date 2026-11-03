@@ -38,7 +38,7 @@ checkpoints/
 /data/calibration/weights/
 /data/maps/lust/LuST*/
 /data/maps/lust/*.zip
-/data/*/traces/
+/data/*/traces/*.npz
 /data/*/nsga/*-w*.json
 /data/*/demos/*.parquet
 /data/*/train/**/*.pt

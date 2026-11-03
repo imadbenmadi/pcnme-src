@@ -5,7 +5,7 @@ One run = one scenario and one method over a list of evaluation seeds:
 
 1. A learning method trains first, on training seeds from 2000 (16.3), on the shared budget in decisions
    (fast_mode.train_decisions, QUESTIONS Q41). PCNME pretrains on the knee demonstrations given (files from
-   tools/make_demos.py); D3QN + greedy expert on greedy demonstrations it makes from the scenario's first
+   data/<map>/demos/); D3QN + greedy expert on greedy demonstrations it makes from the scenario's first
    `windows` NSGA-II windows (seeds 1000-1999). VFC PPO runs with w = 1 (delay only, Q43).
 2. Every evaluation seed is its own episode: the trained weights deployed in every zone, learning online
    (Q42); a rule as it is; the knee reference with its plan for that seed's window (Q45).
@@ -54,7 +54,7 @@ class RunSpec:
     budget: int | None = None  # training decisions (fast_mode.train_decisions)
     train_seconds: float | None = None  # a training episode (fast_mode.episode_length)
     train_seed: int | None = None  # the first training seed (the range's first)
-    demos: tuple[Path, ...] = ()  # pcnme: knee demonstrations (tools/make_demos.py)
+    demos: tuple[Path, ...] = ()  # pcnme: knee demonstrations (train.py, data/<map>/demos/)
     windows: int | None = None  # d3qn-greedy: windows for its demonstrations (nsga2.windows_per_scenario)
     pretrain_updates: int | None = None  # dqfd.pretrain_updates
     nsga_population: int | None = None  # knee-reference (nsga2.population)
@@ -185,7 +185,7 @@ def train(cfg: Config, spec: RunSpec) -> Trained | None:
             demos = plan_demos(cfg, spec.scenario, k, spec.n_cars, "random")
         elif spec.method == "pcnme":
             if not spec.demos:
-                raise ValueError("pcnme needs its knee demonstrations (--demos, from tools/make_demos.py)")
+                raise ValueError("pcnme needs its knee demonstrations (--demos: data/<map>/demos/)")
             demos = load_samples(spec.demos, cfg.nsga2.expert_filter_margin)  # 16.4 expert filter
         elif spec.method == "d3qn-greedy":
             demos = plan_demos(cfg, spec.scenario, k, spec.n_cars, "greedy")

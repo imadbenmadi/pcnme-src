@@ -134,7 +134,7 @@ def test_vfc_ppo_runs_with_w_1(source: dict[str, Any], tmp_path: Path) -> None:
 
 @torch_needed
 def test_pcnme_needs_its_demonstrations(source: dict[str, Any], tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="make_demos"):  # the runner's own message, before training
+    with pytest.raises(ValueError, match="knee demonstrations"):  # the runner's own message, before training
         run(source, RunSpec("S1", "pcnme", (3000,), budget=10, **TINY), tmp_path)  # type: ignore[arg-type]
 
 
