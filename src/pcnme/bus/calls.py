@@ -56,7 +56,11 @@ class Target(Protocol):
 class Calls(Protocol):
     """The zone's HTTP calls (5.3) to another zone or the cloud. `arrive_at`: when the request reaches the
     target (the zone models its own pipes, 4.1), None if it is there now; `back`: the reply's delay. Fast
-    mode (FastCalls) calls the target object; the testbed (testbed/http.py) sends real requests."""
+    mode (FastCalls) calls the target object; the testbed (testbed/http.py) sends real requests.
+    `real_network`: netem gives the delays, so the zone models none (QUESTIONS Q53); `on_sent` then marks
+    the end of the zone's own send (C7)."""
+
+    real_network: bool
 
     def post(
         self,
@@ -66,6 +70,7 @@ class Calls(Protocol):
         back: float,
         on_reply: Callable[[tuple[Reply, Snapshot]], None],
         at_target: Callable[[], None] = ...,
+        on_sent: Callable[[], None] | None = ...,
     ) -> None: ...
 
     def probe(
@@ -84,6 +89,8 @@ class FastCalls:
     """Fast mode: the target object handles the request at `arrive_at` (if it is alive), the reply comes
     `back` later (if the caller is alive): exactly `call` above, so a run is unchanged."""
 
+    real_network = False  # the zone models its pipes; `on_sent` is never used
+
     def __init__(
         self,
         clock: EventClock,
@@ -101,6 +108,7 @@ class FastCalls:
         back: float,
         on_reply: Callable[[tuple[Reply, Snapshot]], None],
         at_target: Callable[[], None] = lambda: None,
+        on_sent: Callable[[], None] | None = None,
     ) -> None:
         def handled() -> tuple[Reply, Snapshot]:
             at_target()
