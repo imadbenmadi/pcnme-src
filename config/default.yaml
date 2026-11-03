@@ -92,19 +92,21 @@ time_table_placeholder:          # run per task (s), per type / hardware class /
   # busy at once, one process per slot; run = JPEG decode + preprocess + inference + postprocess. F-CPU rows = the
   # same CPU slot. Cloud GPU = Ultralytics A100 TensorRT inference (v8n 0.99, v8n-seg 1.21, v8l 2.39 ms) + the measured
   # decode, pre- and post-processing. T4 = yolov8n + EasyOCR's CRNN recogniser on up to 3 plate-like crops (Q52 d).
-  # Cloud CPU rows (and T4's cloud GPU row): half the F-GPU mean, 18's placeholder rule (no published number).
+  # Cloud CPU rows: Ultralytics' CPU ONNX inference (v8n 80.4, v8n-seg 96.1 ms) + the measured decode, pre- and
+  # post-processing. T4 cloud: the YOLO part as above + the recogniser as measured here (GPU 79.3 ms, CPU slot
+  # 312.9 ms; no published number for it, so no speed-up is assumed).
   T1: {F-GPU: {gpu: {mean: 0.0226, p5: 0.0202, p95: 0.0257, longest_step: 0.0130, energy_j: 0.914},
                cpu: {mean: 0.0695, p5: 0.0636, p95: 0.0785, longest_step: 0.0599}},
        F-CPU: {cpu: {mean: 0.0695, p5: 0.0636, p95: 0.0785, longest_step: 0.0599}},
-       cloud: {gpu: 0.0091, cpu: 0.0348}}
+       cloud: {gpu: 0.0091, cpu: 0.0885}}
   T3: {F-GPU: {gpu: {mean: 0.0265, p5: 0.0235, p95: 0.0299, longest_step: 0.0156, energy_j: 1.123},
                cpu: {mean: 0.0933, p5: 0.0800, p95: 0.1118, longest_step: 0.0765}},
        F-CPU: {cpu: {mean: 0.0933, p5: 0.0800, p95: 0.1118, longest_step: 0.0765}},
-       cloud: {gpu: 0.0103, cpu: 0.0467}}
+       cloud: {gpu: 0.0103, cpu: 0.1052}}
   T4: {F-GPU: {gpu: {mean: 0.0978, p5: 0.0245, p95: 0.1427, longest_step: 0.0751, energy_j: 3.049},
                cpu: {mean: 0.3823, p5: 0.1100, p95: 0.6725, longest_step: 0.3181}},
        F-CPU: {cpu: {mean: 0.3823, p5: 0.1100, p95: 0.6725, longest_step: 0.3181}},
-       cloud: {gpu: 0.0489, cpu: 0.1911}}   # T4 cloud: half the F-GPU means (18's placeholder rule)
+       cloud: {gpu: 0.0883, cpu: 0.4014}}
   T2: {F-GPU: {gpu: {mean: 3.869, p5: 3.829, p95: 3.909, longest_step: 0.0655, energy_j: 225.5}}, cloud: {gpu: 0.661}}   # GPU only
 
 energy:
