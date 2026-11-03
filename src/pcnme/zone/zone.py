@@ -479,14 +479,22 @@ class Zone:
             if car_id not in self._cars:
                 self.registry.pop(car_id, None)  # 9.6: the anchor drops the car's predictor state
 
-    def upload(self, task: Task, rate: float | None = None) -> None:
+    def upload(
+        self,
+        task: Task,
+        rate: float | None = None,
+        b_car: float | None = None,
+        on_rx: Callable[[], None] | None = None,
+    ) -> None:
         """The car uploads its task over the zone's radio, sharing its airtime with the other uploads in
         progress (6A.2, CHANGES C6), at its current rate (`rate`, from its distance now; by default the rate
-        at its attach); the task exists at t_rx."""
+        at its attach); the task exists at t_rx. On the testbed the car sends R_car and B_car with the upload
+        (5.3 POST /tasks, 15.3) and `on_rx` answers it at t_rx; in fast mode B_car comes from the car."""
         car, attach_rate = self._cars[task.car_id]
         rate = attach_rate if rate is None else rate
         now = self._clock.now
-        b_car = car.budget(task, now)
+        if b_car is None:
+            b_car = car.budget(task, now)
         d = hops.delay(
             self._streams, hops.RADIO_UP, self._cfg.radio.uplink_delay, task.task_id, hops.UPLOAD_ATTEMPT
         )
@@ -498,6 +506,8 @@ class Zone:
             self._uploads.pop(task.task_id, None)
             rec.w_radio = tr.wait  # known exactly at t_rx: the zone runs its uplink (6A.3)
             rec.parts["upload"] = tr.duration
+            if on_rx is not None:
+                on_rx()
             self._intake(rec, b_car)
 
         self._uploads[task.task_id] = self.uplink.send(
@@ -1168,14 +1178,20 @@ class Zone:
                 rec.parts["queue"] = msg.report.start - info.t_at_executor
                 rec.parts["run"] = msg.report.busy
                 rec.parts["return"] = now - msg.report.finish
-        confirm = car.receive(Result(TaskId(*k.task_id), k.anchor_id, k.attempt), now)  # type: ignore[arg-type]
-        if confirm is None:
-            return
-        self._confirmed.setdefault(car_id, set()).add(k.task_id)  # 9.5.3: this session has it
-        # the car's confirm crosses the radio to this serving zone, which publishes the ack (6D.13)
-        up = hops.delay(self._streams, hops.ACK_UP, self._cfg.radio.uplink_delay, k.task_id, k.attempt)
+        result = Result(TaskId(*k.task_id), k.anchor_id, k.attempt)  # type: ignore[arg-type]
+        confirm = car.receive(result, now)
+        if confirm is not None:  # a remote car (testbed) confirms later, through car_confirmed
+            self.car_confirmed(car_id, result, confirm)
+
+    def car_confirmed(self, car_id: str, result: Result, confirm: Confirm) -> None:
+        """9.5.2-3, 6D.13: the car confirmed a result copy; the confirm crosses the radio to this serving
+        zone, which publishes the ack."""
+        now = self._clock.now
+        tid: tuple[int | str, ...] = result.task_id
+        self._confirmed.setdefault(car_id, set()).add(tid)  # 9.5.3: this session has it
+        up = hops.delay(self._streams, hops.ACK_UP, self._cfg.radio.uplink_delay, tid, result.attempt)
         ack = AckMessage(confirm, self.zone_id)
-        key = (*k.task_id, k.anchor_id, k.attempt, "ack")
+        key = (*tid, result.anchor_id, result.attempt, "ack")
         self._clock.schedule(now + up, lambda: self.mqtt.publish(topics.car_ack(car_id), ack, qos=1, key=key))
 
     def _republish(self, rec: TaskRecord) -> None:

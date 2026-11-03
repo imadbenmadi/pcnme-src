@@ -16,6 +16,7 @@ from pcnme.car.car import Confirm, Result, Task
 from pcnme.ids import AttemptKey, SnapshotVersion, TaskId
 from pcnme.node.executor import Accepted, Ignored, Refused, Report, TaskRequest
 from pcnme.node.state import SlotState
+from pcnme.testbed.messages import Upload, UploadReply
 from pcnme.zone.statestore import Snapshot
 from pcnme.zone.zone import AckMessage, GpsMessage, ResultMessage, ZoneStatus
 
@@ -39,6 +40,8 @@ _TYPES: dict[str, type] = {
         Task,
         Snapshot,
         SlotState,
+        Upload,
+        UploadReply,
     )
 }
 
@@ -55,7 +58,7 @@ def _to(v: Any) -> Any:
         return [_to(x) for x in v]
     if isinstance(v, Mapping):
         return {"$d": [[_to(k), _to(x)] for k, x in v.items()]}
-    if v is None or isinstance(v, (bool, int, float, str)):
+    if v is None or isinstance(v, bool | int | float | str):
         return v
     raise TypeError(f"{name} cannot travel on the testbed (not a registered payload type)")
 
