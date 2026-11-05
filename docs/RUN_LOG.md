@@ -67,3 +67,16 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   transfer.md + figures). Smoke: train/evaluate vfc and evaluate lust --models-from vfc all pass.
 - Note: summary.csv refuses rows from another commit. Run all VFC scenarios on one commit (do not pull between
   the S1-S3 and S4-S6 halves), or start again with --fresh.
+
+## 5 Nov: VFC evaluation
+
+- Command: `uv run python evaluate.py --maps vfc` (commit 6bc5126), 13:02 -> about 19:00 (runs ended 18:36, then the
+  report over 20 GB of logs). 6 scenarios x 8 methods x 20 seeds = 960 of 960 runs.
+- Outputs: data/vfc/results/ (report.md, paired.md, across-*.png, S*.png, training-*.png, summary.csv) in git; the
+  Parquet runs (20 GB, ignored) backed up to F:\projects\pcnme-results-backupfc-2026-11-05esults\.
+- Headline (on time %, PCNME vs best baseline; paired t test, 20 seeds): S1-S2 all methods 99-100 % (ties); S3
+  PCNME 98.5 vs 97.2 (D3QN + greedy demos) and 92.3 (greedy), p < 0.01; S4 94.2 vs 93.8; S5 93.3 vs 93.1.
+  S6 (the CPU-fog scenario, overloaded: about 43 % of tasks dropped for every method): PCNME 56.8 % on time but
+  random 65.6 and VFC-PPO 64.2 are higher, at much more energy (2.6 vs 1.7 J/task) and p99 latency (850 vs 450 ms).
+  To explain in the write-up: w* = 0.414 weights energy; in S6 spreading load beats it on on-time share.
+- Transfer test (T3b) postponed: no time before Friday.
