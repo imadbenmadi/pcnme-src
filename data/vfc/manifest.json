@@ -1,0 +1,33 @@
+{
+ "identity": {
+  "config_hash": "b20e3c962334230c",
+  "commit": "85b2fc94c386",
+  "plan": {
+   "map": "vfc",
+   "scenarios": [
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5",
+    "S6"
+   ],
+   "windows": 6,
+   "population": 40,
+   "generations": 20,
+   "budget": 1000000,
+   "train_seconds": null,
+   "n_cars": null,
+   "pretrain_updates": null,
+   "workers": null,
+   "checkpoint_every_s": null,
+   "smoke": false
+  }
+ },
+ "started": "2026-11-03T23:53:16+01:00",
+ "map": "vfc",
+ "seeds": "training 2000-, NSGA-II 1000-",
+ "finished": "2026-11-05T11:52:52+01:00",
+ "w_star": 0.41389148056905384,
+ "hours": 35.99
+}
