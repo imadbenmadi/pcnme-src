@@ -184,6 +184,7 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   Later (after Friday; fast mode, not the testbed): the 16.3 metrics still missing (next-zone acc@1, T_exit error,
   delivery success after a zone change, decisions until the on-time rate is stable, front hypervolume); they need
   small additions to the fast-mode logs, then a re-evaluation. The knee reference (16.1, Q45) is optional.
+- [ ] **T5** S6 (QUESTIONS Q60, waits for Imed): if agreed, S6 with loose deadlines: rerun S6's NSGA-II windows, check w*, retrain S6 only, evaluate S6 only. Results summary for the supervisor: docs/RESULTS_VFC.md.
 - [ ] **D1** Docs cleanup (after the evaluations, before the write-up): update every .md file to match the code
   and the results (README, READ, RUN_TRAINING, CLAUDE, data/DATA, docs/PLAN, METRICS, RUN_LOG, QUESTIONS, CHANGES,
   data/calibration/cpu-power, visual/city/README, .claude/skills/*); delete the ones nothing needs any more and list
@@ -212,6 +213,7 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
 
 ## V — Viewer (not research: it never changes a result)
 
-- [ ] **V1 Replay viewer** (after M3): reads one run's Parquet files (the Q28 schema: positions, events, attempts, zones) and draws the VFC grid, the zone circles, the cars and their tasks; play, pause and speed; click a car or a task to see it. The data source sits behind one interface, so V3 only adds another source.
+- [x] **V1 Replay viewer** (done 5 Nov: `uv run python view.py`, src/pcnme/viewer/README.md; every scenario, method and seed, fast mode and testbed, two runs side by side) (after M3): reads one run's Parquet files (the Q28 schema: positions, events, attempts, zones) and draws the VFC grid, the zone circles, the cars and their tasks; play, pause and speed; click a car or a task to see it. The data source sits behind one interface, so V3 only adds another source.
 - [ ] **V2 LuST map** (when LuST is added): the road map drawn from the SUMO net file.
 - [ ] **V3 Live mode** (M9): the same viewer fed live from the MQTT broker over WebSocket.
+- [ ] **V4 Live training**: a `live-training` source and view (episodes, loss, on-time, decisions changing); extension points in src/pcnme/viewer/README.md.
