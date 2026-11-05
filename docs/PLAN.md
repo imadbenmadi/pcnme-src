@@ -162,7 +162,9 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   stops until M9.3/M9.4. Smoke-tested on vfc and lust (`--smoke`). Commands: RUN_TRAINING.md.
 - [ ] **T2** VFC: `train.py --maps vfc` then `evaluate.py --maps vfc` (the user runs them, about 14 h + eval).
 - [ ] **T3** LuST: `train.py --maps lust` (generates the traces first, about 30-60 min) then evaluate.
-- [ ] **T3b** Transfer test (decided 4 Nov): evaluate the VFC-trained models on LuST with no LuST training
+- [ ] **T3b** (TODO, postponed 5 Nov: no time before Friday; the code is ready and smoke-tested, only the two
+  runs are left: `train.py --maps lust --until traces`, then `evaluate.py --maps lust --models-from vfc`)
+  Transfer test (decided 4 Nov): evaluate the VFC-trained models on LuST with no LuST training
   (zero-shot, online learning on as in deployment, Q42; the VFC w*). Needs: the LuST traces and coverage only
   (`uv run python train.py --maps lust --until traces`, 30-60 min, after the VFC run) and a new evaluate.py option
   to load another map's models (`--models-from vfc`; to build after the VFC run, not during it). Results go to
