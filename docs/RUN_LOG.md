@@ -58,7 +58,7 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   --models-from vfc (option to build first). Full LuST training later, only if time allows.
 - Finished 5 Nov 11:52: all 36 jobs trained, 35 h 59 min in total (NSGA-II 2 h 40 min, learning about 33 h). The
   LSTM baselines (Tang & Wong, QECO) were the last to finish. Small result files committed to git; the big ignored
-  files (trained.pt, demo parquet, NSGA genomes) backed up to F:\projects\pcnme-results-backup\vfc-2026-11-05.
+  Parquet runs (20 GB, ignored) backed up to F:\projects\pcnme-results-backup\vfc-2026-11-05\results\.
 
 ## 5 Nov: evaluate.py additions (PLAN T3c)
 
@@ -73,7 +73,7 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 - Command: `uv run python evaluate.py --maps vfc` (commit 6bc5126), 13:02 -> about 19:00 (runs ended 18:36, then the
   report over 20 GB of logs). 6 scenarios x 8 methods x 20 seeds = 960 of 960 runs.
 - Outputs: data/vfc/results/ (report.md, paired.md, across-*.png, S*.png, training-*.png, summary.csv) in git; the
-  Parquet runs (20 GB, ignored) backed up to F:\projects\pcnme-results-backupfc-2026-11-05esults\.
+  Parquet runs (20 GB, ignored) backed up to F:\projects\pcnme-results-backup\vfc-2026-11-05\results\.
 - Headline (on time %, PCNME vs best baseline; paired t test, 20 seeds): S1-S2 all methods 99-100 % (ties); S3
   PCNME 98.5 vs 97.2 (D3QN + greedy demos) and 92.3 (greedy), p < 0.01; S4 94.2 vs 93.8; S5 93.3 vs 93.1.
   S6 (the CPU-fog scenario, overloaded: about 43 % of tasks dropped for every method): PCNME 56.8 % on time but
