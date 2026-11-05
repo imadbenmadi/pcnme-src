@@ -162,6 +162,26 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   stops until M9.3/M9.4. Smoke-tested on vfc and lust (`--smoke`). Commands: RUN_TRAINING.md.
 - [ ] **T2** VFC: `train.py --maps vfc` then `evaluate.py --maps vfc` (the user runs them, about 14 h + eval).
 - [ ] **T3** LuST: `train.py --maps lust` (generates the traces first, about 30-60 min) then evaluate.
+- [ ] **T3b** Transfer test (decided 4 Nov): evaluate the VFC-trained models on LuST with no LuST training
+  (zero-shot, online learning on as in deployment, Q42; the VFC w*). Needs: the LuST traces and coverage only
+  (`uv run python train.py --maps lust --until traces`, 30-60 min, after the VFC run) and a new evaluate.py option
+  to load another map's models (`--models-from vfc`; to build after the VFC run, not during it). Results go to
+  data/lust/results-transfer/ so they never mix with a later LuST-trained evaluation.
+- [ ] **T3c** evaluate.py additions (after the VFC run; nothing in src/ changes while it trains). Important, before
+  Friday (Imed, 4 Nov):
+  1. cross-scenario figures: one per key metric (on time, p99 latency, mean ê), all methods over S1-S6;
+  2. PCNME vs each baseline: a paired test over the same seeds (is the difference real or noise?);
+  3. the transfer test (T3b): `--models-from vfc`, results in data/lust/results-transfer/, plus one VFC vs LuST
+     comparison table and figure.
+  Not needed: a results table printed in the terminal (report.md and summary.csv are enough).
+  Later (after Friday; fast mode, not the testbed): the 16.3 metrics still missing (next-zone acc@1, T_exit error,
+  delivery success after a zone change, decisions until the on-time rate is stable, front hypervolume); they need
+  small additions to the fast-mode logs, then a re-evaluation. The knee reference (16.1, Q45) is optional.
+- [ ] **D1** Docs cleanup (after the evaluations, before the write-up): update every .md file to match the code
+  and the results (README, READ, RUN_TRAINING, CLAUDE, data/DATA, docs/PLAN, METRICS, RUN_LOG, QUESTIONS, CHANGES,
+  data/calibration/cpu-power, visual/city/README, .claude/skills/*); delete the ones nothing needs any more and list
+  each deletion with its reason; check every path and command in them still works. final-design.md: content only,
+  no notation renames (Imed does those later).
 - [ ] **T4** Results write-up from data/<map>/results/summary.csv: the 16.3 table per map, training curves,
   the number of seeds, what is missing (knee reference, ablations 16.4, sweeps).
 
