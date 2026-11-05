@@ -60,7 +60,7 @@ def main() -> None:
     for key, name, fmt in ROWS:
         f, t = m_fast[key], m_bed[key]
         lines.append(f"| {name} | {fmt.format(f)} | {fmt.format(t)} | {fmt.format(t - f)} |")
-    out = results.parent / f"gap-{a.scenario}-{a.method}-{a.seed}.md"
+    out = results.parent / f"gap-{a.scenario}-{a.method}-{a.seed}-{a.cars}cars.md"
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines) + f"\n\nwritten to {out}")
 
