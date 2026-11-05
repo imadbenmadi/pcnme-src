@@ -1,0 +1,88 @@
+# PCNME viewer
+
+```bash
+uv run python view.py            # http://127.0.0.1:8765, opens the browser
+uv run python view.py --port 9000 --no-browser
+```
+
+Version 1 replays finished runs: every scenario, method and seed under `data/vfc/results/runs/`, and the
+testbed runs under `data/vfc/testbed/results/`. Two runs on the same seed can be compared side by side. Everything
+on screen comes from a run's logs (METRICS.md); nothing is simulated in the page.
+
+No build step and no new dependency: a standard-library HTTP server and plain ES modules with Canvas 2D.
+
+## Layout
+
+```
+viewer/
+  server.py              HTTP: the page (static/) and the JSON API over the source registry
+  sources/
+    base.py              the interface: SourceInfo, Source, ReplaySource, Placeholder, Registry
+    replay.py            ParquetSource: a map's run directories -> runs() and replay(run_id)
+    __init__.py          default_registry(): what view.py shows (VFC; LuST as "in development")
+  static/
+    index.html, css/style.css
+    js/main.js           the shell: source switcher, view by kind, clock, panel, keyboard
+    js/core/             no DOM views here
+      api.js             fetch helpers for the API
+      sources.js         page-side adapters, one per source kind (replay now)
+      model.js           the city-model contract every view reads, and ReplayModel
+      clock.js           play / pause / speed / seek; views draw "the state at clock.t"
+      theme.js           colour tokens from the CSS for the canvases
+      format.js          names, number formats, bisection
+    js/views/            DOM and canvas; they read a model, never a source
+      city.js            CityView: the map, zones, links, WAN, cloud, cars, task packets
+      run-pane.js        a header with the statistics strip above a CityView
+      panel.js           the details panel (car, task, zone, WAN, cloud)
+      controls.js        transport controls
+      picker.js          scenario / method / seed / source and the comparison method
+      placeholder.js     the "in development" state of a source that is not ready
+```
+
+## The data flow
+
+```
+source (Python)  ->  /api/...  ->  adapter (core/sources.js)  ->  model (core/model.js)  ->  views
+```
+
+A view only calls the model's methods (the contract at the top of `core/model.js`: positions, slots, queues,
+the WAN, tasks around a time, running statistics). It does not know whether the model was built from a finished
+run or is being fed live.
+
+## Add a source
+
+1. Python: a class with `info: SourceInfo` (a new `kind`, or `replay`) and the methods of its kind in
+   `sources/<name>.py`; register it in `sources/__init__.py:default_registry()`.
+   A source that is not ready yet is a `Placeholder(SourceInfo(..., status="development", notes={...}))`; the
+   page shows its title, summary and steps.
+2. API: a replay source needs nothing new. A live kind adds its endpoint in `server.py:api()` (or a streaming
+   handler next to it).
+3. Page: an adapter class in `core/sources.js`, added to `ADAPTERS` under its kind.
+
+Planned kinds:
+
+- `live-testbed` (PLAN V3): the server subscribes to the testbed's MQTT broker and streams the same records the
+  logs hold (positions, zone rows, task and attempt rows) as server-sent events or over a WebSocket at
+  `/api/stream?source=...`. The adapter appends them to a `LiveModel` that implements the model contract with
+  growing arrays; the clock follows the newest time (seeking back replays the buffer). CityView, the panel and the
+  statistics need no change.
+- `live-training`: the training loop (pipeline/train.py) already reports per episode; the server streams those
+  reports (episode, on-time share, mean ê, loss, updates) and sampled decisions. It gets its own model and views
+  (training curves, a decision table), chosen by kind in `main.js`.
+
+## Add a view
+
+A view is a class in `js/views/` that takes a container and a model and draws `(t, selection)`. Read the model's
+methods only; use `core/theme.js` colours and `core/format.js` formats. Wire it in `main.js` (or inside a pane like
+`run-pane.js`). If it needs data the model does not offer, add a method to the contract in `core/model.js` and to
+every model that implements it, and the field to `sources/replay.py`.
+
+## Design rules
+
+One accent colour (`--accent`); green, amber and red only for task outcomes. Every motion shows data: cars move
+with their logged positions, packets travel during their logged upload, forward and result times, coverage fill
+follows the zone's load, queue bars and the WAN pipe follow their logged values. Light and dark themes follow the
+system.
+
+Keys: Space play/pause, arrow keys step 1 s (Shift: 5 s), `[` `]` speed, H hide the bar, F full screen, Esc
+close the panel. The URL keeps the selection (`#vfc/S3/pcnme/3000/fast/greedy`), so a view can be shared as a link.

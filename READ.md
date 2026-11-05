@@ -94,13 +94,14 @@ The live screen is [`src/pcnme/pipeline/screen.py`](src/pcnme/pipeline/screen.py
 - **Mechanism tests** run on the frozen placeholder config [`tests/data/mechanism.yaml`](tests/data/mechanism.yaml),
   so recalibrating never moves them.
 
-## 7. The three scripts
+## 7. The scripts
 
 | Script | What | Code |
 | --- | --- | --- |
 | [`train.py`](train.py) | per map: traces → NSGA-II → w* → demonstrations → pretraining → online (PCNME + 5 baselines) | [`src/pcnme/pipeline/train.py`](src/pcnme/pipeline/train.py) |
 | [`evaluate.py`](evaluate.py) | every scenario × method (8) × seed (20) → summary.csv, tables, figures | [`src/pcnme/pipeline/evaluate.py`](src/pcnme/pipeline/evaluate.py) |
 | [`run_testbed.py`](run_testbed.py) | the Docker testbed; stops until M9.3 and M9.4 are done | [`src/pcnme/pipeline/testbed.py`](src/pcnme/pipeline/testbed.py) |
+| [`view.py`](view.py) | the viewer: replay any evaluated run (S1–S6, every method and seed), two side by side | [`src/pcnme/viewer/`](src/pcnme/viewer/README.md) |
 
 ## 8. How to read summary.csv
 
@@ -124,6 +125,10 @@ uv run pytest -q -n auto
 uv run python train.py --maps vfc --smoke --yes
 uv run python train.py --maps vfc --windows 6 --population 40 --generations 20 --budget 1000000
 uv run python evaluate.py --maps vfc
+uv run python view.py
 ```
+
+`view.py` opens the replay viewer at http://127.0.0.1:8765 (for example `#vfc/S3/pcnme/3000/fast/greedy`:
+S3, PCNME next to Greedy on seed 3000). How it is built and how to extend it: [`src/pcnme/viewer/README.md`](src/pcnme/viewer/README.md).
 
 The full list, with times and outputs, is in [`RUN_TRAINING.md`](RUN_TRAINING.md).
