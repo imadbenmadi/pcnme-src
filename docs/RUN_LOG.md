@@ -119,3 +119,13 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   loop (no errors in the logs). Next: log the zone's POST /results replies and the MQTT ack path for one
   PCNME run, compare with Greedy.
 - Gap tables: data/vfc/testbed/gap-<scenario>-<method>-<seed>-<cars>cars.md.
+
+## 5 Nov (evening): viewer, S6 check, results summary
+
+- Viewer: `uv run python view.py` (src/pcnme/viewer/README.md). Replays any run in data/vfc/results/runs/ and
+  data/vfc/testbed/results/ from its logs; no rerun was needed (the S3 runs of every method are there).
+  Example: http://127.0.0.1:8765/#vfc/S3/pcnme/3000/fast/greedy.
+- S6 check (`uv run python tools/s6_feasibility.py`, read-only): 0.0 % of the 184 020 logged S6 tasks are
+  infeasible with empty queues; the hard tasks need 80 % of the 4 GPU slots with 14-20 ms of slack, so an ideal
+  shared queue still misses 29-36 % of them. Proposal in QUESTIONS Q60 (loose deadlines for S6, retrain S6 only).
+- docs/RESULTS_VFC.md: the one-page summary for the supervisor.
