@@ -167,7 +167,7 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   (`uv run python train.py --maps lust --until traces`, 30-60 min, after the VFC run) and a new evaluate.py option
   to load another map's models (`--models-from vfc`; to build after the VFC run, not during it). Results go to
   data/lust/results-transfer/ so they never mix with a later LuST-trained evaluation.
-- [ ] **T3c** evaluate.py additions (after the VFC run; nothing in src/ changes while it trains). Important, before
+- [x] **T3c** (done 5 Nov: metrics/compare.py, evaluate.py --models-from; smoke-tested) evaluate.py additions (after the VFC run; nothing in src/ changes while it trains). Important, before
   Friday (Imed, 4 Nov):
   1. cross-scenario figures: one per key metric (on time, p99 latency, mean ê), all methods over S1-S6;
   2. PCNME vs each baseline: a paired test over the same seeds (is the difference real or noise?);

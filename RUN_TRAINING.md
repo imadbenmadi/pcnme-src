@@ -32,7 +32,20 @@ Then the evaluation: 6 scenarios × 8 methods × 20 seeds, about 2–3 h.
 uv run python evaluate.py --maps vfc
 ```
 
-## LuST (tomorrow): the traces first (about 30–60 min), then about 10–11 h
+For Friday, if short of time, S1–S3 first (the rest later, on the same commit):
+`uv run python evaluate.py --maps vfc --scenarios S1 S2 S3`.
+
+## Transfer test: the VFC models on LuST, no LuST training (PLAN T3b)
+
+```bat
+uv run python train.py --maps lust --until traces
+uv run python evaluate.py --maps lust --models-from vfc
+```
+
+The first makes only the LuST traces (about 30–60 min); the second deploys the VFC models and the VFC w* on
+LuST. Results: `data/lust/results-transfer/` (transfer.md: each method on VFC vs on LuST).
+
+## LuST, full training (later): the traces first (about 30–60 min), then about 10–11 h
 
 ```bat
 uv run python train.py --maps lust --windows 6 --population 40 --generations 20 --budget 1000000
@@ -52,6 +65,9 @@ To make only the traces: add `--until traces`. To run only NSGA-II and w*: add `
 | What was run (commit, config hash, budget, times) | `data/<map>/manifest.json` |
 | One row per evaluation run | `data/<map>/results/summary.csv` |
 | Tables and figures | `data/<map>/results/report.md`, `*.png` |
+| PCNME vs each baseline (paired t test over the seeds) | `data/<map>/results/paired.md`, `paired.csv` |
+| Each metric over S1–S6, all methods | `data/<map>/results/across-<metric>.png` |
+| Transfer test (VFC models on LuST) | `data/lust/results-transfer/` (`transfer.md`, `transfer-*.png`) |
 
 ## Testbed
 

@@ -59,3 +59,11 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 - Finished 5 Nov 11:52: all 36 jobs trained, 35 h 59 min in total (NSGA-II 2 h 40 min, learning about 33 h). The
   LSTM baselines (Tang & Wong, QECO) were the last to finish. Small result files committed to git; the big ignored
   files (trained.pt, demo parquet, NSGA genomes) backed up to F:\projects\pcnme-results-backup\vfc-2026-11-05.
+
+## 5 Nov: evaluate.py additions (PLAN T3c)
+
+- New: paired.md / paired.csv (PCNME vs each baseline, paired t test over the shared seeds), across-<metric>.png
+  (on time, p99, mean ê over S1-S6), and `--models-from vfc` (transfer test into data/lust/results-transfer/,
+  transfer.md + figures). Smoke: train/evaluate vfc and evaluate lust --models-from vfc all pass.
+- Note: summary.csv refuses rows from another commit. Run all VFC scenarios on one commit (do not pull between
+  the S1-S3 and S4-S6 halves), or start again with --fresh.

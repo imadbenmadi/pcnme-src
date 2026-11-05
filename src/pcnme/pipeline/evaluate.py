@@ -5,7 +5,11 @@ online, Q42); Greedy and Random run as they are. Each finished run appends one r
 data/<map>/results/summary.csv (scenario, method, seed, every 16.3 metric, wall time, commit, config hash);
 its Parquet logs go to results/runs/<run_id>/. At the end: report.md / report.csv (mean +- 95 % interval over
 the seeds), one figure per scenario, and the training curves. Resumable: a (scenario, method, seed) already
-in summary.csv is skipped; rows of another config or commit are refused, never mixed.
+in summary.csv is skipped; rows of another config or commit are refused, never mixed. Also: paired.md (PCNME
+vs each baseline, paired t test) and across-<metric>.png (metrics/compare.py).
+
+--models-from MAP (transfer test, PLAN T3b): the models and w* trained on MAP are deployed on this map with no
+training here; results go to data/<map>/results-transfer/ with transfer.md comparing both maps.
 """
 
 from __future__ import annotations
@@ -32,6 +36,7 @@ def _eval_job(
     seconds: float | None,
     n_cars: int | None,
     ident: dict[str, str],
+    models_from: str | None,
     report: Any,
 ) -> int:
     from pcnme.config import config_from_mapping
@@ -42,13 +47,14 @@ def _eval_job(
     from pcnme.pipeline import checkpoint
     from pcnme.pipeline.train import with_w_star
 
-    paths = MapPaths(map_name)
-    w = json.loads(paths.w_star.read_text(encoding="utf-8"))["w_star"]
+    paths = eval_paths(map_name, models_from)
+    models = MapPaths(models_from or map_name)
+    w = json.loads(models.w_star.read_text(encoding="utf-8"))["w_star"]
     source = with_w_star(map_source(map_name), w)
     cfg = method_config(config_from_mapping(source), method)
     trained = None
     if method not in ("greedy", "random"):
-        f = paths.train(scenario, method) / "trained.pt"
+        f = models.train(scenario, method) / "trained.pt"
         if not f.exists():
             raise RuntimeError(f"{method} on {scenario} is not trained ({f}): run train.py first")
         trained = checkpoint.load(f)
@@ -63,6 +69,7 @@ def _eval_job(
             "usage": "evaluation",
             "reward_w": cfg.reward.w,
             "map": map_name,
+            "models_from": models_from or map_name,
             "training": training_info(trained),
             **report_constants(cfg, scenario),
         }
@@ -94,6 +101,10 @@ def _eval_job(
         )
     report(status="done")
     return len(seeds)
+
+
+def eval_paths(map_name: str, models_from: str | None) -> MapPaths:
+    return MapPaths(map_name, "results" if models_from in (None, map_name) else "results-transfer")
 
 
 def append_row(path: Path, row: dict[str, Any]) -> None:
@@ -136,13 +147,21 @@ def done_rows(path: Path, ident: dict[str, str]) -> set[tuple[str, str, int]]:
     return {(r["scenario"], r["method"], int(r["seed"])) for r in rows}
 
 
-def write_outputs(screen: Any, paths: MapPaths, early: int) -> None:
+def write_outputs(screen: Any, paths: MapPaths, early: int, models_from: str | None = None) -> None:
+    from pcnme.metrics import compare
     from pcnme.metrics.report import report
 
     if paths.runs.exists():
         files = report([paths.runs], paths.results, early)
         screen.say(f"tables and figures: {', '.join(p.name for p in files[:4])} ... in {paths.results}")
-    _training_curves(paths)
+    summary = paths.results / "summary.csv"
+    if summary.exists():
+        rows = compare.read_summary(summary)
+        compare.write_all(rows, paths.results)
+        home = MapPaths(models_from).results / "summary.csv" if models_from else None
+        if home is not None and home.exists():
+            compare.write_transfer(compare.read_summary(home), rows, paths.results, models_from, paths.name)  # type: ignore[arg-type]
+    _training_curves(MapPaths(models_from or paths.name))
 
 
 def _training_curves(paths: MapPaths) -> None:
@@ -187,10 +206,15 @@ def main(argv: list[str] | None = None) -> int:
     names = list(base["maps"]) if args.all else args.maps
     todo: list[tuple[str, list[tuple[str, tuple[Any, ...]]], dict[str, str]]] = []
     print(f"PCNME evaluate.py   commit {runinfo.commit()}\n")
+    src = args.models_from
+    if src is not None and (src not in base["maps"] or not MapPaths(src).w_star.exists()):
+        print(f"  --models-from {src}: not trained yet (no {MapPaths(src).w_star})")
+        return 1
     for name in names:
-        paths = MapPaths(name)
-        if name not in base["maps"] or not paths.w_star.exists():
-            print(f"  {name}: not trained yet (no {paths.w_star}): skipped")
+        paths = eval_paths(name, src)
+        models = MapPaths(src or name)
+        if name not in base["maps"] or not models.w_star.exists():
+            print(f"  {name}: not trained yet (no {models.w_star}): skipped")
             continue
         if args.fresh and (dest := archive_results(paths)):
             print(f"  {name}: earlier results moved to {dest}")
@@ -210,8 +234,10 @@ def main(argv: list[str] | None = None) -> int:
             for m in METHODS:
                 seeds = tuple(k for k in range(first, first + n_seeds) if (s, m, k) not in finished)
                 if seeds:
-                    jobs.append((f"{s} {m}", (name, s, m, seeds, seconds, n_cars, ident)))
+                    jobs.append((f"{s} {m}", (name, s, m, seeds, seconds, n_cars, ident, src)))
         runs = sum(len(a[3]) for _, a in jobs)
+        if src not in (None, name):
+            print(f"  {name}: transfer test, models and w* from {src}; results in {paths.results}")
         print(
             f"  {name}: {len(scenarios)} scenarios x {len(METHODS)} methods x {n_seeds} seeds; "
             f"{runs} runs to do ({len(finished)} done before); "
@@ -228,12 +254,12 @@ def main(argv: list[str] | None = None) -> int:
             print("\nnot started.")
             return 1
     for name, jobs, _ in todo:
-        paths = MapPaths(name)
+        paths = eval_paths(name, src)
         with Screen(f"evaluate.py  map {name}{'  (smoke)' if args.smoke else ''}") as screen:
             screen.stage("evaluation: scenario x method x seed (16.3)", [n for n, _ in jobs])
             res = run_jobs(screen, _eval_job, jobs, args.workers)
             failed = {k: v for k, v in res.items() if isinstance(v, Exception)}
-            write_outputs(screen, paths, map_config(name).fast_mode.early_decisions)
+            write_outputs(screen, paths, map_config(name).fast_mode.early_decisions, src)
         if failed:
             print(f"{name}: {len(failed)} jobs failed: {sorted(failed)}")
             return 3
@@ -247,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
 def archive_results(paths: MapPaths) -> Path | None:
     if not paths.results.exists():
         return None
-    dest = paths.root / "_archive" / f"results-{time.strftime('%Y%m%d-%H%M%S')}"
+    dest = paths.root / "_archive" / f"{paths.results_folder}-{time.strftime('%Y%m%d-%H%M%S')}"
     dest.parent.mkdir(parents=True, exist_ok=True)
     paths.results.rename(dest)
     return dest

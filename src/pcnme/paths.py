@@ -35,6 +35,7 @@ class MapPaths:
     """The folders of one map's outputs."""
 
     name: str
+    results_folder: str = "results"  # results-transfer: another map's models evaluated here (PLAN T3b)
 
     @property
     def root(self) -> Path:
@@ -57,7 +58,7 @@ class MapPaths:
 
     @property
     def results(self) -> Path:
-        return self.root / "results"
+        return self.root / self.results_folder
 
     @property
     def runs(self) -> Path:

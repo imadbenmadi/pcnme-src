@@ -581,7 +581,14 @@ def parse(argv: list[str] | None, *, evaluate: bool = False) -> argparse.Namespa
     ap.add_argument("--smoke", action="store_true", help="a 2-3 minute end-to-end check in data/smoke/")
     ap.add_argument("--yes", action="store_true", help="start without waiting for Enter")
     ap.add_argument("--fresh", action="store_true", help="archive this map's earlier outputs and start over")
-    if not evaluate:
+    if evaluate:
+        ap.add_argument(
+            "--models-from",
+            default=None,
+            metavar="MAP",
+            help="transfer test (PLAN T3b): the models and w* trained on MAP; results in results-transfer/",
+        )
+    else:
         ap.add_argument(
             "--windows",
             type=int,
