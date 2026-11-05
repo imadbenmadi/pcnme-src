@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PCNME Viewer</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header id="bar">
+    <div class="brand">PCNME<span>Viewer</span></div>
+    <nav class="seg" id="sources" aria-label="Map"></nav>
+    <div class="pickers" id="pickers">
+      <label class="field">Scenario <select id="scenario"></select></label>
+      <label class="field">Method <select id="method"></select></label>
+      <label class="field">Seed <select id="seed"></select></label>
+      <label class="field" id="mode-field">Source <select id="mode"></select></label>
+      <span class="divider"></span>
+      <label class="toggle"><input type="checkbox" id="compare"> Compare with</label>
+      <select id="method2" disabled></select>
+    </div>
+    <div class="spacer"></div>
+    <button class="icon-btn" id="hide-bar" title="Hide the bar (H)" aria-label="Hide the bar">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10l4-4 4 4"/></svg>
+    </button>
+    <button class="icon-btn" id="fullscreen" title="Full screen (F)" aria-label="Full screen">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg>
+    </button>
+  </header>
+  <div id="progress"></div>
+  <button class="icon-btn" id="show-bar" title="Show the bar (H)" aria-label="Show the bar">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6l4 4 4-4"/></svg>
+  </button>
+
+  <main>
+    <section id="stage"></section>
+    <aside id="panel" hidden aria-live="polite"></aside>
+    <section id="dev" hidden></section>
+  </main>
+
+  <footer id="controls">
+    <button id="play" title="Play / pause (Space)" aria-label="Play">
+      <svg id="icon-play" viewBox="0 0 14 14"><path d="M3 1.5v11l9-5.5z" fill="currentColor"/></svg>
+      <svg id="icon-pause" viewBox="0 0 14 14" style="display:none"><path d="M3 1.5h3v11H3zM8 1.5h3v11H8z" fill="currentColor"/></svg>
+    </button>
+    <div id="clock"><b>0.0 s</b> / 0.0 s</div>
+    <div class="slider">
+      <div class="drain" id="drain" title="Drain: no new tasks, open ones finish"></div>
+      <input type="range" id="time" min="0" max="90" step="0.1" value="0" aria-label="Time">
+      <span class="mark" id="mark-end">arrivals end</span>
+    </div>
+    <div class="seg" id="speeds" aria-label="Speed"></div>
+    <div class="legend">
+      <span><i class="dot b-on_time"></i>On time</span>
+      <span><i class="dot b-late"></i>Late</span>
+      <span><i class="dot b-dropped"></i>Dropped</span>
+    </div>
+  </footer>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
