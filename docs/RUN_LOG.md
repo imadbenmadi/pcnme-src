@@ -93,3 +93,29 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   attempt gets no reply before its cap). By zone: z1 (3 360 tasks, the busiest) 0 % on time, z2 63 %, z3 9 %,
   z4 7 %. From the first 10 s on, so not a slow build-up. The fewer cars did not help: the zone's load stays the
   same (S2 rho 0.9), so the limit is the zone software on one CPU, as at 200 cars.
+
+- Profiled zone-1 (PCNME_PROFILE=1): two hot spots in the HTTP client, both fixed (commit 33f3240):
+  1. httpcore ran `import sniffio` on every request; sniffio is not installed, so each request searched the
+     whole import path (about 15 s of 60 s). Fixed: sniffio marked absent in sys.modules (no new dependency).
+  2. httpx's connection pool re-scanned every connection and polled every socket per request (about 40 s of
+     60 s). Replaced by a small keep-alive HTTP/1.1 pool on asyncio streams (testbed/netloop.py).
+- After the fixes, Greedy, seed 3000, 60 s:
+
+  | run | fast mode on time | testbed on time | testbed p99 | zone-1 CPU |
+  | --- | --- | --- | --- | --- |
+  | S1, 40 cars | 99.9 % | 96.9 % (was 60.4 %) | - | about 40 % (was 98 %) |
+  | S2, 40 cars | 99.8 % | 95.4 and 96.6 % (two runs; was 14.6 %) | 199-205 ms (fast 171 ms) | about 50 % |
+  | S2, 200 cars | 99.8 % | 48.9 % (was 7 % on 3 Nov) | 410 ms | 100 % |
+  | S2, 200 cars, 2 CPUs per zone | 99.8 % | 47.8 % | - | 110 % |
+
+  Scale limit: at 200 cars the busiest zone (z1, 37 % of the tasks) is bound by Python's GIL (a second CPU
+  does not help); z2-z4 hold 82-89 %. Beyond 40-60 cars needs a zone split over processes (not before Friday).
+  The paper states the limit: the testbed runs at 40 cars with the same per-zone load as 200 (lambda_car scales).
+- The trained agents now run in the zone containers (M9.1 step 7, Q54: CPU torch in the image, models mounted
+  read-only from data/vfc/train/): `--method pcnme` works (zones load the model and decide, about 40 % CPU,
+  500 MB each). OPEN BUG: 88 % of tasks end drop_no_ack: the tasks run and the results are pushed to the car,
+  but the car's confirm never reaches the anchor (t_result_at_car empty). Greedy on the same build is fine.
+  Checked and ruled out: the codec (results and confirms of the agent survive encode/decode), a crashed zone
+  loop (no errors in the logs). Next: log the zone's POST /results replies and the MQTT ack path for one
+  PCNME run, compare with Greedy.
+- Gap tables: data/vfc/testbed/gap-<scenario>-<method>-<seed>-<cars>cars.md.

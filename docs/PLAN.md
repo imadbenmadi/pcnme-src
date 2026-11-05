@@ -131,7 +131,7 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   4. [x] `bus/calls.py` Calls / FastCalls: the zone's POST/GET/DELETE go through `zone.calls`; `testbed/http.py` HttpCalls + `make_app` (FastAPI). Fast mode unchanged: `tests/zone/test_calls_golden.py` pins an S2 run digest.
   5. [x] `testbed/radio.py`: the Shannon pipe runs in software at the zone's intake (15.3); the car's POST /tasks carries `Upload(task, b_car, rate)` and is answered at t_rx (409 if cut, 9.7); `software_radio()` leaves the base radio delays to netem; `RemoteCar` posts results to the car container and hands its Confirm to `Zone.car_confirmed`.
   6. [x] Entry points `pcnme.testbed.{zone,car,cloud}` (+ `serve.py`), Q53 built (no modelled delays, C7 from the written body, own-backhaul bookkeeping kept); zone endpoints POST /cars, POST /gps, GET /closed, GET /status; `@pytest.mark.testbed` compose test (broker, wan-gw, cloud, 4 zones, car-1 with 20 cars): tasks close on time end to end.
-  7. [ ] FedAvg + fine-tuning on the testbed, and the learning methods in the containers: **Q54** (proposal: Greedy for M9.2–M9.4 first; then CPU torch in the zone image).
+  7. [~] FedAvg + fine-tuning on the testbed (not yet), and the learning methods in the containers (done 5 Nov): **Q54** (proposal: Greedy for M9.2–M9.4 first; then CPU torch in the zone image).
 - [x] **M9.2** Verify the network (15.4 "to verify"): routing through wan-gw, netem jitter distribution and reordering, `tcp_slow_start_after_idle=0`, one shaped crossing per hop (`tests/testbed/test_network.py`, `pytest -m testbed`). Found and fixed: jitter reordering distorted WAN transfers (netem now keeps packets in order, **Q56**); a warm 1 MB upload fits 4.2's S/B + d. MinIO cannot be pinned: its public images are gone (**Q55**, proposal: bind-mounted results).
 - [~] **M9.3** Runner: per-scenario shaping, zone join / kill / broker restart (15.7), results to the bind-mounted data/ (Q55).
   Built (branch `m9-3-runner`): `python -m pcnme.testbed.runner --scenario S2 --seed 3000 --method greedy --seconds 60
@@ -142,7 +142,12 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   per zone starving its loop (now one asyncio network thread, `testbed/netloop.py`); zone POSTs carried no input
   bytes, so the WAN saw no bulk and ŵ_WAN went negative (greedy sent most tasks to the cloud; now 5.3's input
   rides with the request).
-  **Left (paused until training finishes: no Docker load runs during training):**
+  **5 Nov:** zone CPU fixes (HTTP client); Greedy at 40 cars holds S1 96.9 % and S2 95.4 % on time (fast mode
+  99.8-99.9 %); at 200 cars the busiest zone is GIL-bound (48.9 %). Learning methods run in the zones, but
+  PCNME loses the car confirms (open bug, RUN_LOG 5 Nov). Details: docs/RUN_LOG.md.
+  **Left:**
+  0. Fix the PCNME confirm bug (drop_no_ack 88 %), then the M9.4 gap for PCNME at 40 cars.
+
   1. Reduced scale the containers can hold: 40–60 cars (`python -m pcnme.testbed.runner --containers 2` or 3), the
      same per-zone load (lambda_car scales with the fleet, 18). Check on-time against fast mode at that fleet.
   2. If it still lags, one timeboxed session: move the zone onto the asyncio loop of its network I/O (one thread),
