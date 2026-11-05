@@ -65,6 +65,11 @@ class MapPaths:
         return self.results / "runs"
 
     @property
+    def testbed(self) -> Path:
+        """Testbed runs (PLAN M9.3, M9.4): results/<run_id>/ and the fast-mode twins of the gap table."""
+        return self.root / "testbed"
+
+    @property
     def traces(self) -> Path:
         return self.root / "traces"
 

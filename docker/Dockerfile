@@ -12,12 +12,13 @@ COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /usr/local/bin/uv
 ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 UV_PYTHON_DOWNLOADS=never
 
 WORKDIR /app
+# ml: CPU-only torch on Linux (uv.lock), so the learning methods run in the zone containers (Q54).
 # Dependencies first, so the layer is cached until uv.lock changes.
 COPY pyproject.toml uv.lock README.md ./
-RUN uv sync --locked --no-install-project --extra testbed
+RUN uv sync --locked --no-install-project --extra testbed --extra ml
 COPY src ./src
 COPY config ./config
-RUN uv sync --locked --extra testbed
+RUN uv sync --locked --extra testbed --extra ml
 
 COPY docker/net-setup.sh /usr/local/bin/net-setup.sh
 RUN sed -i 's/\r$//' /usr/local/bin/net-setup.sh && chmod +x /usr/local/bin/net-setup.sh   # CRLF from a Windows checkout
