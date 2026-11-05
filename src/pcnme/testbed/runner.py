@@ -22,6 +22,7 @@ from pathlib import Path
 from pcnme.config import Config, load_config
 from pcnme.metrics.runlog import TABLES, RunLog
 from pcnme.paths import MapPaths
+from pcnme.pipeline.evaluate import METHODS
 
 ROOT = Path(__file__).resolve().parents[3]
 COMPOSE = ["docker", "compose", "-f", str(ROOT / "docker" / "compose.yaml"), "--profile", "testbed"]
@@ -84,7 +85,14 @@ def _compose(env: dict[str, str], *args: str, timeout: float = 900) -> None:
 
 
 def run(
-    cfg: Config, scenario: str, seed: int, method: str, seconds: float, data_dir: Path, containers: int = 10
+    cfg: Config,
+    scenario: str,
+    seed: int,
+    method: str,
+    seconds: float,
+    data_dir: Path,
+    containers: int = 10,
+    models: Path | None = None,
 ) -> Path:
     """One testbed run, end to end; returns the run's results directory. `containers` car containers of 20
     cars each; the per-zone load is the scenario's for any fleet (lambda_car scales with it, 18)."""
@@ -96,6 +104,7 @@ def run(
     env = {**shaping_env(cfg), **run_env(cfg, scenario, seed, method, seconds)}
     env["PCNME_RESULTS_HOST"] = str(data_dir / "results")
     env["PCNME_FLEET"] = str(CARS_PER_CONTAINER * containers)
+    env["PCNME_MODELS_HOST"] = str(models or data_dir.parent / "train")
     _compose(env, "down", "-v", "--remove-orphans")
     _compose(env, "up", "-d", "--build", *CORE, *ZONES, *CARS[:containers])
     t0 = time.monotonic()
@@ -120,13 +129,13 @@ def main(argv: list[str] | None = None) -> None:  # pragma: no cover - drives Do
     p = argparse.ArgumentParser(description="One PCNME testbed run (PLAN M9.3)")
     p.add_argument("--scenario", default="S2")
     p.add_argument("--seed", type=int, default=3000)
-    p.add_argument("--method", default="greedy", choices=("greedy", "random"))
+    p.add_argument("--method", default="greedy", choices=METHODS)
     p.add_argument("--seconds", type=float, default=60.0)
     p.add_argument("--containers", type=int, default=10, help="car containers (20 cars each)")
     p.add_argument("--config", type=Path, default=None)
     a = p.parse_args(argv)
     cfg = load_config(a.config) if a.config else load_config()
-    print(run(cfg, a.scenario, a.seed, a.method, a.seconds, MapPaths("vfc").root, a.containers))
+    print(run(cfg, a.scenario, a.seed, a.method, a.seconds, MapPaths("vfc").testbed, a.containers))
 
 
 if __name__ == "__main__":  # pragma: no cover

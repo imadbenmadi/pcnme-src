@@ -80,3 +80,16 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   random 65.6 and VFC-PPO 64.2 are higher, at much more energy (2.6 vs 1.7 J/task) and p99 latency (850 vs 450 ms).
   To explain in the write-up: w* = 0.414 weights energy; in S6 spreading load beats it on on-time share.
 - Transfer test (T3b) postponed: no time before Friday.
+
+## 5 Nov: testbed at reduced scale (PLAN M9.3 item 1, M9.4)
+
+- Docker Desktop had crashed ("unable to start"): fixed without a reboot by stopping Docker, `wsl --shutdown`,
+  and starting Docker Desktop again.
+- Run: `uv run --extra testbed python -m pcnme.testbed.runner --scenario S2 --seed 3000 --method greedy --seconds 60 --containers 2`
+  (40 cars; per-zone load as at 200 cars, lambda_car scales). Testbed runs now go to data/vfc/testbed/results/.
+- Gap (`uv run python tools/testbed_gap.py --scenario S2 --method greedy --seed 3000 --seconds 60 --cars 40`,
+  data/vfc/testbed/gap-S2-greedy-3000.md): on time 0.998 fast mode vs 0.146 testbed. 8 803 tasks; the losses are
+  drop_no_ack 49 % (the result or the car's confirm comes too late) and drop_upload_late 25 % (a forwarded
+  attempt gets no reply before its cap). By zone: z1 (3 360 tasks, the busiest) 0 % on time, z2 63 %, z3 9 %,
+  z4 7 %. From the first 10 s on, so not a slow build-up. The fewer cars did not help: the zone's load stays the
+  same (S2 rho 0.9), so the limit is the zone software on one CPU, as at 200 cars.

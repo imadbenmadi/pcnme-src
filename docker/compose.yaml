@@ -62,6 +62,7 @@ x-zone: &zone
     wan-gw: {condition: service_started}
   volumes:
     - ${PCNME_RESULTS_HOST:-../results}:/results   # each zone's rows for the runner (M9.3)
+    - ${PCNME_MODELS_HOST:-../data/vfc/train}:/models:ro   # the trained methods (M9.1 step 7, Q54)
   deploy:
     resources:
       limits: {cpus: "${ZONE_CPUS:-1.0}"}   # --cpus limits only the zone's own work (final-design 15.5)

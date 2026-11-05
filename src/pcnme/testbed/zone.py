@@ -4,8 +4,8 @@ the bus, HTTP for the calls (QUESTIONS Q53: netem gives the delays), the radio p
 POST /gps; GET /closed lists the closed tasks for the runner.
 
 python -m pcnme.testbed.zone, with PCNME_CONFIG, PCNME_ZONE_ID, PCNME_SCENARIO, PCNME_SEED, PCNME_METHOD
-(greedy or random), MQTT_HOST, PCNME_URLS ("z1=http://10.20.0.11:8000,...,cloud=http://10.30.0.10:8000"),
-PCNME_SECONDS.
+(greedy, random, or a learning method deployed from PCNME_MODELS/<scenario>-<method>/trained.pt), MQTT_HOST,
+PCNME_URLS ("z1=http://10.20.0.11:8000,...,cloud=http://10.30.0.10:8000"), PCNME_SECONDS.
 """
 
 # No `from __future__ import annotations`: FastAPI must resolve `request: Request` (imported locally).
@@ -29,8 +29,30 @@ from pcnme.testbed.messages import Attach, Gps, GpsBatch
 from pcnme.testbed.netloop import NetLoop
 from pcnme.testbed.radio import RemoteCar, software_radio
 from pcnme.testbed.serve import PORT, on_loop
+from pcnme.zone.decision import Placement
 from pcnme.zone.layout import Site
 from pcnme.zone.zone import TaskRecord, Zone
+
+
+def zone_placement(
+    cfg: Config, streams: RandomStreams, zone_id: str, method: str, scenario: str, seed: int, models: Path
+) -> Placement:
+    """What decides in this zone: Greedy, Random, or the trained method deployed as in fast mode (16.1, Q42:
+    it keeps learning online; Q54: CPU torch in the zone image)."""
+    if method == "greedy":
+        return Greedy(cfg)
+    if method == "random":
+        return Random(cfg, streams, zone_id)
+    import torch
+
+    from pcnme.experiments.runner import deployed
+    from pcnme.pipeline import checkpoint
+
+    f = models / f"{scenario}-{method}" / "trained.pt"
+    if not f.exists():
+        raise FileNotFoundError(f"no trained {method} for {scenario} at {f}")
+    torch.set_num_threads(1)  # one zone, one CPU (15.5)
+    return deployed(cfg, checkpoint.load(f), seed)(cfg, streams, zone_id)
 
 
 def build_zone(
@@ -44,9 +66,12 @@ def build_zone(
     method: str = "greedy",
     *,
     net: NetLoop,
+    models: Path = Path("/models"),
 ) -> tuple[Zone, list[TaskRecord]]:
     """One zone as the city builds it (experiments/city.py), on a real network."""
-    cfg, _ = software_radio(cfg)  # the base radio delays are netem's (15.3)
+    from pcnme.experiments.runner import method_config
+
+    cfg, _ = software_radio(method_config(cfg, method))  # the base radio delays are netem's (15.3)
     usage = "evaluation" if seed >= 3000 else "training"
     streams = RandomStreams.from_config(cfg, seed, usage)
     table = RunTimeTable.from_config(cfg, lognormal)
@@ -54,7 +79,7 @@ def build_zone(
     lay = cfg.layout
     active = [z for z in lay.zones if z not in lay.joining_zones]
     sites = [Site(z, *lay.zone_positions_m[z], lay.zone_radius_m) for z in active if z != zone_id]
-    placement = Greedy(cfg) if method == "greedy" else Random(cfg, streams, zone_id)
+    placement = zone_placement(cfg, streams, zone_id, method, scenario, seed, models)
     closed: list[TaskRecord] = []
     zone = Zone(
         zone_id,
@@ -177,6 +202,7 @@ def main() -> None:  # pragma: no cover - runs in the container (the compose tes
         urls_from_env(os.environ["PCNME_URLS"]),
         os.environ.get("PCNME_METHOD", "greedy"),
         net=(net := NetLoop(clock)),
+        models=Path(os.environ.get("PCNME_MODELS", "/models")),
     )
     serve(zone_app(clock, zone, closed, net))
     seconds = float(os.environ.get("PCNME_SECONDS", "3600")) + float(os.environ.get("PCNME_DRAIN", "30"))

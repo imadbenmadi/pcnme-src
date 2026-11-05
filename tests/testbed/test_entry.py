@@ -88,3 +88,27 @@ def test_a_zone_writes_its_anchored_records_as_rows(tmp_path: Any) -> None:
     log = merge(path.parent, "S2", "greedy", 3000)
     (row,) = log.rows["tasks"]
     assert row["task_id"] == str(task.task_id) and row["outcome"] == "on_time" and row["mode"] == "testbed"
+
+
+def test_a_zone_deploys_the_trained_method_from_the_models_folder(tmp_path: Any) -> None:
+    """PLAN M9.1 step 7 (Q54): the learning methods run in the zone container, deployed as in fast mode."""
+    pytest.importorskip("torch")
+    from pcnme.experiments.runner import deployed
+    from pcnme.methods.learners import d3qn_session, run_session
+    from pcnme.methods.simple import Greedy
+    from pcnme.pipeline import checkpoint
+    from pcnme.sim.rng import RandomStreams
+    from pcnme.testbed.zone import zone_placement
+
+    cfg = fixed_delay_config()
+    zones = cfg.layout.active_zones
+    trained = run_session(cfg, d3qn_session(cfg, "d3qn-scratch", "S1", zones, 200, seconds=2.0, n_cars=20))
+    (tmp_path / "S1-d3qn-scratch").mkdir()
+    checkpoint.save(trained, tmp_path / "S1-d3qn-scratch" / "trained.pt")
+    streams = RandomStreams.from_config(cfg, 3000, "evaluation")
+    z = zones[0]
+    agent = zone_placement(cfg, streams, z, "d3qn-scratch", "S1", 3000, tmp_path)
+    assert type(agent) is type(deployed(cfg, trained, 3000)(cfg, streams, z))
+    assert isinstance(zone_placement(cfg, streams, z, "greedy", "S1", 3000, tmp_path), Greedy)
+    with pytest.raises(FileNotFoundError):
+        zone_placement(cfg, streams, z, "pcnme", "S1", 3000, tmp_path)
