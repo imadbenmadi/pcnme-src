@@ -265,7 +265,8 @@ testbed correct"). Claude owns these; an item is done only when its check passes
   (experiments/calibrate.measure_trace) scales lambda_car per map (data/lust/calibrated.yaml).
 - [x] **L4** Tests: tests/mobility/test_traces.py (slots, interpolation, gaps, seeds, a City episode), a slow
   real-SUMO test tests/mobility/test_lust.py; `train.py --maps lust --smoke` end to end.
-- [ ] **L5** Full traces (train.py makes them on first use) and a look at the vehicles per crop and coverage.
+- [x] **L5** (done 6 Nov, 36 min; RUN_LOG 6 Nov) Full traces (train.py makes them on first use) and a look at the
+  vehicles per crop and coverage. The viewer shows them as LuST's traffic preview until LuST is trained.
 
 ## C — Calibration (any time after M0, on the home desktop)
 

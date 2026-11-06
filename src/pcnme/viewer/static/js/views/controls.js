@@ -21,7 +21,9 @@ export class TransportControls {
     $("play").setAttribute("aria-label", c.playing ? "Pause" : "Play");
     $("speeds").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.s === c.speed)));
     $("time").max = c.end || 1;
-    if (c.end && this.arrivals != null) {
+    const drain = c.end && this.arrivals != null && this.arrivals < c.end; // a traffic-only run has none
+    $("drain").style.display = $("mark-end").style.display = drain ? "" : "none";
+    if (drain) {
       $("drain").style.width = `${(100 * Math.max(0, c.end - this.arrivals)) / c.end}%`;
       $("mark-end").style.left = `${(100 * this.arrivals) / c.end}%`;
     }
