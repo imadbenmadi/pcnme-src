@@ -56,7 +56,7 @@ def export(out: Path, seeds: set[int] | None, registry: Registry | None = None, 
             continue
         src = registry.replay_source(s["id"])
         assert isinstance(src, ReplaySource)
-        runs = [r for r in src.runs() if seeds is None or r.seed in seeds or r.mode == "testbed"]
+        runs = [r for r in src.runs() if seeds is None or r.seed in seeds or r.mode in ("testbed", "traces")]
         (data / "status").mkdir(parents=True, exist_ok=True)
         (data / "status" / f"{s['id']}.json").write_text(json.dumps(src.status()), encoding="utf-8")
         (data / "runs" / f"{s['id']}.json").write_text(
