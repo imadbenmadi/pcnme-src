@@ -70,7 +70,8 @@ uv run python tools/calibrate_map.py
 | `results/runs/<run_id>/` | each run's Parquet logs and run.json | no | evaluate.py |
 | `traces/<time>.npz`, `traces/<time>.json` (lust) | the replayable SUMO traces and their numbers | npz no, json yes | train.py (stage traces) |
 | `calibrated.yaml` (lust) | coverage measured on the traces, merged into the map's config | yes | train.py |
-| `results-transfer/` (lust) | the VFC models evaluated on LuST (transfer test, T3b) | like results/ | evaluate.py --models-from vfc |
+| `_archive/<S>-<label>-<time>/` | a revised scenario's old training outputs (train.py --scenarios, Q60) | no | train.py |
+| `results/archive/<S>-<label>/` | its old evaluation rows (summary.csv, committed) and runs (not) | csv yes | evaluate.py |
 | `testbed/results/<run_id>/` (vfc) | testbed runs and their fast-mode twins | no | pcnme.testbed.runner, tools/testbed_gap.py |
 | `testbed/gap-<S>-<method>-<seed>-<cars>cars.md` (vfc) | fast mode vs testbed, one table | yes | tools/testbed_gap.py |
 
