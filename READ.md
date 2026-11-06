@@ -130,5 +130,7 @@ uv run python view.py
 
 `view.py` opens the replay viewer at http://127.0.0.1:8765 (for example `#vfc/S3/pcnme/3000/fast/greedy`:
 S3, PCNME next to Greedy on seed 3000). How it is built and how to extend it: [`src/pcnme/viewer/README.md`](src/pcnme/viewer/README.md).
+For another machine: `uv run python -m pcnme.viewer.export` writes `../pcnme-history-viewer` (about 25 MB), which
+runs with `python serve.py` and nothing else installed.
 
 The full list, with times and outputs, is in [`RUN_TRAINING.md`](RUN_TRAINING.md).

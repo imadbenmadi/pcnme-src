@@ -11,11 +11,24 @@ on screen comes from a run's logs (METRICS.md); nothing is simulated in the page
 
 No build step and no new dependency: a standard-library HTTP server and plain ES modules with Canvas 2D.
 
+## Another machine (a laptop): export
+
+```bash
+uv run python -m pcnme.viewer.export                  # seed 3000 of every run -> ../pcnme-history-viewer (~25 MB)
+uv run python -m pcnme.viewer.export --seeds all      # every seed (~0.5 GB)
+```
+
+The folder holds the page, the replays pre-built and gzipped, and `serve.py` (`standalone.py`: standard library
+only). Copy it anywhere and run `python serve.py` (Windows: `start.bat`); no repo, uv or packages needed.
+Export again after new runs; replays already in the folder are kept.
+
 ## Layout
 
 ```
 viewer/
   server.py              HTTP: the page (static/) and the JSON API over the source registry
+  export.py              writes a portable folder (page + pre-built replays + standalone.py as serve.py)
+  standalone.py          the exported folder's server: the same API from files, standard library only
   sources/
     base.py              the interface: SourceInfo, Source, ReplaySource, Placeholder, Registry
     replay.py            ParquetSource: a map's run directories -> runs() and replay(run_id)
