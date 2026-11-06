@@ -161,3 +161,8 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 - To run (tonight, by Imed): RUN_TRAINING.md, section "S6 with loose deadlines".
 - The agent: its 48 inputs, 6 actions, masks and reward are unchanged; S6's deadline values change, so the inputs
   that read the deadline (slack, D_norm, the masks' feasibility) see larger values in S6.
+- Incident (6 Nov, 09:02): a dry check piped Enter into tonight's train.py command and started the S6 revision.
+  Stopped within about 2 minutes, before any S6 window or model finished. It had archived the old S6 outputs (as
+  designed); everything was moved back and the manifest, fronts.csv and demos.csv restored from git: 36 NSGA-II
+  windows, 63 demonstration files, 36 trained models, as in the backup. It confirmed that the command's settings
+  pass the revision check. Lesson: never pipe input into train.py or evaluate.py.
