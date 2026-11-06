@@ -224,6 +224,28 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
    - The testbed would not hold 20 zones on one desktop (the 200-car limit already binds at 4 zones).
    - Suggested scope: a thesis extension or future work, after LuST v1 is complete.
 
+## Q — Quality gate (Imed, 6 Nov: "the design is mine, the code is yours: make every result, the pipeline and the
+testbed correct"). Claude owns these; an item is done only when its check passes and is recorded in RUN_LOG.
+
+- [ ] **Q1 Testbed = the design.** Fix the PCNME confirm bug (a code bug: the agent's path loses the car's confirm,
+  drop_no_ack 88 %, Greedy fine on the same build). Then every method (Greedy, Random and the 6 learners) runs on
+  the testbed at 40 cars with no drop_no_ack beyond fast mode's, and its gap to fast mode on the same seed is
+  explained metric by metric (network jitter Q56, real run times), not by a bug. A test pins the fix.
+- [ ] **Q2 Fast mode = the design.** Re-read every final-design section the code cites against the code (a
+  section-by-section review, findings to QUESTIONS/CHANGES, never silent fixes); the acceptance tests of M1-M8 and
+  the determinism test (same config and seed, bit-identical logs) pass on the final config.
+- [ ] **Q3 Results are reproducible.** From a clean checkout: `train.py --smoke`, `evaluate.py --smoke` and one
+  real evaluation seed per scenario reproduce summary.csv's rows for that seed exactly (same commit, same config);
+  every number in RESULTS_VFC.md is generated from summary.csv (no hand-typed numbers left).
+- [ ] **Q4 Pipeline robustness.** Interrupting train.py and evaluate.py at any stage and rerunning resumes with
+  bit-identical results (test_resume extended to NSGA-II, demos and the revision path); mismatched configs and
+  commits are refused with a clear message; nothing is ever deleted (only archived).
+- [ ] **Q5 Historical viewer = the logs.** For one run per scenario, the viewer's statistics strip at the end of
+  the run equals summary.csv (on time, dropped, mean latency, J/task); the export opens on a clean machine.
+- [ ] **Q6 Live viewer and Grafana = the logs.** A live testbed run (V3, R2) shows the same final numbers in the
+  viewer, in Grafana and in the run's Parquet files.
+- [ ] **Q7 LuST passes Q1-Q6 too** before its results are reported.
+
 ## B — Backups (outside the repository: F:\projects\pcnme-results-backup\<map>-<date>\)
 
 - [x] **B0** vfc-2026-11-05: data/vfc after the full training and evaluation (trained models, Parquet runs,
