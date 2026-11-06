@@ -8,6 +8,10 @@ the seeds), one figure per scenario, and the training curves. Resumable: a (scen
 in summary.csv is skipped; rows of another config or commit are refused, never mixed. Also: paired.md (PCNME
 vs each baseline, paired t test) and across-<metric>.png (metrics/compare.py).
 
+--scenarios S6 after a revision of S6 (train.py --scenarios S6, pipeline/revision.py): S6's rows of the old
+config and their run folders move to results/archive/S6-<label>/, the report shows them as "S6 <label>
+(archived)", and only the evaluated scenarios' rows are checked against this commit and config.
+
 --models-from MAP (transfer test, PLAN T3b): the models and w* trained on MAP are deployed on this map with no
 training here; results go to data/<map>/results-transfer/ with transfer.md comparing both maps.
 """
@@ -18,6 +22,7 @@ import csv
 import json
 import os
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -131,12 +136,15 @@ def append_row(path: Path, row: dict[str, Any]) -> None:
         os.unlink(lock)
 
 
-def done_rows(path: Path, ident: dict[str, str]) -> set[tuple[str, str, int]]:
-    """(scenario, method, seed) already finished; refuses rows of another config or commit."""
+def done_rows(
+    path: Path, ident: dict[str, str], scenarios: Sequence[str] | None = None
+) -> set[tuple[str, str, int]]:
+    """(scenario, method, seed) already finished; refuses rows of another config or commit. With `scenarios`,
+    only their rows count (the others may be of an earlier config: a revision reran these scenarios)."""
     if not path.exists():
         return set()
     with path.open(encoding="utf-8", newline="") as f:
-        rows = list(csv.DictReader(f))
+        rows = [r for r in csv.DictReader(f) if scenarios is None or r["scenario"] in scenarios]
     other = {(r["commit"], r["config_hash"]) for r in rows} - {(ident["commit"], ident["config_hash"])}
     if other:
         raise RuntimeError(
@@ -147,17 +155,28 @@ def done_rows(path: Path, ident: dict[str, str]) -> set[tuple[str, str, int]]:
     return {(r["scenario"], r["method"], int(r["seed"])) for r in rows}
 
 
-def write_outputs(screen: Any, paths: MapPaths, early: int, models_from: str | None = None) -> None:
+def write_outputs(
+    screen: Any, paths: MapPaths, early: int, models_from: str | None = None, doc: Path | None = None
+) -> None:
+    """report.md and figures, paired.md, across-*.png (archived scenarios included under their own name);
+    `doc`: a results page whose generated tables are refreshed (docs/RESULTS_VFC.md)."""
     from pcnme.metrics import compare
     from pcnme.metrics.report import report
+    from pcnme.pipeline.revision import archived
 
+    old = archived(paths.results)
     if paths.runs.exists():
-        files = report([paths.runs], paths.results, early)
+        files = report([paths.runs], paths.results, early, archived=[(d / "runs", name) for d, name in old])
         screen.say(f"tables and figures: {', '.join(p.name for p in files[:4])} ... in {paths.results}")
     summary = paths.results / "summary.csv"
     if summary.exists():
         rows = compare.read_summary(summary)
+        for d, name in old:
+            rows += [{**r, "scenario": name} for r in compare.read_summary(d / "summary.csv")]
         compare.write_all(rows, paths.results)
+        if doc is not None and doc.exists():
+            compare.update_doc(doc, rows)
+            screen.say(f"tables in {doc.name} refreshed")
         home = MapPaths(models_from).results / "summary.csv" if models_from else None
         if home is not None and home.exists():
             compare.write_transfer(compare.read_summary(home), rows, paths.results, models_from, paths.name)  # type: ignore[arg-type]
@@ -199,7 +218,8 @@ def main(argv: list[str] | None = None) -> int:
         smoke_env()
     from pcnme.config import DEFAULT_CONFIG_PATH, load_yaml
     from pcnme.maps import config_hash, map_config, map_source
-    from pcnme.pipeline import runinfo
+    from pcnme.paths import REPO
+    from pcnme.pipeline import revision, runinfo
     from pcnme.pipeline.screen import Screen, run_jobs
 
     base = load_yaml(DEFAULT_CONFIG_PATH)
@@ -220,8 +240,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {name}: earlier results moved to {dest}")
         cfg = map_config(name)
         ident = {"commit": runinfo.commit(), "config_hash": config_hash(map_source(name, measured=False))}
+        for s in args.scenarios or []:  # a revised scenario: its old rows go to results/archive/ (Q60)
+            label = revision.label_of(models, s)
+            if label and (n := revision.archive_results(paths.results, s, label, ident["config_hash"])):
+                print(f"  {name}: {n} rows of the old {s} archived as '{s} {label}' in results/archive/")
         try:
-            finished = done_rows(paths.results / "summary.csv", ident)
+            finished = done_rows(paths.results / "summary.csv", ident, args.scenarios)
         except RuntimeError as e:
             print(f"  {name}: {e}")
             return 2
@@ -259,7 +283,8 @@ def main(argv: list[str] | None = None) -> int:
             screen.stage("evaluation: scenario x method x seed (16.3)", [n for n, _ in jobs])
             res = run_jobs(screen, _eval_job, jobs, args.workers)
             failed = {k: v for k, v in res.items() if isinstance(v, Exception)}
-            write_outputs(screen, paths, map_config(name).fast_mode.early_decisions, src)
+            doc = None if args.smoke or src else REPO / "docs" / f"RESULTS_{name.upper()}.md"
+            write_outputs(screen, paths, map_config(name).fast_mode.early_decisions, src, doc)
         if failed:
             print(f"{name}: {len(failed)} jobs failed: {sorted(failed)}")
             return 3

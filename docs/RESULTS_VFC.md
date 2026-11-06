@@ -3,8 +3,14 @@
 **Setup.** VFC grid: 1.2 km, 4 active fog zones (z5 joins only in the topology experiment), 200 cars, 60 s
 episodes, 6 scenarios (final-design 16.2). There are 8 methods (16.1). Each method was evaluated on the same 20
 seeds (3000–3019) in every scenario, 960 runs in total. Every number below is the mean over those seeds; the 95 %
-intervals are in `data/vfc/results/report.md`. Bold marks the best method in each column.
+intervals are in `data/vfc/results/report.md`. Bold marks the best method in each column. evaluate.py writes
+these tables.
 
+**S6 changed on 6 Nov (QUESTIONS Q60).** S6 now has loose deadlines. Its first version, with tight deadlines,
+is kept as a stress test, "S6 tight (archived)": until the new S6 is evaluated, the S6 column below still shows
+that tight version.
+
+<!-- tables:begin (written by evaluate.py) -->
 **On time (%)**
 
 | method | S1 | S2 | S3 | S4 | S5 | S6 |
@@ -18,18 +24,32 @@ intervals are in `data/vfc/results/report.md`. Bold marks the best method in eac
 | QECO | 99.8 | 98.6 | 78.4 | 93.2 | 92.8 | 59.2 |
 | Random | 99.5 | 98.1 | 81.3 | 90.9 | 90.3 | **65.6** |
 
-**p99 latency (ms)** and **energy per task (J)**
+**p99 latency (ms)**
 
-| method | S1 | S2 | S3 | S4 | S5 | S6 | | S1 | S2 | S3 | S4 | S5 | S6 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| PCNME | 167 | 228 | **605** | 228 | 187 | 453 | | 2.17 | **2.21** | **2.36** | 2.12 | 2.11 | 1.72 |
-| Greedy | **157** | 182 | 932 | **167** | **168** | **261** | | **2.16** | 2.22 | 2.81 | **2.10** | **2.09** | **1.59** |
-| D3QN + greedy demos | 159 | **177** | 751 | 173 | 172 | 290 | | 2.17 | **2.21** | 2.57 | 2.11 | 2.10 | 1.61 |
-| D3QN (scratch) | 174 | 291 | 1597 | 196 | 209 | 331 | | 2.19 | 2.47 | 3.71 | 2.11 | 2.10 | 1.61 |
-| VFC PPO | 257 | 632 | 1409 | 209 | 209 | 811 | | 2.62 | 3.15 | 3.92 | 2.12 | 2.12 | 2.61 |
-| Tang & Wong | 193 | 546 | 1702 | 194 | 192 | 740 | | 3.04 | 3.25 | 3.97 | 2.13 | 2.11 | 2.17 |
-| QECO | 193 | 540 | 1742 | 186 | 184 | 614 | | 3.04 | 3.23 | 3.96 | 2.11 | 2.10 | 1.95 |
-| Random | 292 | 607 | 1528 | 294 | 294 | 853 | | 3.19 | 3.50 | 3.98 | 2.18 | 2.16 | 2.66 |
+| method | S1 | S2 | S3 | S4 | S5 | S6 |
+| --- | --- | --- | --- | --- | --- | --- |
+| PCNME | 167 | 228 | **605** | 228 | 187 | 453 |
+| Greedy | **157** | 182 | 932 | **167** | **168** | **261** |
+| D3QN + greedy demos | 159 | **177** | 751 | 173 | 172 | 290 |
+| D3QN (scratch) | 174 | 291 | 1597 | 196 | 209 | 331 |
+| VFC PPO | 257 | 632 | 1409 | 209 | 209 | 811 |
+| Tang & Wong | 193 | 546 | 1702 | 194 | 192 | 740 |
+| QECO | 193 | 540 | 1742 | 186 | 184 | 614 |
+| Random | 292 | 607 | 1528 | 294 | 294 | 853 |
+
+**Energy per task (J)**
+
+| method | S1 | S2 | S3 | S4 | S5 | S6 |
+| --- | --- | --- | --- | --- | --- | --- |
+| PCNME | 2.17 | **2.21** | **2.36** | 2.12 | 2.11 | 1.72 |
+| Greedy | **2.16** | 2.22 | 2.81 | **2.10** | **2.09** | **1.59** |
+| D3QN + greedy demos | 2.17 | **2.21** | 2.57 | 2.11 | 2.10 | 1.61 |
+| D3QN (scratch) | 2.19 | 2.47 | 3.71 | 2.11 | 2.10 | 1.61 |
+| VFC PPO | 2.62 | 3.15 | 3.92 | 2.12 | 2.12 | 2.61 |
+| Tang & Wong | 3.04 | 3.25 | 3.97 | 2.13 | 2.11 | 2.17 |
+| QECO | 3.04 | 3.23 | 3.96 | 2.11 | 2.10 | 1.95 |
+| Random | 3.19 | 3.50 | 3.98 | 2.18 | 2.16 | 2.66 |
+<!-- tables:end -->
 
 **S3, the overload scenario (fog load ρ = 1.5).** PCNME is best on all three metrics at once: 98.4 % on time (next
 best: D3QN with greedy demonstrations 97.2 %, Greedy 92.3 %, the other learners 78–86 %), the lowest p99 (605 ms
@@ -39,8 +59,8 @@ each other method (`paired.md`). The WAN is saturated, with a queue of up to 3.7
 off the cloud (0.4 % of attempts for PCNME and Greedy alike). PCNME wins by how it spreads load across the
 neighbouring zones. Expert pretraining clearly matters: D3QN from scratch reaches 86.4 % on the same budget.
 
-**S6, the heterogeneous scenario.** All methods are at 55–66 % on time with about 43 % of tasks dropped. Random and
-VFC PPO come out above PCNME, at much higher energy (2.6 against 1.7 J per task) and p99 (about 830 against 453 ms).
+**S6 with tight deadlines (the stress test, archived).** All methods are at 55–66 % on time with about 43 % of
+tasks dropped. Random and VFC PPO come out above PCNME, at much higher energy (2.6 against 1.7 J per task) and p99 (about 830 against 453 ms).
 This is not a placement failure (`tools/s6_feasibility.py`, QUESTIONS Q60):
 - With empty queues, 0.0 % of the 184 020 logged S6 tasks are infeasible. A hard task from a CPU-only zone reaches a
   GPU neighbour in about 32 ms, against a 50 ms deadline; locally it would take 72.5 ms.
@@ -50,6 +70,10 @@ This is not a placement failure (`tools/s6_feasibility.py`, QUESTIONS Q60):
 - S6 therefore measures which tasks a method sacrifices. PCNME, with w* = 0.414 weighing energy, keeps soft T4
   tasks on time (97.9 %) and sacrifices hard T1 tasks (44.7 % on time); Random does the opposite (T1 58.3 %, T4 74.0 %).
 - Only 1 of S6's 6 NSGA-II windows gave demonstrations (Q59), so PCNME was pretrained on the whole map's demonstrations.
+
+So S6 was rerun with loose deadlines (Q60): T1's CPU run (69.5 ms) then meets its 100 ms deadline locally, and
+the GPU neighbours get slack. w* stays 0.414, so S1–S5 are unchanged. The results of the new S6 replace the S6
+column above after its evaluation; its analysis follows here then.
 
 **Testbed gap (Greedy, Docker, 40 cars at the same per-zone load as 200).** S1: 96.9 % on time on the testbed
 against 99.9 % in fast mode. S2: 96.6 % against 99.8 %, with p99 199 ms against 171 ms. At 200 cars the busiest
@@ -65,8 +89,8 @@ fine on the same build). This is a testbed bug, scheduled after Friday.
 - Testbed: about 10 runs of 60 s.
 
 **Next.**
-1. **S6:** loose deadlines, rerun S6's NSGA-II windows, check that w* is unchanged, then retrain and evaluate S6
-   only (about 8–16 h; Q60 waits for your decision).
+1. **S6:** loose deadlines (Q60, applied 6 Nov): S6 rerun alone with w* = 0.414 (training about 8–13 h,
+   evaluation about 2 h), then the analysis of the new S6.
 2. **LuST:** traces, then the transfer test (the VFC models on LuST without retraining), then LuST training.
 3. **Testbed:** fix the PCNME confirmation bug, run the agent's testbed gap, and split zones over processes for
    200 cars.

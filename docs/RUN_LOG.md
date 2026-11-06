@@ -142,3 +142,22 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 - Checked, no change: CHANGES, QUESTIONS, METRICS, data/calibration/cpu-power, .claude/skills, final-design.
 - Docker Desktop's data: F:\DockerDesktopWSL, on the internal SSD (F: "ssd2"); the external Seagate USB disk is
   not used.
+
+## 6 Nov: Q60 applied (S6 with loose deadlines)
+
+- config/default.yaml S6 `deadlines: loose`; final-design 16.2 (S6 row), 18 (TOF-Broker in S4 and S5) and its
+  change list; QUESTIONS Q60 answered.
+- Check that only S6 changed since training: the current config with S6 set back to tight hashes to
+  b20e3c962334230c, the trained run's config hash (data/vfc/manifest.json); with loose: 13a2970378845209.
+- train.py / evaluate.py `--scenarios S6` on a finished map = a revision (src/pcnme/pipeline/revision.py,
+  tests/pipeline/test_revision.py): settings must match the finished run, S6's old outputs archived, w* kept
+  (0.414), the manifest records it; evaluate.py archives the old S6 rows/runs to results/archive/S6-tight/ and checks
+  only the evaluated scenarios. report.md, paired.md and the generated tables of docs/RESULTS_VFC.md show the new S6
+  and "S6 tight (archived)".
+- Smoke (data/smoke/vfc): `train.py --maps vfc --scenarios S6 --smoke --archive-label tight` (52 s: revision
+  recorded, w* kept, S1 untouched), `evaluate.py --maps vfc --scenarios S6 --smoke` (S1's old rows kept); then the
+  S6 rows marked as the old config and evaluated again: 16 rows and their runs archived, report sections S1, S6,
+  "S6 tight (archived)".
+- To run (tonight, by Imed): RUN_TRAINING.md, section "S6 with loose deadlines".
+- The agent: its 48 inputs, 6 actions, masks and reward are unchanged; S6's deadline values change, so the inputs
+  that read the deadline (slack, D_norm, the masks' feasibility) see larger values in S6.

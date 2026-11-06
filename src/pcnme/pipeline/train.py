@@ -185,7 +185,7 @@ def _nsga_job(map_name: str, scenario: str, k: int, plan: Plan, report: Any) -> 
     return {k2: v for k2, v in data.items() if k2 != "genomes"}
 
 
-def stage_nsga(screen: Any, plan: Plan) -> float:
+def stage_nsga(screen: Any, plan: Plan, keep_w_star: bool = False) -> float:
     from pcnme.pipeline.screen import run_jobs
 
     paths = MapPaths(plan.map)
@@ -198,12 +198,38 @@ def stage_nsga(screen: Any, plan: Plan) -> float:
     failed = [k for k, v in res.items() if isinstance(v, Exception)]
     if failed:
         raise RuntimeError(f"NSGA-II failed on {failed}; rerun train.py to retry them")
+    if keep_w_star:  # a revision: these windows join fronts.csv; w* stays the finished run's (Q60)
+        from pcnme.pipeline.revision import kept_w_star
+
+        rows = [r for r in _read_csv(paths.nsga / "fronts.csv") if r["scenario"] not in plan.scenarios]
+        _write_csv(paths.nsga / "fronts.csv", rows + front_rows(paths, keys))
+        w = kept_w_star(paths)
+        screen.say(f"w* kept at {w:.4f} (the finished run's); the new windows are in fronts.csv")
+        return w
     return write_fronts_and_w_star(paths, keys, screen)
 
 
 def write_fronts_and_w_star(paths: MapPaths, keys: list[tuple[str, int]], screen: Any) -> float:
     """fronts.csv (one row per window) and w_star.json: the median of the knee weights (13.3)."""
-    rows, knees = [], []
+    rows = front_rows(paths, keys)
+    knees = [float(r["knee_w"]) for r in rows if r["knee_w"] != ""]
+    _write_csv(paths.nsga / "fronts.csv", rows)
+    if not knees:
+        raise RuntimeError("no window has a front with 2 distinct points: no knee, no w* (13.3)")
+    w = statistics.median(knees)
+    paths.w_star.write_text(
+        json.dumps(
+            {"w_star": w, "knee_weights": knees, "windows": len(keys), "with_knee": len(knees)}, indent=1
+        ),
+        encoding="utf-8",
+    )
+    screen.say(f"w* = {w:.4f} (median of {len(knees)} knee weights over {len(keys)} windows)")
+    return w
+
+
+def front_rows(paths: MapPaths, keys: list[tuple[str, int]]) -> list[dict[str, Any]]:
+    """One fronts.csv row per NSGA-II window."""
+    rows = []
     for s, k in keys:
         d = json.loads((paths.nsga / f"{s}-w{k}.json").read_text(encoding="utf-8"))
         kn = d["knee"]
@@ -225,20 +251,7 @@ def write_fronts_and_w_star(paths: MapPaths, keys: list[tuple[str, int]], screen
                 "seconds": round(d["seconds"], 1),
             }
         )
-        if kn:
-            knees.append(kn["w"])
-    _write_csv(paths.nsga / "fronts.csv", rows)
-    if not knees:
-        raise RuntimeError("no window has a front with 2 distinct points: no knee, no w* (13.3)")
-    w = statistics.median(knees)
-    paths.w_star.write_text(
-        json.dumps(
-            {"w_star": w, "knee_weights": knees, "windows": len(keys), "with_knee": len(knees)}, indent=1
-        ),
-        encoding="utf-8",
-    )
-    screen.say(f"w* = {w:.4f} (median of {len(knees)} knee weights over {len(keys)} windows)")
-    return w
+    return rows
 
 
 # --- stage 3: demonstrations --------------------------------------------------------------------------------
@@ -606,6 +619,11 @@ def parse(argv: list[str] | None, *, evaluate: bool = False) -> argparse.Namespa
         ap.add_argument("--pretrain-updates", type=int, default=None, help="dqfd.pretrain_updates")
         ap.add_argument("--checkpoint-minutes", type=float, default=10.0)
         ap.add_argument(
+            "--archive-label",
+            default="previous",
+            help="--scenarios on a finished map: the name the replaced outputs keep (for example tight)",
+        )
+        ap.add_argument(
             "--until",
             choices=STAGES,
             default="learning",
@@ -637,7 +655,7 @@ def main(argv: list[str] | None = None) -> int:
     from pcnme.config import DEFAULT_CONFIG_PATH, load_yaml
     from pcnme.maps import config_hash, map_config, map_source
     from pcnme.mobility.traces import trace_file
-    from pcnme.pipeline import runinfo
+    from pcnme.pipeline import revision, runinfo
     from pcnme.pipeline.screen import Screen, hms
 
     base = load_yaml(DEFAULT_CONFIG_PATH)
@@ -705,6 +723,10 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     for plan in plans:
         paths = MapPaths(plan.map)
+        rev = revision.applies(paths, plan.scenarios, map_config(plan.map).scenarios)
+        if args.fresh and rev:
+            print(f"\n{plan.map}: --fresh with --scenarios would archive every scenario's outputs; refused.")
+            return 2
         if args.fresh and (dest := archive(paths)):
             print(f"{plan.map}: earlier outputs moved to {dest}")
         source = map_source(plan.map, measured=False)
@@ -714,9 +736,15 @@ def main(argv: list[str] | None = None) -> int:
             "plan": asdict(plan) | {"workers": None, "checkpoint_every_s": None},
         }
         try:
-            runinfo.check_or_start(
-                paths.manifest, identity, {"map": plan.map, "seeds": "training 2000-, NSGA-II 1000-"}
-            )
+            if rev:  # QUESTIONS Q60: rerun these scenarios only, w* kept (pipeline/revision.py)
+                rec = revision.start(paths, identity, args.archive_label)
+                print(
+                    f"{plan.map}: revision of {', '.join(plan.scenarios)}; old outputs: {rec['archived_to']}"
+                )
+            else:
+                runinfo.check_or_start(
+                    paths.manifest, identity, {"map": plan.map, "seeds": "training 2000-, NSGA-II 1000-"}
+                )
         except runinfo.Mismatch as e:
             print(f"\n{plan.map}: {e}")
             return 2
@@ -726,7 +754,7 @@ def main(argv: list[str] | None = None) -> int:
             last = STAGES.index(args.until)
             if map_config(plan.map).map.kind == "trace":
                 stage_traces(screen, plan)
-            w = stage_nsga(screen, plan) if last >= 1 else float("nan")
+            w = stage_nsga(screen, plan, keep_w_star=rev) if last >= 1 else float("nan")
             if last >= 2:
                 stage_demos(screen, plan, w)
             if last >= 3:
@@ -736,8 +764,10 @@ def main(argv: list[str] | None = None) -> int:
         if last < 3:
             print(f"\n{plan.map}: stopped after '{args.until}' (--until). Outputs: {paths.root}")
             continue
-        runinfo.update(
-            paths.manifest, finished=runinfo.now(), w_star=w, hours=round((time.monotonic() - t0) / 3600, 2)
-        )
+        hours = round((time.monotonic() - t0) / 3600, 2)
+        if rev:
+            revision.finish(paths, plan.scenarios, hours)
+        else:
+            runinfo.update(paths.manifest, finished=runinfo.now(), w_star=w, hours=hours)
         print(f"\n{plan.map}: done. Outputs: {paths.root}. Next: python evaluate.py --maps {plan.map}")
     return 0

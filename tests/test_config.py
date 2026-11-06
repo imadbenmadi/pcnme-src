@@ -535,3 +535,10 @@ def test_a_testbed_event_needs_a_known_action(raw: dict[str, Any]) -> None:
 
     with pytest.raises(ConfigError, match="action"):
         edited(raw, edit)
+
+
+def test_s6_has_loose_deadlines_in_the_default_config() -> None:
+    """QUESTIONS Q60 (6 Nov): mixed fog with loose deadlines (the frozen mechanism config keeps tight)."""
+    from pcnme.config import DEFAULT_CONFIG_PATH, load_yaml
+
+    assert load_yaml(DEFAULT_CONFIG_PATH)["scenarios"]["S6"]["deadlines"] == "loose"
