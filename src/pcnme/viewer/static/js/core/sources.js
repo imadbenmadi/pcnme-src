@@ -11,6 +11,7 @@ import { ReplayModel } from "./model.js";
 class ReplayAdapter {
   constructor(info) { this.info = info; this.cache = new Map(); }
   async listRuns() { return this.runs ?? (this.runs = await api.runs(this.info.id)); }
+  async status() { return this.state ?? (this.state = await api.status(this.info.id)); }
   async open(runId) {
     if (!this.cache.has(runId)) this.cache.set(runId, api.replay(this.info.id, runId).then((d) => new ReplayModel(d)));
     return this.cache.get(runId);

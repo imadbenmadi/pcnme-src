@@ -54,6 +54,16 @@ here (it is refused: it would archive every scenario). The evaluation moves the 
 `results/archive/S6-tight/`, and report.md, paired.md and docs/RESULTS_VFC.md show the new S6 and
 "S6 tight (archived)". Afterwards: a dated backup (PLAN B1).
 
+## LuST traces only (no training): the map in the viewer
+
+```bat
+uv run python train.py --maps lust --until traces --yes
+```
+
+About 30 min: SUMO records the crop at three times of day (data/lust/traces/), then the coverage is measured
+(data/lust/calibrated.yaml). It is not recorded in the manifest (any commit; later training reuses the traces).
+The viewer then shows LuST's traffic (roads, zones, vehicles) until LuST is trained and evaluated.
+
 ## LuST, full training (later): the traces first (about 30–60 min), then about 36 h like VFC
 
 ```bat

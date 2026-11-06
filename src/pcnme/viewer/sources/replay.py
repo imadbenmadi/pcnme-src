@@ -228,7 +228,7 @@ def _tasks(d: Path, cars: dict[str, int]) -> dict[str, Any]:
     return {"tasks": tasks, "attempts": attempts}
 
 
-def map_source(map_name: str, label: str) -> ParquetSource:
+def parquet_source(map_name: str, label: str) -> ParquetSource:
     """A map's evaluation runs and testbed runs (data/<map>/results/runs/, data/<map>/testbed/results/)."""
     from pcnme.paths import MapPaths
 

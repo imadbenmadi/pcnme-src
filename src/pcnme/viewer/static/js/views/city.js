@@ -41,7 +41,7 @@ export class CityView {
     this.draw(this.t, this.sel);
   }
   X(x) { return this.ox + x * this.s; }
-  Y(y) { return this.oy + y * this.s; }
+  Y(y) { return this.oy + (this.m.layout.north_up ? this.m.layout.area[1] - y : y) * this.s; } // maps: north up
   node(id) {
     if (id === "cloud") return this.cloudPos;
     const z = this.m.zone[id];
@@ -59,6 +59,20 @@ export class CityView {
     g.scale(this.dpr, this.dpr);
     const L = this.m.layout, [W, H] = L.area, B = L.block, road = Math.max(4, 16 * this.s) / this.s;
     g.fillStyle = C["map-bg"]; g.fillRect(0, 0, this.w, this.h);
+    if (L.roads) { // a real city: its streets from the map's network file, clipped to the crop
+      g.fillStyle = C.block;
+      roundRect(g, this.X(0), Math.min(this.Y(0), this.Y(H)), W * this.s, H * this.s, 4); g.fill();
+      g.save(); g.beginPath(); g.rect(this.X(0), Math.min(this.Y(0), this.Y(H)), W * this.s, H * this.s); g.clip();
+      g.strokeStyle = C.road; g.lineCap = "round"; g.lineJoin = "round"; g.lineWidth = Math.max(2, 9 * this.s);
+      for (const line of L.roads) {
+        g.beginPath();
+        line.forEach(([x, y], i) => (i ? g.lineTo(this.X(x), this.Y(y)) : g.moveTo(this.X(x), this.Y(y))));
+        g.stroke();
+      }
+      g.restore();
+      this.static = c;
+      return;
+    }
     g.fillStyle = C.road;
     roundRect(g, this.X(-road), this.Y(-road), (W + 2 * road) * this.s, (H + 2 * road) * this.s, 4); g.fill();
     g.fillStyle = C.block;

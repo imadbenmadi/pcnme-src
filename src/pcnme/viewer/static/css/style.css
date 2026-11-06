@@ -136,6 +136,8 @@ main { flex: 1; min-height: 0; display: flex; position: relative; }
 .stat b { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
 .stat span { font-size: 11px; color: var(--faint); white-space: nowrap; }
 .canvas-wrap { flex: 1; min-height: 0; position: relative; }
+.pane-note { margin-left: auto; max-width: 560px; color: var(--muted); font-size: 12px; line-height: 1.4; text-align: right; }
+.missing { flex: 1; display: grid; place-items: center; padding: 24px; background: var(--bg); }
 .canvas-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: default; }
 .canvas-wrap canvas.hover { cursor: pointer; }
 

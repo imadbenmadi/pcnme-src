@@ -26,6 +26,9 @@ class FakeReplay:
             raise KeyError(run_id)
         return {"meta": {"run_id": run_id}}
 
+    def status(self) -> dict[str, Any]:
+        return {"scenarios": ["S1"], "methods": ["greedy"], "seeds": [3000], "cells": {}, "notes": {}}
+
 
 def registry() -> Registry:
     return Registry([FakeReplay(), Placeholder(SourceInfo("later", "replay", "Later", status="development"))])

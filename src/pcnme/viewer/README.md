@@ -5,9 +5,15 @@ uv run python view.py            # http://127.0.0.1:8765, opens the browser
 uv run python view.py --port 9000 --no-browser
 ```
 
-Version 1 replays finished runs: every scenario, method and seed under `data/vfc/results/runs/`, and the
-testbed runs under `data/vfc/testbed/results/`. Two runs on the same seed can be compared side by side. Everything
+Version 1 replays finished runs: every scenario, method and seed under `data/<map>/results/runs/`, and the
+testbed runs under `data/<map>/testbed/results/`. Two runs on the same seed can be compared side by side. Everything
 on screen comes from a run's logs (METRICS.md); nothing is simulated in the page.
+
+It shows what exists and says what does not. In fast mode the picker lists the whole design (every scenario,
+method and seed, from `/api/status`); a choice without a run is marked "not evaluated" or "not trained" and its
+pane explains why (for example a scenario being rerun, QUESTIONS Q60). A trace map with traces but no results
+(LuST before its training) shows a traffic preview per time of day: the crop's real roads, the zones and SUMO's
+vehicles, with no tasks. A map with neither is listed "in development".
 
 No build step and no new dependency: a standard-library HTTP server and plain ES modules with Canvas 2D.
 
@@ -32,7 +38,8 @@ viewer/
   sources/
     base.py              the interface: SourceInfo, Source, ReplaySource, Placeholder, Registry
     replay.py            ParquetSource: a map's run directories -> runs() and replay(run_id)
-    __init__.py          default_registry(): what view.py shows (VFC; LuST as "in development")
+    traffic.py           MapSource (runs + a trace map's traffic previews), status() of the design
+    __init__.py          default_registry(): VFC and LuST, each with whatever runs and traces exist
   static/
     index.html, css/style.css
     js/main.js           the shell: source switcher, view by kind, clock, panel, keyboard
@@ -71,6 +78,9 @@ run or is being fed live.
 2. API: a replay source needs nothing new. A live kind adds its endpoint in `server.py:api()` (or a streaming
    handler next to it).
 3. Page: an adapter class in `core/sources.js`, added to `ADAPTERS` under its kind.
+
+A replay source also answers `status()`: the design's scenarios, methods and seeds, and per scenario x method
+"evaluated" (with its seeds), "trained" or "not trained", plus notes per scenario.
 
 Planned kinds:
 

@@ -11,6 +11,25 @@ const STATS = [
   ["closed", "tasks closed", (x) => x.toLocaleString("en")],
 ];
 
+function subtitle(meta) {
+  if (meta.mode === "traces") return `${meta.map === "lust" ? "LuST" : meta.map} · ${meta.scenario.replace("_", "-")} · ${meta.fleet} vehicles recorded by SUMO`;
+  return `${meta.scenario} · seed ${meta.seed} · ${meta.mode === "testbed" ? "testbed" : "fast mode"}${meta.fleet ? ` · ${meta.fleet} cars` : ""}`;
+}
+
+// MissingPane: a selected run that does not exist (yet), and why.
+export class MissingPane {
+  constructor(root, { what, why, note }) {
+    this.el = document.createElement("div");
+    this.el.className = "pane";
+    this.el.innerHTML = `<div class="missing"><div class="dev-card">
+      <div class="eyebrow">No results</div><h1>${esc(what)}</h1><p>${esc(why)}</p>${note ? `<p>${esc(note)}</p>` : ""}</div></div>`;
+    root.appendChild(this.el);
+  }
+  draw() {}
+  updateStats() {}
+  destroy() { this.el.remove(); }
+}
+
 export class RunPane {
   constructor(root, model, { onSelect, speed }) {
     this.m = model;
@@ -19,8 +38,8 @@ export class RunPane {
     this.el.className = "pane";
     this.el.innerHTML = `
       <div class="pane-head">
-        <div class="pane-title">${esc(methodName(meta.method))}<small>${esc(meta.scenario)} · seed ${meta.seed} · ${meta.mode === "testbed" ? "testbed" : "fast mode"}${meta.fleet ? ` · ${meta.fleet} cars` : ""}</small></div>
-        <div class="stats">${STATS.map(([k, label]) => `<div class="stat"><b data-k="${k}">–</b><span>${label}</span></div>`).join("")}</div>
+        <div class="pane-title">${esc(meta.mode === "traces" ? "Traffic" : methodName(meta.method))}<small>${esc(subtitle(meta))}</small></div>
+        ${meta.note ? `<div class="pane-note">${esc(meta.note)}</div>` : `<div class="stats">${STATS.map(([k, label]) => `<div class="stat"><b data-k="${k}">–</b><span>${label}</span></div>`).join("")}</div>`}
       </div>
       <div class="canvas-wrap"></div>`;
     root.appendChild(this.el);
@@ -29,6 +48,7 @@ export class RunPane {
   }
   draw(t, sel) { this.city.draw(t, sel && sel.pane === this ? sel : null); }
   updateStats(t) {
+    if (this.m.meta.note) return;
     const s = this.m.stats(t);
     for (const [k, , f] of STATS) this.statEls[k].textContent = f(s[k]);
   }

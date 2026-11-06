@@ -50,6 +50,10 @@ class ReplaySource(Source, Protocol):
 
     def replay(self, run_id: str) -> dict[str, Any]: ...
 
+    def status(self) -> dict[str, Any]:
+        """The design's scenarios, methods and seeds, and where each scenario x method stands."""
+        ...
+
 
 @dataclass(frozen=True)
 class Placeholder:
