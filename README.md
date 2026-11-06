@@ -12,6 +12,9 @@ Predictive task offloading for connected cars across fog zones and the cloud. MS
 | Design issues found while coding | [`docs/CHANGES.md`](docs/CHANGES.md), [`docs/QUESTIONS.md`](docs/QUESTIONS.md) |
 | Calibration (time table) | `tools/calibrate_yolo.py`, [`data/calibration/`](data/calibration/) |
 | Training, evaluation, testbed: every command | [`RUN_TRAINING.md`](RUN_TRAINING.md) |
+| Results on the VFC grid (one page) | [`docs/RESULTS_VFC.md`](docs/RESULTS_VFC.md) |
+| What was run, when, and what came out | [`docs/RUN_LOG.md`](docs/RUN_LOG.md) |
+| Replay viewer (`uv run python view.py`) | [`src/pcnme/viewer/README.md`](src/pcnme/viewer/README.md) |
 | Data folders: what each file is, how to rebuild it | [`data/DATA.md`](data/DATA.md) |
 | Rules for Claude Code | [`CLAUDE.md`](CLAUDE.md), skills in `.claude/skills/` |
 
@@ -48,15 +51,19 @@ ruff check src tests tools   # lint
 mypy                      # types
 python tools/calc_defaults.py
 pcnme run --help          # train and evaluate a method (fast mode); pcnme report for tables
+uv run python view.py     # the replay viewer, http://127.0.0.1:8765
 ```
 
 ## Monitoring and testbed (Docker Desktop, WSL2 backend)
 
 ```
 copy docker\.env.example docker\.env      # then change the passwords
-docker compose -f docker/compose.yaml --profile monitoring up -d   # Grafana http://localhost:3000, InfluxDB :8086, MinIO :9001
+docker compose -f docker/compose.yaml --profile monitoring up -d   # Grafana http://localhost:3000, InfluxDB :8086
 docker compose -f docker/compose.yaml --profile testbed up -d      # the testbed (milestone M9)
 ```
+
+Testbed runs are driven by the runner (`RUN_TRAINING.md`, section Testbed). Docker Desktop keeps its data in
+`F:\DockerDesktopWSL` (internal SSD).
 
 ## Folders that are not specifications
 

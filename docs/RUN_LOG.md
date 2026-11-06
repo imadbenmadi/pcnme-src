@@ -129,3 +129,16 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   infeasible with empty queues; the hard tasks need 80 % of the 4 GPU slots with 14-20 ms of slack, so an ideal
   shared queue still misses 29-36 % of them. Proposal in QUESTIONS Q60 (loose deadlines for S6, retrain S6 only).
 - docs/RESULTS_VFC.md: the one-page summary for the supervisor.
+
+## 6 Nov: docs cleanup (PLAN D1)
+
+- Updated to the code and results: README, READ, RUN_TRAINING (real VFC times, testbed runner, viewer, S6 tool),
+  CLAUDE (viewer in the layout), data/DATA (new results files, testbed, backup and export folders), PLAN (T2, M9.3
+  items 1-2 and D1 done, M9.4 in progress), visual/city/README (marked as an illustration), run_testbed.py's
+  message (and its --force runs now go to data/vfc/testbed/), docker comments and .env.example (no MinIO, Q55).
+- Deleted: data/calibration/calc_defaults-placeholders.txt and calc_defaults-first-measurement.txt, snapshots of
+  tools/calc_defaults.py from before the applied calibration (82.5 tasks/s per zone; now 43.2). The 3 Nov entry
+  above keeps both numbers, and the tool prints the current ones.
+- Checked, no change: CHANGES, QUESTIONS, METRICS, data/calibration/cpu-power, .claude/skills, final-design.
+- Docker Desktop's data: F:\DockerDesktopWSL, on the internal SSD (F: "ssd2"); the external Seagate USB disk is
+  not used.

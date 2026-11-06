@@ -1,5 +1,8 @@
 # PCNME — interactive system visual (v1)
 
+An illustration with example values, made before the code (not a specification, CLAUDE.md). Real runs are
+replayed by `uv run python view.py` (src/pcnme/viewer/).
+
 Predictive Cloud-Native Mobile Edge: task offloading for connected cars in an IoT–Fog–Cloud network.
 
 ## Run it

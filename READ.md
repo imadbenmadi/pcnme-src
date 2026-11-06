@@ -1,6 +1,6 @@
 # Reading guide
 
-How to understand this code base before Friday. Every path below exists; click it from the repository root.
+How to understand this code base. Every path below exists; click it from the repository root.
 
 ## 1. The big picture
 
@@ -15,7 +15,7 @@ where each task runs: on its own node, on one of up to 4 neighbour zones, or in 
    grid and LuST (Luxembourg, SUMO traces).
 
 Everything runs in **fast mode**: a discrete-event simulator, deterministic per seed. A Docker **testbed**
-(M9, paused) re-runs the same code on a real network.
+(M9) re-runs the same code on a real network: Greedy holds at 40 cars (RUN_LOG 5 Nov).
 
 ## 2. Read first, in this order
 
@@ -27,6 +27,7 @@ Everything runs in **fast mode**: a discrete-event simulator, deterministic per 
 4. [`docs/PLAN.md`](docs/PLAN.md): what is built and what is left. [`docs/QUESTIONS.md`](docs/QUESTIONS.md)
    and [`docs/CHANGES.md`](docs/CHANGES.md): every gap found while coding and your answer to it.
 5. [`docs/METRICS.md`](docs/METRICS.md): the logs, `summary.csv` and `episodes.csv` columns.
+6. [`docs/RESULTS_VFC.md`](docs/RESULTS_VFC.md): the results so far; [`docs/RUN_LOG.md`](docs/RUN_LOG.md): every run.
 
 ## 3. Folder map
 
@@ -47,8 +48,9 @@ Everything runs in **fast mode**: a discrete-event simulator, deterministic per 
 | [`src/pcnme/experiments/`](src/pcnme/experiments/) | the city (one episode), runner, CLI `pcnme`, map calibration | 16 |
 | [`src/pcnme/pipeline/`](src/pcnme/pipeline/) | the stages behind the three root scripts, live screen, checkpoints, manifests | 16 |
 | [`src/pcnme/testbed/`](src/pcnme/testbed/), [`docker/`](docker/) | the Docker testbed (M9) | 15.4 |
+| [`src/pcnme/viewer/`](src/pcnme/viewer/README.md) | the replay viewer (`view.py`) and its export | |
 | [`tests/`](tests/) | mirrors src/; [`tests/zone/test_delivery.py`](tests/zone/test_delivery.py) has hand-checked runs | 17 |
-| [`tools/`](tools/) | calc_defaults, calibrate_yolo, calibrate_map, input_ranges, plot_curves, testbed_gap | |
+| [`tools/`](tools/) | calc_defaults, calibrate_yolo, calibrate_map, input_ranges, plot_curves, testbed_gap, s6_feasibility | |
 | [`data/`](data/) | calibration, maps, one folder per map ([`data/DATA.md`](data/DATA.md)) | |
 
 ## 4. One task through the code (fast mode)
@@ -100,7 +102,7 @@ The live screen is [`src/pcnme/pipeline/screen.py`](src/pcnme/pipeline/screen.py
 | --- | --- | --- |
 | [`train.py`](train.py) | per map: traces → NSGA-II → w* → demonstrations → pretraining → online (PCNME + 5 baselines) | [`src/pcnme/pipeline/train.py`](src/pcnme/pipeline/train.py) |
 | [`evaluate.py`](evaluate.py) | every scenario × method (8) × seed (20) → summary.csv, tables, figures | [`src/pcnme/pipeline/evaluate.py`](src/pcnme/pipeline/evaluate.py) |
-| [`run_testbed.py`](run_testbed.py) | the Docker testbed; stops until M9.3 and M9.4 are done | [`src/pcnme/pipeline/testbed.py`](src/pcnme/pipeline/testbed.py) |
+| [`run_testbed.py`](run_testbed.py) | the Docker testbed's open items; `--force` runs one testbed run | [`src/pcnme/pipeline/testbed.py`](src/pcnme/pipeline/testbed.py) |
 | [`view.py`](view.py) | the viewer: replay any evaluated run (S1–S6, every method and seed), two side by side | [`src/pcnme/viewer/`](src/pcnme/viewer/README.md) |
 
 ## 8. How to read summary.csv

@@ -148,15 +148,16 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   **Left:**
   0. Fix the PCNME confirm bug (drop_no_ack 88 %), then the M9.4 gap for PCNME at 40 cars.
 
-  1. Reduced scale the containers can hold: 40–60 cars (`python -m pcnme.testbed.runner --containers 2` or 3), the
+  1. [x] (5 Nov: 40 cars hold; 200 cars are GIL-bound in the busiest zone) Reduced scale the containers can hold: 40–60 cars (`python -m pcnme.testbed.runner --containers 2` or 3), the
      same per-zone load (lambda_car scales with the fleet, 18). Check on-time against fast mode at that fleet.
-  2. If it still lags, one timeboxed session: move the zone onto the asyncio loop of its network I/O (one thread),
+  2. [x] (5 Nov: profiled; two HTTP-client fixes, commit 33f3240) If it still lags, one timeboxed session: move the zone onto the asyncio loop of its network I/O (one thread),
      profile with `PCNME_PROFILE=1`. If it still does not hold, stop and report (the paper states the scale limit).
   3. Topology runs (Q57, low priority, last): three separate 120 s runs, event at 40 s: `start zone-5`;
      `kill zone-3` + `kill zone-4`; `restart broker`.
   Decided: Q54 Greedy first, then the agent with CPU-only torch in the zone image; Q55 bind mount, MinIO removed;
   Q56 the in-order jitter bias (+8–24 %) is reported in the gap.
-- [ ] **M9.4** Same scenario and seed in fast mode and on the testbed, at M9.3's reduced scale, Greedy first (no trained model needed), then the agent: report the gap (16.3). Tool ready: `tools/testbed_gap.py` (fast-mode run with the testbed's fleet and seed, one Markdown table of the 16.3 metrics). Waits on M9.3's open item; the in-order jitter bias (Q56) is part of the gap.
+- [~] **M9.4** (Greedy done 5 Nov: S1 96.9 % vs 99.9 %, S2 96.6 % vs 99.8 % on time, data/vfc/testbed/gap-*.md;
+  the agent waits on the confirm bug) Same scenario and seed in fast mode and on the testbed, at M9.3's reduced scale, Greedy first (no trained model needed), then the agent: report the gap (16.3). Tool ready: `tools/testbed_gap.py` (fast-mode run with the testbed's fleet and seed, one Markdown table of the 16.3 metrics). Waits on M9.3's open item; the in-order jitter bias (Q56) is part of the gap.
 
 ## T — Training and results (the runs behind the paper; the user starts the full runs)
 
@@ -165,7 +166,8 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   baselines on the same budget and w* (16.1); live screen, per-episode CSVs, checkpoints, resume, manifests.
   `evaluate.py --maps <map>`: every scenario x method x seed, summary.csv, tables, figures. `run_testbed.py`:
   stops until M9.3/M9.4. Smoke-tested on vfc and lust (`--smoke`). Commands: RUN_TRAINING.md.
-- [ ] **T2** VFC: `train.py --maps vfc` then `evaluate.py --maps vfc` (the user runs them, about 14 h + eval).
+- [x] **T2** VFC: `train.py --maps vfc` then `evaluate.py --maps vfc` (done 5 Nov: 36 h training, 960 evaluation
+  runs; docs/RESULTS_VFC.md, docs/RUN_LOG.md).
 - [ ] **T3** LuST: `train.py --maps lust` (generates the traces first, about 30-60 min) then evaluate.
 - [ ] **T3b** (TODO, postponed 5 Nov: no time before Friday; the code is ready and smoke-tested, only the two
   runs are left: `train.py --maps lust --until traces`, then `evaluate.py --maps lust --models-from vfc`)
@@ -185,7 +187,7 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   delivery success after a zone change, decisions until the on-time rate is stable, front hypervolume); they need
   small additions to the fast-mode logs, then a re-evaluation. The knee reference (16.1, Q45) is optional.
 - [ ] **T5** S6 (QUESTIONS Q60, waits for Imed): if agreed, S6 with loose deadlines: rerun S6's NSGA-II windows, check w*, retrain S6 only, evaluate S6 only. Results summary for the supervisor: docs/RESULTS_VFC.md.
-- [ ] **D1** Docs cleanup (after the evaluations, before the write-up): update every .md file to match the code
+- [x] **D1** (done 6 Nov; deletions listed in RUN_LOG 6 Nov) Docs cleanup (after the evaluations, before the write-up): update every .md file to match the code
   and the results (README, READ, RUN_TRAINING, CLAUDE, data/DATA, docs/PLAN, METRICS, RUN_LOG, QUESTIONS, CHANGES,
   data/calibration/cpu-power, visual/city/README, .claude/skills/*); delete the ones nothing needs any more and list
   each deletion with its reason; check every path and command in them still works. final-design.md: content only,

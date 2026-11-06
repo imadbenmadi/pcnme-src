@@ -60,11 +60,12 @@ src/pcnme/
   fl/              federated learning, phase 2                                   13.7
   experiments/     the city, scenario runner, CLI `pcnme`, map calibration       16
   pipeline/        train.py / evaluate.py / run_testbed.py stages, screen, resume 16
+  viewer/          replay viewer (view.py), sources, export (viewer/README.md)    16.3 logs
   paths.py, maps.py   data/<map>/ layout; a map's config (overrides, hash)        18
   testbed/         Docker entry points: zone, car, cloud, wan-gw, runner (M9)    15.4
 tests/             mirrors src/ ; one test file per module
-tools/             calc_defaults.py, calibrate_yolo.py, calibrate_map.py, small scripts
+tools/             calc_defaults.py, calibrate_yolo.py, calibrate_map.py, testbed_gap.py, s6_feasibility.py
 data/              calibration, maps (LuST), per-map outputs (data/DATA.md)
-train.py, evaluate.py, run_testbed.py   the entry points (RUN_TRAINING.md)
+train.py, evaluate.py, run_testbed.py, view.py   the entry points (RUN_TRAINING.md)
 docker/            Dockerfile, compose.yaml, net-setup.sh (tc netem), Grafana provisioning
 ```
