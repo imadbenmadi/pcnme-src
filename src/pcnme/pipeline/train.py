@@ -30,6 +30,15 @@ from typing import Any
 from pcnme.paths import REPO, MapPaths
 
 STAGES = ("traces", "nsga", "demos", "learning")
+
+
+def records_run(until: str) -> bool:
+    """Whether a train.py run is recorded in the map's manifest: every stage after the traces is. The traces
+    depend only on the map's config and SUMO, so `--until traces` can run on any commit and later training
+    reuses them."""
+    return STAGES.index(until) > 0
+
+
 TRAINED = ("pcnme", "d3qn-scratch", "d3qn-greedy", "vfc-ppo", "tang-wong", "qeco")  # 16.1; rules need none
 
 # Measured on the home desktop (3 Nov): core-seconds per NSGA-II evaluation (S2, no fork) and training
@@ -736,7 +745,9 @@ def main(argv: list[str] | None = None) -> int:
             "plan": asdict(plan) | {"workers": None, "checkpoint_every_s": None},
         }
         try:
-            if rev:  # QUESTIONS Q60: rerun these scenarios only, w* kept (pipeline/revision.py)
+            if not records_run(args.until):
+                pass  # traces only: an asset of the config and SUMO, not a run (no manifest)
+            elif rev:  # QUESTIONS Q60: rerun these scenarios only, w* kept (pipeline/revision.py)
                 rec = revision.start(paths, identity, args.archive_label)
                 print(
                     f"{plan.map}: revision of {', '.join(plan.scenarios)}; old outputs: {rec['archived_to']}"

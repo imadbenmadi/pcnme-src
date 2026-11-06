@@ -127,3 +127,10 @@ def test_the_results_page_tables_are_rewritten_between_their_markers(tmp_path: P
     plain = tmp_path / "PLAIN.md"
     plain.write_text("no markers\n", encoding="utf-8")
     assert not update_doc(plain, rows) and plain.read_text(encoding="utf-8") == "no markers\n"
+
+
+def test_a_traces_only_run_is_not_recorded_so_later_training_reuses_the_traces() -> None:
+    from pcnme.pipeline.train import records_run
+
+    assert not records_run("traces")
+    assert all(records_run(s) for s in ("nsga", "demos", "learning"))
