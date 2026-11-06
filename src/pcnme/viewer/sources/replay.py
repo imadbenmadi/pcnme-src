@@ -46,11 +46,13 @@ class ParquetSource:
         raise KeyError(run_id)
 
     def runs(self) -> list[RunInfo]:
-        out = []
+        """Every run once: a run id in two roots is the first root's (as `replay` reads it)."""
+        out, seen = [], set()
         for r in self._roots:
             for d in sorted(r.iterdir()):
                 info = parse_run_id(d.name)
-                if info is not None and (d / "tasks.parquet").exists():
+                if info is not None and info.run_id not in seen and (d / "tasks.parquet").exists():
+                    seen.add(info.run_id)
                     out.append(info)
         return out
 
