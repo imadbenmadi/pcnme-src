@@ -5,6 +5,7 @@ server.py from files written by the export:
 
     data/sources.json                  GET /api/sources
     data/runs/<source>.json            GET /api/runs?source=<source>
+    data/status/<source>.json          GET /api/status?source=<source>
     data/replay/<source>/<run>.json.gz GET /api/replay?source=<source>&run=<run>
 """
 
@@ -34,6 +35,8 @@ def api_file(path: str, q: dict[str, str]) -> Path | None:
         return DATA / "sources.json"
     if path == "/api/runs" and SAFE.match(source):
         return DATA / "runs" / f"{source}.json"
+    if path == "/api/status" and SAFE.match(source):
+        return DATA / "status" / f"{source}.json"
     if path == "/api/replay" and SAFE.match(source) and SAFE.match(run):
         return DATA / "replay" / source / f"{run}.json.gz"
     return None

@@ -2,29 +2,33 @@
 
 from __future__ import annotations
 
-from pcnme.viewer.sources.base import Placeholder, Registry, SourceInfo
+from pcnme.viewer.sources.base import Placeholder, Registry, Source, SourceInfo
+
+LUST_NOTES = {
+    "title": "LuST (Luxembourg)",
+    "summary": "A 1.2 km crop of central Luxembourg, with car traces from the LuST SUMO scenario at three "
+    "times of day. The traces are not made yet, so there is nothing to show.",
+    "steps": [
+        ["Crop, SUMO traces, trace replayer", "built, smoke-tested", True],
+        ["Full traces and coverage (train.py --maps lust --until traces)", "next", False],
+        ["Training and evaluation on LuST", "planned", False],
+    ],
+}
+
+
+def map_source(map_name: str, label: str) -> Source:
+    """A map's runs (and a trace map's traffic previews); a placeholder while there is nothing to show."""
+    from pcnme.viewer.sources.replay import parquet_source
+    from pcnme.viewer.sources.traffic import MapSource
+
+    src = MapSource(SourceInfo(map_name, "replay", label, map=map_name), parquet_source(map_name, label))
+    if src.runs():
+        return src
+    return Placeholder(
+        SourceInfo(map_name, "replay", label, status="development", map=map_name, notes=LUST_NOTES)
+    )
 
 
 def default_registry() -> Registry:
-    """What `view.py` shows: the VFC grid's runs; LuST listed in development (no runs yet)."""
-    from pcnme.viewer.sources.replay import map_source
-
-    lust = SourceInfo(
-        "lust",
-        "replay",
-        "LuST (Luxembourg)",
-        status="development",
-        map="lust",
-        notes={
-            "title": "LuST (Luxembourg)",
-            "summary": "A 1.2 km crop of central Luxembourg, with car traces from the LuST SUMO scenario at "
-            "three times of day. No model has been trained or evaluated on this map yet, so there is nothing "
-            "to replay.",
-            "steps": [
-                ["Crop, SUMO traces, trace replayer", "built, smoke-tested", True],
-                ["Full traces and coverage", "next", False],
-                ["Training and evaluation on LuST", "planned", False],
-            ],
-        },
-    )
-    return Registry([map_source("vfc", "VFC grid"), Placeholder(lust)])
+    """What `view.py` shows: the VFC grid and LuST, each with whatever runs and traces exist."""
+    return Registry([map_source("vfc", "VFC grid"), map_source("lust", "LuST (Luxembourg)")])

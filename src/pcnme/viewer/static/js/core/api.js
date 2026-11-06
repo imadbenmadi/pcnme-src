@@ -9,5 +9,6 @@ async function get(url) {
 export const api = {
   sources: () => get("/api/sources"),
   runs: (source) => get(`/api/runs?source=${encodeURIComponent(source)}`),
+  status: (source) => get(`/api/status?source=${encodeURIComponent(source)}`),
   replay: (source, run) => get(`/api/replay?source=${encodeURIComponent(source)}&run=${encodeURIComponent(run)}`),
 };

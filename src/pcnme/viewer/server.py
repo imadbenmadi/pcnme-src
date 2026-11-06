@@ -5,6 +5,7 @@ A standard-library HTTP server: the page (static/) and a small JSON API over the
     GET /api/sources                         every source: id, kind, label, status, map, notes
     GET /api/runs?source=vfc                 a replay source's runs (scenario, method, seed, mode)
     GET /api/replay?source=vfc&run=<run_id>  one run as a replay (gzip)
+    GET /api/status?source=vfc               the design's scenarios x methods and what exists of each
 
 Live sources (live-testbed, live-training) will add a streaming endpoint (`/api/stream?source=...`,
 server-sent events or a WebSocket); the page picks the view by the source's kind.
@@ -40,6 +41,8 @@ def api(registry: Registry, path: str, q: dict[str, str]) -> Any:
         return [asdict(r) for r in registry.replay_source(q["source"]).runs()]
     if path == "/api/replay":
         return registry.replay_source(q["source"]).replay(q["run"])
+    if path == "/api/status":
+        return registry.replay_source(q["source"]).status()
     raise KeyError(path)
 
 

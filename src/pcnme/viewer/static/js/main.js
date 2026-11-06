@@ -10,7 +10,7 @@ import { TransportControls } from "./views/controls.js";
 import { DetailsPanel } from "./views/panel.js";
 import { RunPicker } from "./views/picker.js";
 import { renderPlaceholder } from "./views/placeholder.js";
-import { RunPane } from "./views/run-pane.js";
+import { MissingPane, RunPane } from "./views/run-pane.js";
 
 const clock = new Clock();
 const controls = new TransportControls(clock);
@@ -60,7 +60,8 @@ async function setSource(id, hash = {}) {
     return;
   }
   if (info.kind === "replay") {
-    picker.setRuns(await state.adapter.listRuns(), hash);
+    const [runs, status] = await Promise.all([state.adapter.listRuns(), state.adapter.status().catch(() => null)]);
+    picker.setRuns(runs, status, hash);
     await showRuns(picker.selection());
   }
 }
@@ -73,13 +74,16 @@ async function showRuns(sel) {
   history.replaceState(null, "", `#${[state.source.id, sel.scenario, sel.method, sel.seed, sel.mode, sel.method2 || ""].join("/").replace(/\/$/, "")}`);
   $("progress").classList.add("on");
   try {
-    const models = await Promise.all(ids.map((id) => state.adapter.open(id)));
+    const methods = sel.method2 ? [sel.method, sel.method2] : [sel.method];
+    const models = await Promise.all(ids.map((id) => (picker.exists(id) ? state.adapter.open(id) : null)));
     if (token !== state.loadToken) return; // a newer choice won
     state.sel = null; panel.render(null);
     clearPanes();
-    state.panes = models.map((m) => new RunPane($("stage"), m, { onSelect: select, speed: () => clock.speed }));
-    controls.setArrivals(models[0].arrivals);
-    clock.setRange(Math.max(...models.map((m) => m.end)));
+    state.panes = models.map((m, k) =>
+      m ? new RunPane($("stage"), m, { onSelect: select, speed: () => clock.speed }) : new MissingPane($("stage"), picker.missing(sel, methods[k])));
+    const live = models.filter(Boolean);
+    controls.setArrivals(live.length ? live[0].arrivals : 0);
+    clock.setRange(live.length ? Math.max(...live.map((m) => m.end)) : 0);
   } catch (e) {
     $("stage").innerHTML = `<div class="empty">Could not load ${esc(ids.join(", "))}: ${esc(e.message)}</div>`;
   } finally {
@@ -117,7 +121,7 @@ addEventListener("hashchange", () => { const h = parseHash(); setSource(h.id, h.
 
 async function boot() {
   readTheme();
-  onTheme(() => { state.panes.forEach((p) => p.city.resize()); });
+  onTheme(() => { state.panes.forEach((p) => p.city && p.city.resize()); });
   state.sources = await api.sources();
   $("sources").innerHTML = state.sources.map((s) => `<button data-id="${esc(s.id)}">${esc(s.label)}${s.status === "development" ? '<span class="tag">in development</span>' : ""}</button>`).join("");
   $("sources").querySelectorAll("button").forEach((b) => (b.onclick = () => setSource(b.dataset.id)));
