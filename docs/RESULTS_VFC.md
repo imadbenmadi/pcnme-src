@@ -91,7 +91,7 @@ fine on the same build). This is a testbed bug, scheduled after Friday.
 **Next.**
 1. **S6:** loose deadlines (Q60, applied 6 Nov): S6 rerun alone with w* = 0.414 (training about 8–13 h,
    evaluation about 2 h), then the analysis of the new S6.
-2. **LuST:** traces, then the transfer test (the VFC models on LuST without retraining), then LuST training.
+2. **LuST:** traces, then LuST training and evaluation.
 3. **Testbed:** fix the PCNME confirmation bug, run the agent's testbed gap, and split zones over processes for
    200 cars.
 

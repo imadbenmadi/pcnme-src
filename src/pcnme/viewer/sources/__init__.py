@@ -23,7 +23,6 @@ def default_registry() -> Registry:
             "steps": [
                 ["Crop, SUMO traces, trace replayer", "built, smoke-tested", True],
                 ["Full traces and coverage", "next", False],
-                ["Transfer test: the VFC models on LuST", "planned", False],
                 ["Training and evaluation on LuST", "planned", False],
             ],
         },

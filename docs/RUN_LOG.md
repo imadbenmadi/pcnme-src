@@ -166,3 +166,17 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   designed); everything was moved back and the manifest, fronts.csv and demos.csv restored from git: 36 NSGA-II
   windows, 63 demonstration files, 36 trained models, as in the backup. It confirmed that the command's settings
   pass the revision check. Lesson: never pipe input into train.py or evaluate.py.
+
+## 6 Nov: plan changes
+
+- The transfer test (VFC models on LuST without LuST training, T3b) is dropped (Imed). Removed from PLAN,
+  RUN_TRAINING, data/DATA, RESULTS_VFC and the viewer's LuST page; the entries above stay as history.
+  evaluate.py keeps its --models-from option (built and tested on 5 Nov), unused.
+- Rehearsal of tonight's S6 revision on a copy of data/vfc (nothing real touched): 6 S6 windows and 6 models
+  archived, 30 + 30 kept, w* 0.41389 kept, a resume archives nothing twice; evaluation archives the 160 old S6
+  rows and runs, keeps the 800 S1-S5 rows, and queues all 160 new S6 runs.
+- PLAN: roadmap R (S6, the VFC testbed to the end with live metrics, Grafana and V3, LuST v1, one platform for both
+  maps, LuST v2 as an idea) and backups B (B1: a dated copy after tonight's run).
+- Two folders next to the repo that are not data in use: F:\projects\pcnme-data\calib-venv (the CUDA venv used
+  for calibration on 3 Nov; only needed to calibrate again) and F:\projects\pcnme-data-old-2026-11-03 (the
+  discarded first attempt; RUN_LOG 3 Nov). Both can be deleted by Imed.

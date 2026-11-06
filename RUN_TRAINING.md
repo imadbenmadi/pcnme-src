@@ -52,17 +52,7 @@ demonstrations and models move to `data/vfc/_archive/S6-tight-<time>/`; w* stays
 the manifest records the revision. It resumes like a full run (same command, same commit). Never add `--fresh`
 here (it is refused: it would archive every scenario). The evaluation moves the old S6 rows and runs to
 `results/archive/S6-tight/`, and report.md, paired.md and docs/RESULTS_VFC.md show the new S6 and
-"S6 tight (archived)".
-
-## Transfer test: the VFC models on LuST, no LuST training (PLAN T3b, not run yet)
-
-```bat
-uv run python train.py --maps lust --until traces
-uv run python evaluate.py --maps lust --models-from vfc
-```
-
-The first makes only the LuST traces (about 30–60 min); the second deploys the VFC models and the VFC w* on
-LuST. Results: `data/lust/results-transfer/` (transfer.md: each method on VFC vs on LuST).
+"S6 tight (archived)". Afterwards: a dated backup (PLAN B1).
 
 ## LuST, full training (later): the traces first (about 30–60 min), then about 36 h like VFC
 
@@ -87,7 +77,6 @@ To make only the traces: add `--until traces`. To run only NSGA-II and w*: add `
 | PCNME vs each baseline (paired t test over the seeds) | `data/<map>/results/paired.md`, `paired.csv` |
 | Each metric over S1–S6, all methods | `data/<map>/results/across-<metric>.png` |
 | Training curves per scenario | `data/<map>/results/training-<S>.png` |
-| Transfer test (VFC models on LuST) | `data/lust/results-transfer/` (`transfer.md`, `transfer-*.png`) |
 | Testbed runs and fast-mode vs testbed gaps | `data/vfc/testbed/results/<run_id>/`, `data/vfc/testbed/gap-*.md` |
 
 ## Testbed (Docker Desktop running; never while train.py or evaluate.py runs)

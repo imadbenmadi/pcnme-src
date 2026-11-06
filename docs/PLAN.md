@@ -169,19 +169,13 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
 - [x] **T2** VFC: `train.py --maps vfc` then `evaluate.py --maps vfc` (done 5 Nov: 36 h training, 960 evaluation
   runs; docs/RESULTS_VFC.md, docs/RUN_LOG.md).
 - [ ] **T3** LuST: `train.py --maps lust` (generates the traces first, about 30-60 min) then evaluate.
-- [ ] **T3b** (TODO, postponed 5 Nov: no time before Friday; the code is ready and smoke-tested, only the two
-  runs are left: `train.py --maps lust --until traces`, then `evaluate.py --maps lust --models-from vfc`)
-  Transfer test (decided 4 Nov): evaluate the VFC-trained models on LuST with no LuST training
-  (zero-shot, online learning on as in deployment, Q42; the VFC w*). Needs: the LuST traces and coverage only
-  (`uv run python train.py --maps lust --until traces`, 30-60 min, after the VFC run) and a new evaluate.py option
-  to load another map's models (`--models-from vfc`; to build after the VFC run, not during it). Results go to
-  data/lust/results-transfer/ so they never mix with a later LuST-trained evaluation.
+- [-] **T3b** Dropped (Imed, 6 Nov): no transfer test of the VFC models on LuST. LuST is trained and
+  evaluated on its own (T3).
 - [x] **T3c** (done 5 Nov: metrics/compare.py, evaluate.py --models-from; smoke-tested) evaluate.py additions (after the VFC run; nothing in src/ changes while it trains). Important, before
   Friday (Imed, 4 Nov):
   1. cross-scenario figures: one per key metric (on time, p99 latency, mean ê), all methods over S1-S6;
   2. PCNME vs each baseline: a paired test over the same seeds (is the difference real or noise?);
-  3. the transfer test (T3b): `--models-from vfc`, results in data/lust/results-transfer/, plus one VFC vs LuST
-     comparison table and figure.
+  3. (dropped with T3b)
   Not needed: a results table printed in the terminal (report.md and summary.csv are enough).
   Later (after Friday; fast mode, not the testbed): the 16.3 metrics still missing (next-zone acc@1, T_exit error,
   delivery success after a zone change, decisions until the on-time rate is stable, front hypervolume); they need
@@ -203,6 +197,40 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   no notation renames (Imed does those later).
 - [ ] **T4** Results write-up from data/<map>/results/summary.csv: the 16.3 table per map, training curves,
   the number of seeds, what is missing (knee reference, ablations 16.4, sweeps).
+
+## R — Roadmap (Imed, 6 Nov; the order of the next weeks)
+
+1. **VFC S6** (T5): train and evaluate S6 with loose deadlines (tonight). Then back up (B1) and write up S6.
+2. **VFC testbed** (M9), to the end:
+   a. the PCNME confirm bug (drop_no_ack 88 %), then M9.4 for every method at 40 cars (fast mode vs testbed);
+   b. live metrics: zones and the runner push the 16.3 points to InfluxDB while a run goes (today they are only
+      written to points.lp after it); Grafana dashboards per run, zone and method (docker/grafana/);
+   c. V3 live mode: the viewer's `live-testbed` source (MQTT -> server-sent events), the same CityView;
+   d. the topology runs (Q57) and the scale question (a zone split over processes for 200 cars, or report 40).
+3. **LuST v1** (the 1.2 km crop, 4 zones, final-design 16.2): L5 traces, T3 training and evaluation, V2 the road map
+   in the viewer, then its testbed (the car containers replay traces instead of walking the grid: new work).
+4. **One platform for both maps.** Keep one viewer, one Grafana and one testbed, with the map as a parameter
+   everywhere (sources per map in the viewer, a `map` tag on every Influx point, `--maps` in the scripts),
+   not separate copies.
+5. **LuST v2 (idea, to discuss; not decided):** the whole LuST city (about 155 km^2) with about 20 fog zones,
+   and a viewer where one picks a crop anywhere. Notes (6 Nov):
+   - The agent need not change: it is per zone, sees itself, at most 4 neighbours and the cloud (48 inputs,
+     6 actions), so 20 zones are 20 agents with the same network (13.1 already trains one network on all zones;
+     FedAvg, M8, is where many zones pay off). Needed: a zone layout for the city (positions, radii), the rule
+     for choosing 4 neighbours when more are within d_nb (a design question), a LuST-wide trace (24 h, many
+     thousand vehicles: fast mode's speed and NSGA-II's window size grow with the fleet), and new training.
+   - "Crop anywhere" in the viewer means running something on demand: SUMO traces for the crop (minutes), then a
+     fast-mode run with a trained model (minutes), then a replay. Doable as a viewer feature after LuST v1.
+   - The testbed would not hold 20 zones on one desktop (the 200-car limit already binds at 4 zones).
+   - Suggested scope: a thesis extension or future work, after LuST v1 is complete.
+
+## B — Backups (outside the repository: F:\projects\pcnme-results-backup\<map>-<date>\)
+
+- [x] **B0** vfc-2026-11-05: data/vfc after the full training and evaluation (trained models, Parquet runs,
+  testbed runs). It holds the tight-deadline S6 too (models, NSGA-II windows, runs).
+- [ ] **B1** After tonight's S6 run: a new dated copy, vfc-2026-11-07 (the folder pattern stays <map>-<date>),
+  with the new S6 and the archived tight S6 (data/vfc/_archive/S6-tight-<time>/,
+  results/archive/S6-tight/). Inside the copy the archived folders keep their names (S6-tight...).
 
 ## L — LuST map (Codeca et al. 2015; final-design 16.2, 18)
 
