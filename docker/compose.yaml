@@ -1,12 +1,12 @@
 # PCNME Docker testbed (final-design 15.4). One machine, Docker Compose.
 #
-#   docker compose -f docker/compose.yaml --profile monitoring up -d     # InfluxDB + Grafana + MinIO (usable now)
+#   docker compose -f docker/compose.yaml --profile monitoring up -d     # InfluxDB + Grafana
 #   docker compose -f docker/compose.yaml --profile testbed up -d        # the testbed itself (milestone M9)
 #
 # Networks (final-design 15.4): radio_net cars <-> zones; backhaul_net zones <-> zones <-> broker <-> wan-gw;
 # wan_net wan-gw <-> cloud (the one shared WAN pipe); mgmt_net everything <-> metrics, never shaped. Results: the bind-mounted data/ folder (Q55).
 # Shaping: docker/net-setup.sh (tc netem), parameters from the environment; the runner sets them per scenario.
-# Image versions are pinned; MinIO uses a moving tag until M9 pins it (see the comment there).
+# Image versions are pinned. No MinIO: its public images are gone; results go to the bind-mounted data/ (Q55).
 
 name: pcnme
 

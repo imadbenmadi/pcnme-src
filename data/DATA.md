@@ -28,7 +28,6 @@ tar -xf data\maps\lust\LuSTScenario.zip -C data\maps\lust
 | `calibration_gtx1070.json` | T1, T3, T2 run times (mean, p5, p95, longest step), GPU energy per run, JPEG sizes | `tools/calibrate_yolo.py`, 3 Nov, GTX 1070 at PCIe x4 |
 | `calibration_t4.json` | T4 (yolov8n + EasyOCR recogniser) | same tool, T4 only |
 | `cpu-power.md` | the CPU slot's power estimate (no RAPL on Windows) | by hand |
-| `calc_defaults-placeholders.txt`, `calc_defaults-first-measurement.txt` | `tools/calc_defaults.py` before / after the first measurement | `tools/calc_defaults.py` |
 
 The values are in `config/default.yaml` (`time_table_placeholder`, `hardware`). To measure again, use a separate venv with
 the CUDA build of torch, so the project's lock is untouched. These are the commands that produced the JSON files:
@@ -65,10 +64,15 @@ uv run python tools/calibrate_map.py
 | `train/<S>-<method>/train.log`, `training.json` | the job's log; budget, episodes, pretraining agreement | log no, json yes | train.py |
 | `train/<S>-<method>/trained.pt`, `model.pt`, `checkpoint.pt` | the trained method (evaluate.py loads it), its weights, the resume checkpoint | no | train.py |
 | `results/summary.csv` | one row per evaluation run, every 16.3 metric (docs/METRICS.md) | yes | evaluate.py |
-| `results/report.md`, `report.csv`, `*.png` | tables (mean +- 95 % interval) and figures | yes | evaluate.py |
+| `results/report.md`, `report.csv`, `<S>.png`, `<S>-load.png` | tables (mean +- 95 % interval) and figures per scenario | yes | evaluate.py |
+| `results/paired.md`, `paired.csv`, `across-<metric>.png` | PCNME vs each baseline (paired t test); each metric over S1-S6 | yes | evaluate.py |
+| `results/training-<S>.png` | the training curves per scenario | yes | evaluate.py |
 | `results/runs/<run_id>/` | each run's Parquet logs and run.json | no | evaluate.py |
 | `traces/<time>.npz`, `traces/<time>.json` (lust) | the replayable SUMO traces and their numbers | npz no, json yes | train.py (stage traces) |
 | `calibrated.yaml` (lust) | coverage measured on the traces, merged into the map's config | yes | train.py |
+| `results-transfer/` (lust) | the VFC models evaluated on LuST (transfer test, T3b) | like results/ | evaluate.py --models-from vfc |
+| `testbed/results/<run_id>/` (vfc) | testbed runs and their fast-mode twins | no | pcnme.testbed.runner, tools/testbed_gap.py |
+| `testbed/gap-<S>-<method>-<seed>-<cars>cars.md` (vfc) | fast mode vs testbed, one table | yes | tools/testbed_gap.py |
 
 Rebuild everything of one map: `uv run python train.py --maps <map> --fresh ...` (the old outputs go to
 `data/_archive/`), then `uv run python evaluate.py --maps <map>`. Exact commands: `RUN_TRAINING.md`.
@@ -81,3 +85,7 @@ Only NSGA-II and w*: `uv run python train.py --maps vfc --until nsga`.
 | --- | --- | --- |
 | `smoke/` | outputs of `--smoke` runs (2–3 min checks) | no |
 | `_archive/` | outputs moved aside by `--fresh` | no |
+
+Outside the repository: `F:\projects\pcnme-results-backup\` (a copy of the big ignored files: trained models,
+Parquet runs, testbed runs; one folder per date) and `F:\projects\pcnme-history-viewer\` (the viewer export,
+`uv run python -m pcnme.viewer.export`).
