@@ -180,3 +180,20 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 - Two folders next to the repo that are not data in use: F:\projects\pcnme-data\calib-venv (the CUDA venv used
   for calibration on 3 Nov; only needed to calibrate again) and F:\projects\pcnme-data-old-2026-11-03 (the
   discarded first attempt; RUN_LOG 3 Nov). Both can be deleted by Imed.
+
+## 6 Nov: LuST traces (PLAN L5), no training
+
+- Command: `uv run python train.py --maps lust --until traces --yes` (14:21 -> 14:57, 36 min). Not recorded in
+  the manifest (traces-only runs no longer are: later LuST training on any commit reuses them).
+- 1.2 km crop, 216 road edges, 45 min simulated per time of day (15 min warm-up + 30 min recorded):
+
+  | time of day | vehicles through the crop | at once (mean / max) | SUMO wall time |
+  | --- | --- | --- | --- |
+  | off-peak 11:00 | 1 288 | 99 / 157 | 11 min |
+  | midday 15:00 | 1 163 | 89 / 128 | 11 min |
+  | peak 08:00 | 3 840 | 310 / 398 | 34 min |
+
+- Coverage on the traces (data/lust/calibrated.yaml): off-peak 0.42, midday 0.46, peak 0.87; per mobility class:
+  low 0.53, high 0.87 (Q29).
+- The viewer's LuST tab now shows each time of day as a traffic preview (the crop's streets from lust.net.xml,
+  the zones, SUMO's vehicles; no tasks until LuST is trained). Log: data/lust/logs/traces-2026-11-06.log.

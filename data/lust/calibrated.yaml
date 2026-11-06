@@ -1,0 +1,7 @@
+# Measured by train.py on this map's traces (positions only; QUESTIONS Q29). Merged into the map's
+# config by pcnme.maps. Per time of day: {"mid": 0.4576, "off_peak": 0.4199, "peak": 0.8709}
+cars:
+  calibrated:
+    coverage:
+      high: 0.8709
+      low: 0.5327
