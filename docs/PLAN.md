@@ -187,6 +187,16 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   delivery success after a zone change, decisions until the on-time rate is stable, front hypervolume); they need
   small additions to the fast-mode logs, then a re-evaluation. The knee reference (16.1, Q45) is optional.
 - [ ] **T5** S6 (QUESTIONS Q60, waits for Imed): if agreed, S6 with loose deadlines: rerun S6's NSGA-II windows, check w*, retrain S6 only, evaluate S6 only. Results summary for the supervisor: docs/RESULTS_VFC.md.
+  The pipeline cannot do this safely yet (checked 6 Nov), so build it first:
+  1. `train.py --maps vfc --scenarios S6` refuses: the config hash and the plan changed (manifest identity), and
+     `--fresh` would archive ALL of data/vfc (every trained model and result). Never use --fresh for this.
+  2. stage_nsga computes w* from the windows of the scenarios it is given: with S6 only, w_star.json would be
+     overwritten with the median of S6's 6 knees instead of all 36.
+  3. evaluate.py's summary.csv refuses rows of another commit or config hash, so the new S6 rows cannot join it.
+  Proposal: a variant run (`--variant s6-loose`) with its own folder data/vfc/variants/s6-loose/ (manifest, nsga,
+  demos, train, results); w* recomputed from the 30 unchanged windows of data/vfc/nsga plus the 6 new S6 ones
+  (if it differs from 0.414, stop and ask: every method's reward would move); evaluate.py --variant writes its own
+  summary; the report and RESULTS_VFC take S1-S5 from data/vfc and S6 from the variant, and say so.
 - [x] **D1** (done 6 Nov; deletions listed in RUN_LOG 6 Nov) Docs cleanup (after the evaluations, before the write-up): update every .md file to match the code
   and the results (README, READ, RUN_TRAINING, CLAUDE, data/DATA, docs/PLAN, METRICS, RUN_LOG, QUESTIONS, CHANGES,
   data/calibration/cpu-power, visual/city/README, .claude/skills/*); delete the ones nothing needs any more and list
@@ -219,3 +229,10 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
 - [ ] **V2 LuST map** (when LuST is added): the road map drawn from the SUMO net file.
 - [ ] **V3 Live mode** (M9): the same viewer fed live from the MQTT broker over WebSocket.
 - [ ] **V4 Live training**: a `live-training` source and view (episodes, loss, on-time, decisions changing); extension points in src/pcnme/viewer/README.md.
+- [ ] **V5 Responsive, polished UI** (Imed, 6 Nov: not responsive enough yet): one layout system for every width
+  from a laptop to a projector: the top bar collapses into a menu below about 1100 px (no horizontal scroll),
+  the statistics strip wraps cleanly, the side panel becomes an overlay sheet on narrow screens, the map keeps
+  readable zone cards at every size (no compact fallback needed above 900 px), touch targets of at least 32 px,
+  compare mode stacks the two maps vertically when the window is taller than wide. A light/dark switch in the bar
+  (today the page follows the OS theme only). Check at 1366x768, 1920x1080, 2560x1440 and a phone width; then
+  re-export pcnme-history-viewer.
