@@ -43,6 +43,7 @@ checkpoints/
 /data/*/demos/*.parquet
 /data/*/train/**/*.pt
 /data/*/results/runs/
+/data/*/results/archive/*/runs/
 /data/**/*.parquet
 /data/**/*.prof
 *.zip.part

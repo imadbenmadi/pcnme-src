@@ -216,3 +216,54 @@ def write_transfer(
     files.append(out / "transfer.md")
     files[-1].write_text("\n".join(lines), encoding="utf-8")
     return files
+
+
+# --- the results page's tables (docs/RESULTS_<MAP>.md, between the markers) ---------------------------------
+
+BEGIN, END = "<!-- tables:begin (written by evaluate.py) -->", "<!-- tables:end -->"
+ORDER = ("pcnme", "greedy", "d3qn-greedy", "d3qn-scratch", "vfc-ppo", "tang-wong", "qeco", "random")
+NAMES = {"pcnme": "PCNME", "greedy": "Greedy", "d3qn-greedy": "D3QN + greedy demos",
+         "d3qn-scratch": "D3QN (scratch)", "vfc-ppo": "VFC PPO", "tang-wong": "Tang & Wong", "qeco": "QECO",
+         "random": "Random"}  # fmt: skip
+TABLES = (  # metric, title, scale, digits, better
+    ("on_time", "On time (%)", 100.0, 1, max),
+    ("latency_p99_s", "p99 latency (ms)", 1000.0, 0, min),
+    ("energy_per_task_j", "Energy per task (J)", 1.0, 2, min),
+)
+
+
+def results_tables(rows: Sequence[Row]) -> str:
+    """One Markdown table per key metric: methods x scenarios, the mean over the seeds, the best in bold."""
+    out = []
+    for metric, title, scale, digits, better in TABLES:
+        means = across_scenarios(rows, metric)
+        scenarios = sorted({s for v in means.values() for s in v})
+        methods = [m for m in ORDER if m in means] + sorted(m for m in means if m not in ORDER)
+        cell = {(m, s): f"{means[m][s] * scale:.{digits}f}" for m in methods for s in means[m]}
+        best = {
+            s: f"{better(means[m][s] for m in methods if s in means[m]) * scale:.{digits}f}"
+            for s in scenarios
+        }
+        out += [
+            f"**{title}**",
+            "",
+            "| method | " + " | ".join(scenarios) + " |",
+            "| --- " * (len(scenarios) + 1) + "|",
+        ]
+        for m in methods:
+            cells = [cell.get((m, s), "–") for s in scenarios]
+            cells = [f"**{c}**" if c == best[s] else c for c, s in zip(cells, scenarios, strict=True)]
+            out.append(f"| {NAMES.get(m, m)} | " + " | ".join(cells) + " |")
+        out.append("")
+    return "\n".join(out).rstrip("\n")
+
+
+def update_doc(doc: Path, rows: Sequence[Row]) -> bool:
+    """Replace the tables between the markers of a results page; False when it has no markers."""
+    text = doc.read_bytes().decode("utf-8").replace("\r\n", "\n")
+    if BEGIN not in text or END not in text:
+        return False
+    head, rest = text.split(BEGIN, 1)
+    _, tail = rest.split(END, 1)
+    doc.write_bytes(f"{head}{BEGIN}\n{results_tables(rows)}\n{END}{tail}".encode())  # LF on every platform
+    return True

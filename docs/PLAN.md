@@ -186,17 +186,16 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   Later (after Friday; fast mode, not the testbed): the 16.3 metrics still missing (next-zone acc@1, T_exit error,
   delivery success after a zone change, decisions until the on-time rate is stable, front hypervolume); they need
   small additions to the fast-mode logs, then a re-evaluation. The knee reference (16.1, Q45) is optional.
-- [ ] **T5** S6 (QUESTIONS Q60, waits for Imed): if agreed, S6 with loose deadlines: rerun S6's NSGA-II windows, check w*, retrain S6 only, evaluate S6 only. Results summary for the supervisor: docs/RESULTS_VFC.md.
+- [~] **T5** (6 Nov: Q60 applied: config and final-design 16.2/18; S6-only revision built and smoke-tested,
+  pipeline/revision.py; the S6 training and evaluation are the user's to run, RUN_TRAINING.md) S6 (QUESTIONS Q60): if agreed, S6 with loose deadlines: rerun S6's NSGA-II windows, check w*, retrain S6 only, evaluate S6 only. Results summary for the supervisor: docs/RESULTS_VFC.md.
   The pipeline cannot do this safely yet (checked 6 Nov), so build it first:
   1. `train.py --maps vfc --scenarios S6` refuses: the config hash and the plan changed (manifest identity), and
      `--fresh` would archive ALL of data/vfc (every trained model and result). Never use --fresh for this.
   2. stage_nsga computes w* from the windows of the scenarios it is given: with S6 only, w_star.json would be
      overwritten with the median of S6's 6 knees instead of all 36.
   3. evaluate.py's summary.csv refuses rows of another commit or config hash, so the new S6 rows cannot join it.
-  Proposal: a variant run (`--variant s6-loose`) with its own folder data/vfc/variants/s6-loose/ (manifest, nsga,
-  demos, train, results); w* recomputed from the 30 unchanged windows of data/vfc/nsga plus the 6 new S6 ones
-  (if it differs from 0.414, stop and ask: every method's reward would move); evaluate.py --variant writes its own
-  summary; the report and RESULTS_VFC take S1-S5 from data/vfc and S6 from the variant, and say so.
+  Decided (Imed, 6 Nov): no variant folder; w* fixed at 0.414; S6 rerun in place as a revision of the finished
+  run (all three points solved: revision record in the manifest, w* kept, per-scenario row checks and archive).
 - [x] **D1** (done 6 Nov; deletions listed in RUN_LOG 6 Nov) Docs cleanup (after the evaluations, before the write-up): update every .md file to match the code
   and the results (README, READ, RUN_TRAINING, CLAUDE, data/DATA, docs/PLAN, METRICS, RUN_LOG, QUESTIONS, CHANGES,
   data/calibration/cpu-power, visual/city/README, .claude/skills/*); delete the ones nothing needs any more and list

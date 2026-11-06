@@ -15,6 +15,7 @@ import csv
 import math
 from collections import defaultdict
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 
 from pcnme.metrics.stats import (
@@ -167,10 +168,20 @@ def plot_loads(path: Path, scenario: str, loads: dict[str, list[dict[str, float]
     plt.close(fig)
 
 
-def report(paths: Sequence[Path], out: Path, early_decisions: int, plots: bool = True) -> list[Path]:
-    """Every output file of the report; the numbers come from the Parquet logs only."""
+def report(
+    paths: Sequence[Path],
+    out: Path,
+    early_decisions: int,
+    plots: bool = True,
+    archived: Sequence[tuple[Path, str]] = (),
+) -> list[Path]:
+    """Every output file of the report; the numbers come from the Parquet logs only. `archived`: run folders
+    of a replaced scenario and the name it is shown under (e.g. "S6 tight (archived)", QUESTIONS Q60)."""
     dirs = run_dirs(paths)
     runs = [run_metrics(d, early_decisions) for d in dirs]
+    for folder, name in archived:
+        if folder.exists() and any(folder.iterdir()):
+            runs += [replace(run_metrics(d, early_decisions), scenario=name) for d in run_dirs([folder])]
     summary = summarise(runs)
     windows = window_points(dirs)
     out.mkdir(parents=True, exist_ok=True)

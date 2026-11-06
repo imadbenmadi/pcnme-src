@@ -265,7 +265,7 @@ scenarios:                       # rho_fog = per-zone arrival rate x mean F-GPU 
   S3: {rho_fog: 1.5, deadlines: loose, mobility: low, fog: [F-GPU]}
   S4: {rho_fog: 0.9, deadlines: tight, mobility: low, fog: [F-GPU]}
   S5: {rho_fog: 0.9, deadlines: tight, mobility: high, fog: [F-GPU]}
-  S6: {rho_fog: 0.9, deadlines: tight, mobility: low, fog: {z1: F-GPU, z2: F-CPU, z3: F-GPU, z4: F-CPU, z5: F-GPU}}
+  S6: {rho_fog: 0.9, deadlines: loose, mobility: low, fog: {z1: F-GPU, z2: F-CPU, z3: F-GPU, z4: F-CPU, z5: F-GPU}}   # loose: QUESTIONS Q60 (6 Nov)
   arrival_rate: calibrated       # C: lambda_car = rho_fog x c_gpu / (mean GPU run x cars per zone)
 
 fedavg:

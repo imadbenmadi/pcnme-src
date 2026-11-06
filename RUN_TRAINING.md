@@ -35,6 +35,25 @@ uv run python evaluate.py --maps vfc
 Some scenarios only: add `--scenarios S1 S2 S3`. The rest must follow on the same commit: summary.csv refuses
 rows of another commit (`--fresh` starts a new one). Results: `docs/RESULTS_VFC.md`, history: `docs/RUN_LOG.md`.
 
+## S6 with loose deadlines (QUESTIONS Q60): rerun S6 alone
+
+```bat
+uv run python train.py --maps vfc --scenarios S6 --windows 6 --population 40 --generations 20 --budget 1000000 --archive-label tight
+uv run python evaluate.py --maps vfc --scenarios S6
+```
+
+Training: about 8–13 h. NSGA-II's 6 S6 windows take about 40 min; the 6 methods train in parallel, the D3QN
+family in 3–4.5 h and Tang & Wong and QECO in 8–13 h (they took 11 and 13 h next to 10 other jobs). Evaluation:
+about 2 h (160 runs; QECO's 20 seeds alone take about 1.7 h).
+
+`--scenarios S6` on the finished map is a revision (src/pcnme/pipeline/revision.py): the settings must match the
+finished run's (hence the same --windows, --population, --generations, --budget); S6's old windows,
+demonstrations and models move to `data/vfc/_archive/S6-tight-<time>/`; w* stays 0.414; S1–S5 are not touched;
+the manifest records the revision. It resumes like a full run (same command, same commit). Never add `--fresh`
+here (it is refused: it would archive every scenario). The evaluation moves the old S6 rows and runs to
+`results/archive/S6-tight/`, and report.md, paired.md and docs/RESULTS_VFC.md show the new S6 and
+"S6 tight (archived)".
+
 ## Transfer test: the VFC models on LuST, no LuST training (PLAN T3b, not run yet)
 
 ```bat
