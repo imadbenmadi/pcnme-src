@@ -125,7 +125,7 @@ class CarFleet:
                 vx, vy = app.mover.velocity(now)
                 fixes.setdefault(app.serving, []).append(Gps(app.car.car_id, pos[0], pos[1], vx, vy, now))
         for zone, batch in fixes.items():  # one request per zone and period (GpsBatch: transport only)
-            self._send(zone, "POST", "/gps", GpsBatch(tuple(batch)), _ignore)
+            self._send(zone, "POST", "/gps", GpsBatch(tuple(batch)), self._on_gps(zone))
         self.clock.schedule(now + self._period, self._tick)
 
     def _switch(self, app: CarApp, new: str | None) -> None:
@@ -140,6 +140,20 @@ class CarFleet:
             self._attach(app, new)
             for tid in list(app.held):
                 self._upload(app, app.held.pop(tid))
+
+    def _on_gps(self, zone: str) -> OnReply:
+        """QUESTIONS Q61: the zone names the cars it does not serve (it dropped them: T_leave fired on a late
+        GPS, 9.6); those still served by that zone attach again at the next GPS period."""
+
+        def unknown(status: int, reply: Any) -> None:
+            if status != 200 or not isinstance(reply, list):
+                return
+            for car_id in reply:
+                app = self._by_id.get(str(car_id))
+                if app is not None and app.serving == zone and self._attached.get(app.car.car_id) == zone:
+                    del self._attached[app.car.car_id]
+
+        return unknown
 
     def _attach(self, app: CarApp, zone: str) -> None:
         """9.6: the serving zone must know the car to push its results; the car repeats the attach every GPS
@@ -206,10 +220,6 @@ class CarFleet:
         """POST /results: a result copy reaches the car (9.5.1-2)."""
         app = self._by_id.get(str(result.task_id[0]))
         return None if app is None else app.car.receive(result, self.clock.now)
-
-
-def _ignore(_status: int, _reply: Any) -> None:
-    pass
 
 
 def http_send(clock: Any, urls: dict[str, str], timeout: float = 5.0) -> Send:

@@ -11,6 +11,7 @@ from __future__ import annotations
 import heapq
 import threading
 import time
+from collections import Counter
 from collections.abc import Callable
 
 from pcnme.sim.clock import EventHandle, _finite
@@ -20,6 +21,9 @@ class RealClock:
     def __init__(self) -> None:
         self._t0 = time.monotonic()
         self._queue: list[tuple[float, int, EventHandle]] = []
+        # how late events ran and which callbacks held the loop longest (diagnosis, PLAN Q1)
+        self.lag: Counter[str] = Counter()
+        self.slow: Counter[str] = Counter()
         self._next_seq = 0
         self._pending = 0
         self._cv = threading.Condition()
@@ -84,9 +88,19 @@ class RealClock:
                         continue
                     wait = min(end, self._queue[0][0] if self._queue else end) - self.now
                     if self._queue and wait <= 0:
-                        _, _, handle = heapq.heappop(self._queue)
+                        due, _, handle = heapq.heappop(self._queue)
+                        late = self.now - due
                         handle.state = "done"
                         self._pending -= 1
                         break
                     self._cv.wait(timeout=max(wait, 0.0))
+            for limit in (0.01, 0.05, 0.2, 1.0):
+                if late > limit:
+                    self.lag[f"events late > {int(limit * 1000)} ms"] += 1
+            t0 = time.monotonic()
             handle.callback()  # outside the lock: a callback may schedule more work
+            took = time.monotonic() - t0
+            if took > 0.02:
+                name = getattr(handle.callback, "__qualname__", "?")
+                self.slow[f"{name} > 20 ms"] += 1
+                self.slow[f"{name} total ms"] += round(took * 1000)
