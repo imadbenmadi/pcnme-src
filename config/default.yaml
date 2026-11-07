@@ -59,7 +59,8 @@ task_types:                      # sizes M: BDD100K 720p re-encoded at quality 8
        deadline: {loose: 6.0, tight: 1.1x_E_strong}}   # loose R (Q52 a): a pebble (3.87 s < 0.8 x 6.0); tight C: 1.1 x the mean run on the strongest fog class -> a boulder
   T5: {enabled: false}           # optional stress test (PointPillars)
   L_max: equal_to_D              # final doc
-
+# Slots (Imed's question, 6 Nov): c_gpu = 2 because the GTX 1070 runs 2 CUDA streams at once (calibrated
+# that way, Q52 b); c_cpu = 2 slots of 4 threads each, a share of the i7-6850K's 12 threads (final doc 18).
 hardware:                        # run times and powers are M; placeholders below
   F-GPU:                         # reference and strongest fog class: the GTX 1070 in FP32, no TensorRT (Q52 b), 8 cores
     c_gpu: 2

@@ -180,7 +180,7 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   Later (after Friday; fast mode, not the testbed): the 16.3 metrics still missing (next-zone acc@1, T_exit error,
   delivery success after a zone change, decisions until the on-time rate is stable, front hypervolume); they need
   small additions to the fast-mode logs, then a re-evaluation. The knee reference (16.1, Q45) is optional.
-- [~] **T5** (6 Nov: Q60 applied: config and final-design 16.2/18; S6-only revision built and smoke-tested,
+- [x] **T5** (done 7 Nov: trained 12.2 h, evaluated; RESULTS_VFC, RUN_LOG 7 Nov. 6 Nov: Q60 applied: config and final-design 16.2/18; S6-only revision built and smoke-tested,
   pipeline/revision.py; the S6 training and evaluation are the user's to run, RUN_TRAINING.md) S6 (QUESTIONS Q60): if agreed, S6 with loose deadlines: rerun S6's NSGA-II windows, check w*, retrain S6 only, evaluate S6 only. Results summary for the supervisor: docs/RESULTS_VFC.md.
   The pipeline cannot do this safely yet (checked 6 Nov), so build it first:
   1. `train.py --maps vfc --scenarios S6` refuses: the config hash and the plan changed (manifest identity), and
@@ -195,6 +195,11 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   data/calibration/cpu-power, visual/city/README, .claude/skills/*); delete the ones nothing needs any more and list
   each deletion with its reason; check every path and command in them still works. final-design.md: content only,
   no notation renames (Imed does those later).
+- [ ] **T6** S6 analysis (7 Nov finding: in S6 with loose deadlines Greedy is best, 96.9 % on time, against PCNME
+  92.1 %, level with both D3QN variants). Read-only first: compare PCNME's decisions with Greedy's per anchor zone
+  (F-GPU vs F-CPU), task type and option (decisions.parquet, attempts.parquet); check the training curves for
+  convergence. Then, if Imed agrees: S6 with a larger budget, and the 16.4 ablation "60 inputs: both slot types per
+  option" (it changes the agent's inputs: Imed decides).
 - [ ] **T4** Results write-up from data/<map>/results/summary.csv: the 16.3 table per map, training curves,
   the number of seeds, what is missing (knee reference, ablations 16.4, sweeps).
 
@@ -250,7 +255,7 @@ testbed correct"). Claude owns these; an item is done only when its check passes
 
 - [x] **B0** vfc-2026-11-05: data/vfc after the full training and evaluation (trained models, Parquet runs,
   testbed runs). It holds the tight-deadline S6 too (models, NSGA-II windows, runs).
-- [ ] **B1** After tonight's S6 run: a new dated copy, vfc-2026-11-07 (the folder pattern stays <map>-<date>),
+- [x] **B1** (done 7 Nov, 7.9 GB: the new S6, the archived tight S6, a README) After tonight's S6 run: a new dated copy, vfc-2026-11-07 (the folder pattern stays <map>-<date>),
   with the new S6 and the archived tight S6 (data/vfc/_archive/S6-tight-<time>/,
   results/archive/S6-tight/). Inside the copy the archived folders keep their names (S6-tight...).
 
