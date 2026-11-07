@@ -29,5 +29,34 @@
  "seeds": "training 2000-, NSGA-II 1000-",
  "finished": "2026-11-05T11:52:52+01:00",
  "w_star": 0.41389148056905384,
- "hours": 35.99
+ "hours": 35.99,
+ "revisions": {
+  "S6": {
+   "identity": {
+    "config_hash": "13a2970378845209",
+    "commit": "62304916e198",
+    "plan": {
+     "map": "vfc",
+     "scenarios": [
+      "S6"
+     ],
+     "windows": 6,
+     "population": 40,
+     "generations": 20,
+     "budget": 1000000,
+     "train_seconds": null,
+     "n_cars": null,
+     "pretrain_updates": null,
+     "workers": null,
+     "checkpoint_every_s": null,
+     "smoke": false
+    }
+   },
+   "label": "tight",
+   "archived_to": "F:\\projects\\pcnme-src\\data\\vfc\\_archive\\S6-tight-2026-11-06T150527",
+   "started": "2026-11-06T15:05:27+01:00",
+   "finished": "2026-11-07T03:16:02+01:00",
+   "hours": 12.18
+  }
+ }
 }

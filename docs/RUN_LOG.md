@@ -197,3 +197,20 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   low 0.53, high 0.87 (Q29).
 - The viewer's LuST tab now shows each time of day as a traffic preview (the crop's streets from lust.net.xml,
   the zones, SUMO's vehicles; no tasks until LuST is trained). Log: data/lust/logs/traces-2026-11-06.log.
+
+## 6-7 Nov: S6 with loose deadlines (Q60), trained and evaluated
+
+- Training: `train.py --maps vfc --scenarios S6 --windows 6 --population 40 --generations 20 --budget 1000000
+  --archive-label tight`, 6 Nov 15:05 -> 7 Nov 03:16 (12.2 h). Revision recorded in the manifest; w* kept
+  0.41389; old S6 outputs in data/vfc/_archive/S6-tight-2026-11-06T150527/. All 6 S6 windows gave demonstrations
+  (7-9 plans each); PCNME's pretraining agreement 0.62.
+- Evaluation: `evaluate.py --maps vfc --scenarios S6`: 160 new rows; 160 old rows and runs archived to
+  results/archive/S6-tight/; report.md, paired.md and RESULTS_VFC.md regenerated with "S6 tight (archived)".
+  The S6 rows record commit 62304916e198-dirty: config/default.yaml had an uncommitted comment line at the time
+  (Imed's note "why 2 cpus 2 gpus", added 6 Nov 16:19); comments do not change the config or its hash, so the
+  results are those of commit 6230491's config.
+- Result (on time %): Greedy 96.9, D3QN + greedy demos 92.4, PCNME 92.1, D3QN scratch 91.9, VFC PPO 89.3,
+  Random 81.0, QECO 80.9, Tang & Wong 79.2. Greedy beats PCNME on on-time, p99 and energy (p < 0.001); PCNME is
+  level with the D3QN variants and ahead of the rest. The learners were still improving at the end of the budget.
+  Analysis: PLAN T6.
+- Backup B1: F:\projects\pcnme-results-backup\vfc-2026-11-07\ (7.9 GB; the new S6 and the archived tight S6).
