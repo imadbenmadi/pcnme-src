@@ -15,6 +15,7 @@ This is the one complete design of PCNME. It merges the PCNME Architecture doc, 
 | Date | Section | Change | Note |
 | --- | --- | --- | --- |
 | 28 Oct | 16.2 | ρ_fog uses every task of the whole mix, boulders included (not pebbles only), so S4–S6 keep S2's arrival rate | CHANGES C2 (QUESTIONS Q1) |
+| 7 Nov | 9.6 | A car always knows whether its serving zone serves it: the attach is repeated until confirmed, and a zone names the cars it does not serve in its reply to their GPS, which then attach again (testbed transport detail) | QUESTIONS Q61 |
 | 6 Nov | 16.2, 18 | S6 (mixed fog) has loose deadlines, not tight: with tight ones every method was near a capacity ceiling (the hard tasks need 80 % of the 4 GPU slots with 14–20 ms of slack), so S6 measured which tasks a method sacrifices rather than placement on unequal nodes. The TOF-Broker is now exercised in S4 and S5 | QUESTIONS Q60 |
 | 28 Oct | 13.2 | Random draws keyed by task, not by event order: a run time is a uniform keyed by (seed, task id, attempt) through the inverse CDF of the row it runs on; a delay is keyed by (seed, task id, attempt, hop); arrivals and mobility stay sequential per car | CHANGES C3 (QUESTIONS Q6) |
 | 28 Oct | 8.5, 5.2 | The wait estimate is water-filling over each slot's remaining time r_i (published per slot instead of their sum R): Σ max(0, Ŵ − r_i) = B; still 0 while a slot is free; for c_q = 1 the same as before | CHANGES C4 |
@@ -494,6 +495,7 @@ Duplicates come from two finished attempts, a republish after an attach, and QoS
 - **The car registry follows the serving role**; the anchor drops a car's predictor state when its count reaches 0.
 - **Retained GPS expires** (MQTT 5 message expiry), so the broker does not keep every departed car forever.
 - **Zones connect with a clean start**, so a restarted zone has no stale subscriptions. **No wildcards** (car/+/result would send every result in the city to every zone).
+- **A car always knows whether its serving zone serves it** (testbed transport detail, QUESTIONS Q61). The car repeats its attach until the zone confirms it, and the zone's reply to the car's GPS names the cars it does not serve (T_leave fired, for example on a GPS that arrived late), which then attach again. Without this, a zone that dropped a car still in range never served it again and every later result of that car was lost. Fast mode, where GPS is never late, needs neither.
 
 ### 9.7 An upload cut by a handover or a gap
 

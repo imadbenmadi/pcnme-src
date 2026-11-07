@@ -11,15 +11,13 @@ seed, writes it next to the testbed run under data/vfc/testbed/results/, and pri
 from __future__ import annotations
 
 import argparse
-from typing import Any
 
 from pcnme.config import load_config
-from pcnme.experiments.city import City
-from pcnme.experiments.runner import deployed, method_config
+from pcnme.experiments.runner import method_config
 from pcnme.metrics.stats import run_metrics
 from pcnme.paths import MapPaths
-from pcnme.pipeline import checkpoint
 from pcnme.pipeline.evaluate import METHODS
+from pcnme.pipeline.testbed import fast_twin
 
 ROWS = (
     ("on_time", "on-time share", "{:.3f}"),
@@ -47,12 +45,7 @@ def main() -> None:
     testbed = results / f"{a.scenario}-{a.method}-{a.seed}-testbed"
     if not (testbed / "tasks.parquet").exists():
         raise SystemExit(f"no testbed run at {testbed}: run python -m pcnme.testbed.runner first")
-    factory: Any = a.method
-    if a.method not in ("greedy", "random"):  # deployed exactly as in the zone container (Q42, Q54)
-        trained = checkpoint.load(MapPaths("vfc").train(a.scenario, a.method) / "trained.pt")
-        factory = deployed(cfg, trained, a.seed)
-    city = City(cfg, a.scenario, factory, a.seed, n_cars=a.cars, usage="evaluation", method_name=a.method)
-    fast = city.run(a.seconds).write(results, {"method": a.method})
+    fast = fast_twin(a.scenario, a.method, a.seed, a.seconds, a.cars, results)
     m_fast = run_metrics(fast, cfg.fast_mode.early_decisions).metrics
     m_bed = run_metrics(testbed, cfg.fast_mode.early_decisions).metrics
     lines = [f"{a.scenario}, {a.method}, seed {a.seed}, {a.seconds:g} s, {a.cars} cars", ""]
