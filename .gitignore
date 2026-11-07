@@ -55,3 +55,4 @@ checkpoints/
 # Docker secrets
 docker/.env
 /data/*/testbed/results/
+/data/*/testbed/_test*/
