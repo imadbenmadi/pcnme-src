@@ -62,5 +62,9 @@ class RemoteCar:
             elif counts is not None:
                 counts["POST /results: 200 without a confirm"] += 1
 
+        from pcnme.zone import zone as zone_module
+
+        if zone_module.HOP is not None:
+            zone_module.HOP(result.task_id, result.attempt, "push to the car", None)
         self._net.request("POST", self._url, "/results", encode(result), done)
         return None

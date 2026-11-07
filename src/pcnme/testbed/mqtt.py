@@ -128,7 +128,18 @@ class MqttBus:
             )
             self._clock.call_soon(lambda: self._deliver(client_id, on_message, d))
 
+        def connected(c: Any, *_: Any) -> None:
+            """Every (re)connection: no Nagle delay on small messages (PLAN Q1; 15.4, warm connections that
+            do not distort transfer times)."""
+            import socket
+
+            sock = c.socket()
+            if sock is not None:
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
         paho.on_message = received
+        paho.on_connect = connected
+        paho.max_inflight_messages_set(0)  # no 20-message QoS 1 window: results never wait for others' acks
         self._first_connect(paho)
         paho.loop_start()
         client = MqttClient(self, client_id, paho)

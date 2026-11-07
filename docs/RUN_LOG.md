@@ -233,3 +233,21 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   testbed against 99.8 % in fast mode; p99 270 ms against 200 ms. The rest is mostly drop_late (7.1 %; Greedy
   1.2 %): results after the deadline, both at home and through neighbours (backhaul hops with netem jitter, Q56).
   A real fast-mode vs testbed gap, not a lost message.
+
+## 7 Nov: S4 check and where the testbed's extra latency goes (before the 240-run batch)
+
+- S4 (T1 deadline 50 ms), seed 3000, 40 cars, 60 s, testbed vs fast mode (on time): Greedy 38.7 vs 94.6 %,
+  PCNME 23.3 vs 95.4 %. Tight deadlines collapse on the testbed for both methods.
+- Per-hop breakdown (testbed/trace.py, tools/testbed_hops.py; every 5th task; the shared host clock, final-design
+  5.4: analysis only), S4 Greedy, medians (p90): upload 7.8 (12.0) ms, decision 0.4, forward and queue 0.2 (9.6),
+  run 23.2 (32.9), executor publish 0.2, MQTT publish -> result at the serving zone 15.8 (37.3), push 0.1,
+  HTTP to the car 4.7 (6.4); total 59.6 (108.9) ms.
+- Avoidable: the MQTT hop. paho kept the default 20-message window for QoS 1 and no TCP_NODELAY (Nagle's
+  algorithm meeting delayed acks: the ~40 ms p90). Fixed in testbed/mqtt.py (no window limit, TCP_NODELAY on
+  every connection; a transport setting, the agent untouched): MQTT hop 9.2 (12.1) ms, total 49.0 (100.8) ms.
+  S4 after the fix: Greedy 66.1 %, PCNME 47.6 % (fast 94.6 / 95.4 %).
+- What is left is the testbed's real cost: netem's delays on each crossing (radio 3 +- 2 ms, backhaul 3 +- 2 ms,
+  as configured) plus the software of HTTP and MQTT, about 10 ms more than fast mode's modelled hops. With a
+  50 ms deadline and a 23 ms run, the median task sits at the deadline: the tight scenarios (S4, S5) and S6 show
+  the largest gaps. Reducing it further means changing the transport (persistent sockets instead of HTTP
+  requests, fewer broker hops): not cheap, not done.

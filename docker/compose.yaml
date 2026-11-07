@@ -39,6 +39,7 @@ x-zone-env: &zone-env
   RADIO_JITTER_MS: ${RADIO_DOWN_JITTER_MS:-2}
   PCNME_RESULTS: /results
   PCNME_PROFILE: ${PCNME_PROFILE:-}
+  PCNME_TRACE: ${PCNME_TRACE:-}     # every n-th task's hop times (analysis only, final-design 5.4)
   PCNME_DRAIN: ${PCNME_DRAIN:-30}
   PCNME_SECONDS: ${PCNME_SECONDS:-3600}
 
@@ -52,6 +53,8 @@ x-car-env: &car-env
   PCNME_DRAIN: ${PCNME_DRAIN:-30}
   PCNME_SECONDS: ${PCNME_SECONDS:-3600}
   RADIO_DELAY_MS: ${RADIO_UP_DELAY_MS:-3}       # the car's radio egress carries the uplink
+  PCNME_TRACE: ${PCNME_TRACE:-}
+  PCNME_RESULTS: /results
   RADIO_JITTER_MS: ${RADIO_UP_JITTER_MS:-2}
 
 x-zone: &zone
@@ -77,6 +80,8 @@ x-car: &car
   <<: *pcnme
   profiles: ["testbed"]
   command: ["python", "-m", "pcnme.testbed.car"]
+  volumes:
+    - ${PCNME_RESULTS_HOST:-../results}:/results   # hop traces (PCNME_TRACE, analysis only)
   depends_on:   # the cars start once every zone is up (a zone still loading refused the cars' first attach)
     zone-1: {condition: service_healthy}
     zone-2: {condition: service_healthy}

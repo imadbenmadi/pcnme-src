@@ -193,6 +193,12 @@ def main() -> None:  # pragma: no cover - runs in the container (the compose tes
 
     cfg = load_config(Path(os.environ.get("PCNME_CONFIG", "config/default.yaml")))
     clock = RealClock()
+    from pcnme.testbed.trace import Tracer
+    from pcnme.zone import zone as zone_module
+
+    tracer = Tracer.from_env(os.environ.get("PCNME_ZONE_ID", "zone"), lambda: clock.now)
+    if tracer is not None:  # analysis only (final-design 5.4)
+        zone_module.HOP = tracer.mark
     bus = MqttBus(clock, os.environ.get("MQTT_HOST", "broker"))
     zone, closed = build_zone(
         cfg,
@@ -223,6 +229,8 @@ def main() -> None:  # pragma: no cover - runs in the container (the compose tes
         counts = Path(os.environ["PCNME_RESULTS"]) / f"counts-{zone.zone_id}.json"
         diag = {**zone.counts, **clock.lag, **clock.slow}
         counts.write_text(json.dumps(diag, indent=1), encoding="utf-8")  # diagnosis (PLAN Q1)
+        if tracer is not None:
+            tracer.write(Path(os.environ["PCNME_RESULTS"]))
 
 
 if __name__ == "__main__":  # pragma: no cover
