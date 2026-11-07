@@ -214,3 +214,22 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   level with the D3QN variants and ahead of the rest. The learners were still improving at the end of the budget.
   Analysis: PLAN T6.
 - Backup B1: F:\projects\pcnme-results-backup\vfc-2026-11-07\ (7.9 GB; the new S6 and the archived tight S6).
+
+## 7 Nov: the PCNME testbed bug (PLAN Q1)
+
+- Method: counters at each step of a result's way back to the car (zone.counts, RemoteCar replies, the event
+  loop's lateness and slow callbacks; each zone writes counts-<zone>.json), Greedy and PCNME on the same seed
+  (S2, seed 3000, 40 cars). Ruled out on the way: the codec (every PCNME bus message encodes), CPU load (zones
+  30-60 %), a blocked loop (slow callbacks under 1 s per zone in 90 s).
+- Bug 1 (fixed, commit 7a2b307): the cars attached once at start, while PCNME's zones were still loading the
+  model; the attach failed and was never retried, so those zones never knew the cars and could not push their
+  results. Fix: cars repeat the attach until the zone confirms it; compose starts the cars once every zone is
+  healthy. PCNME 11 % -> 79-83 % on time.
+- Bug 2 (stand-in, QUESTIONS Q61): a zone loop sometimes 200+ ms late lets T_leave (300 ms) fire before the
+  queued GPS; the zone drops a car that never left, the car is not told, and all its later results are lost
+  (whole cars, 10-30 % of tasks). Stand-in: the zone's reply to POST /gps names the cars it does not serve and
+  they attach again. drop_no_ack 1 238 -> 56.
+- Now (S2, seed 3000, 60 s, 40 cars; data/vfc/testbed/gap-S2-pcnme-3000-40cars.md): PCNME 89.8 % on time on the
+  testbed against 99.8 % in fast mode; p99 270 ms against 200 ms. The rest is mostly drop_late (7.1 %; Greedy
+  1.2 %): results after the deadline, both at home and through neighbours (backhaul hops with netem jitter, Q56).
+  A real fast-mode vs testbed gap, not a lost message.

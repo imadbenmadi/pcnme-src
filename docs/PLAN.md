@@ -232,7 +232,9 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
 ## Q — Quality gate (Imed, 6 Nov: "the design is mine, the code is yours: make every result, the pipeline and the
 testbed correct"). Claude owns these; an item is done only when its check passes and is recorded in RUN_LOG.
 
-- [ ] **Q1 Testbed = the design.** Fix the PCNME confirm bug (a code bug: the agent's path loses the car's confirm,
+- [~] **Q1 Testbed = the design.** (7 Nov: two bugs found by counters and fixed, PCNME 11 % -> 89.8 % on time at
+  S2, 40 cars, fast mode 99.8 %; the rest is lateness, a real gap; RUN_LOG 7 Nov. Left: every method at 40 cars,
+  Q61 to confirm) Fix the PCNME confirm bug (a code bug: the agent's path loses the car's confirm,
   drop_no_ack 88 %, Greedy fine on the same build). Then every method (Greedy, Random and the 6 learners) runs on
   the testbed at 40 cars with no drop_no_ack beyond fast mode's, and its gap to fast mode on the same seed is
   explained metric by metric (network jitter Q56, real run times), not by a bug. A test pins the fix.

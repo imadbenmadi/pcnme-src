@@ -132,12 +132,14 @@ def zone_app(clock: RealClock, zone: Zone, closed: list[TaskRecord], net: NetLoo
         if fixes is None:
             raise HTTPException(422, "expected a Gps or a GpsBatch")
 
-        def each() -> None:
+        def each() -> list[str]:
             for f in fixes:  # each fix as its own message (5.2)
                 zone.gps(f.car_id, f.x, f.y, f.vx, f.vy, f.car_time)
+            # QUESTIONS Q61: the cars this zone does not serve (T_leave fired, 9.6): they attach again
+            return [f.car_id for f in fixes if f.car_id not in zone._cars]
 
-        await on_loop(clock, each)
-        return ok()
+        unknown = await on_loop(clock, each)
+        return Response(encode(unknown), media_type="application/json")
 
     @app.get("/status")
     async def status() -> Response:
@@ -219,7 +221,8 @@ def main() -> None:  # pragma: no cover - runs in the container (the compose tes
         method = os.environ.get("PCNME_METHOD", "greedy")
         write_rows(zone._cfg, scenario, method, seed, zone.zone_id, closed, Path(os.environ["PCNME_RESULTS"]))
         counts = Path(os.environ["PCNME_RESULTS"]) / f"counts-{zone.zone_id}.json"
-        counts.write_text(json.dumps(dict(zone.counts), indent=1), encoding="utf-8")  # diagnosis (PLAN Q1)
+        diag = {**zone.counts, **clock.lag, **clock.slow}
+        counts.write_text(json.dumps(diag, indent=1), encoding="utf-8")  # diagnosis (PLAN Q1)
 
 
 if __name__ == "__main__":  # pragma: no cover

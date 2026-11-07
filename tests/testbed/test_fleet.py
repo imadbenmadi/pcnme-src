@@ -33,6 +33,7 @@ class Net:
         self.sent: list[tuple[str, str, str, Any]] = []
         self.open: dict[Any, Any] = {}
         self.lose_attaches = 0
+        self.unknown: list[str] = []
 
     def __call__(self, zone: str, method: str, path: str, body: Any, on_reply: Any) -> None:
         self.sent.append((zone, method, path, body))
@@ -41,6 +42,9 @@ class Net:
                 self.lose_attaches -= 1  # lost: no reply at all (connection refused)
             else:
                 on_reply(200, None)
+        elif isinstance(body, GpsBatch):
+            on_reply(200, self.unknown)  # the cars this zone does not serve (QUESTIONS Q61)
+            self.unknown = []
         elif isinstance(body, Upload):
             self.open[body.task.task_id] = on_reply
         elif method == "DELETE":
@@ -152,3 +156,15 @@ def test_a_confirmed_attach_is_not_sent_again() -> None:
     _, clock, net, _ = fleet([(300.0, 300.0)])
     clock.run_until(1.0)
     assert len([s for s in net.sent if s[2] == "/cars"]) == 1
+
+
+def test_a_car_its_zone_no_longer_serves_attaches_again() -> None:
+    """QUESTIONS Q61: a zone that dropped the car (T_leave fired on a late GPS, 9.6) names it in its reply to
+    the GPS; the car attaches again, so its results reach it again."""
+    _, clock, net, _ = fleet([(300.0, 300.0)])
+    clock.run_until(0.25)
+    assert len([s for s in net.sent if s[2] == "/cars"]) == 1
+    net.unknown = ["c000"]
+    clock.run_until(0.5)
+    attaches = [s for s in net.sent if s[2] == "/cars"]
+    assert len(attaches) == 2 and attaches[1][0] == "z1"

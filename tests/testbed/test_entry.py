@@ -66,8 +66,11 @@ def test_a_testbed_zone_takes_cars_gps_and_lists_closed_tasks() -> None:
     assert isinstance(car, RemoteCar) and rate > 0
     x, y = cfg.layout.zone_positions_m["z1"]
     batch = GpsBatch((Gps("c000", x, y, 1.0, 0.0, 0.5),))
-    assert http.post("/gps", content=encode(batch)).status_code == 200
+    reply = http.post("/gps", content=encode(batch))
+    assert reply.status_code == 200 and decode(reply.content) == []
     assert "c000" in zone.registry
+    stranger = GpsBatch((Gps("c999", x, y, 1.0, 0.0, 0.6),))  # a car this zone does not serve (Q61)
+    assert decode(http.post("/gps", content=encode(stranger)).content) == ["c999"]
     assert decode(http.get("/closed").content) == []
     st = decode(http.get("/status").content)
     assert isinstance(st, dict) and st["cars"] == 1 and st["closed"] == 0
