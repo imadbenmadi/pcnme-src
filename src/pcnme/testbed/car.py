@@ -74,6 +74,7 @@ class CarFleet:
         self.apps: list[CarApp] = []
         self._by_id: dict[str, CarApp] = {}
         self._attached: dict[str, str] = {}  # car id -> the zone that confirmed its attach (9.6)
+        self.tracer: Any = None  # testbed/trace.py (analysis only, PCNME_TRACE)
         for car_id in car_ids:
             hot = int(car_id[1:]) < n_hot
             if mover is not None:
@@ -199,6 +200,9 @@ class CarFleet:
         app.uploading[task.task_id] = zone
         rate = shannon_rate(math.dist(app.car.position, self.centres[zone]), self.cfg.radio)
         up = Upload(task, b_car=app.car.budget(task, now), rate=rate)
+        if self.tracer is not None:
+            self.tracer.mark(task.task_id, 0, "created", task.created)
+            self.tracer.mark(task.task_id, 0, "upload sent", None)
 
         def replied(status: int, reply: Any) -> None:
             if status == 200 and isinstance(reply, UploadReply):
@@ -281,9 +285,14 @@ def main() -> None:  # pragma: no cover - runs in the container (the compose tes
         fleet_size=int(os.environ["PCNME_FLEET"]) if "PCNME_FLEET" in os.environ else None,
     )
     seconds = float(os.environ.get("PCNME_SECONDS", "3600"))
+    from pcnme.testbed.trace import Tracer
+
+    fleet.tracer = Tracer.from_env(f"car-{os.environ.get('HOSTNAME', 'car')}", lambda: clock.now)
     serve(results_app(clock, fleet))
     fleet.start(seconds)
     clock.run_for(seconds + float(os.environ.get("PCNME_DRAIN", "30")))  # then drain (testbed.drain_s)
+    if fleet.tracer is not None and "PCNME_RESULTS" in os.environ:
+        fleet.tracer.write(Path(os.environ["PCNME_RESULTS"]))
 
 
 if __name__ == "__main__":  # pragma: no cover

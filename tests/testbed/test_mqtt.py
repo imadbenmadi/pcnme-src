@@ -21,6 +21,20 @@ class FakePaho:
         self.calls: list[tuple[Any, ...]] = []
         self.will: tuple[Any, ...] | None = None
         self.on_message: Any = None
+        self.on_connect: Any = None
+        self.options: list[tuple[int, int, int]] = []
+
+    def max_inflight_messages_set(self, n: int) -> None:
+        self.calls.append(("max_inflight", n))
+
+    def socket(self) -> Any:
+        fake = self
+
+        class Sock:
+            def setsockopt(self, level: int, opt: int, value: int) -> None:
+                fake.options.append((level, opt, value))
+
+        return Sock()
 
     def will_set(self, topic: str, payload: bytes, qos: int, retain: bool) -> None:
         self.will = (topic, payload, qos, retain)
@@ -71,7 +85,8 @@ def test_connect_sets_the_last_will_and_starts_the_network_thread() -> None:
     topic, payload, qos, retain = paho.will  # type: ignore[misc]
     assert (topic, qos, retain) == ("zone/z1/status", 1, True)
     assert decode(payload) == {"p": "z1", "k": ("will",), "d": will}
-    assert paho.calls[:2] == [("connect", "broker", 1883), ("loop_start",)]
+    calls = [c for c in paho.calls if c[0] != "max_inflight"]
+    assert calls[:2] == [("connect", "broker", 1883), ("loop_start",)]
 
 
 def test_subscriptions_are_counted_and_only_edges_reach_the_broker() -> None:
@@ -138,3 +153,17 @@ def test_the_first_connect_waits_for_a_broker_that_is_still_starting() -> None:
     bus = MqttBus(RealClock(), "broker", paho_factory=Slow, connect_wait=0.01)
     client = bus.connect("z1", (0.0, 0.0), lambda d: None)
     assert client.alive and refusals == [0]
+
+
+def test_every_connection_has_no_inflight_limit_and_no_nagle_delay() -> None:
+    """PLAN Q1 (7 Nov): the MQTT hop took 16 ms (median) and 37 ms (p90) against 3-6 ms of network: paho's
+    20-message QoS 1 window and Nagle's algorithm (no TCP_NODELAY) held results back (15.4: warm connections
+    that do not distort transfer times)."""
+    import socket
+
+    clock = RealClock()
+    got: list[Delivery] = []
+    _, fake = make(clock, got)
+    assert ("max_inflight", 0) in fake.calls  # 0: no limit
+    fake.on_connect(fake, None, None, 0, None)  # paho calls it on every (re)connection
+    assert (socket.IPPROTO_TCP, socket.TCP_NODELAY, 1) in fake.options

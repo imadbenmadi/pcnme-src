@@ -46,6 +46,7 @@ def results_app(clock: RealClock, fleet: Any) -> Any:
     """The car container's POST /results (9.5): the Confirm in the reply, 204 for no confirm."""
     from fastapi import FastAPI, Request, Response
 
+    from pcnme.car.car import Result
     from pcnme.testbed.codec import decode, encode
 
     app = FastAPI()
@@ -53,6 +54,8 @@ def results_app(clock: RealClock, fleet: Any) -> Any:
     @app.post("/results")
     async def results(request: Request) -> Response:
         res = decode(await request.body())
+        if fleet.tracer is not None and isinstance(res, Result):
+            fleet.tracer.mark(res.task_id, res.attempt, "result at the car", None)
         confirm = await on_loop(clock, lambda: fleet.result(res))
         if confirm is None:
             return Response(status_code=204)

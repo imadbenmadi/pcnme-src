@@ -196,10 +196,19 @@ class AckMessage:
     zone_id: str
 
 
+# Testbed analysis only (testbed/trace.py, final-design 5.4): HOP(task_id, attempt, event, own-clock time or
+# None); unset in fast mode.
+HOP: Callable[[Any, int, str, float | None], None] | None = None
+
+
 def publish_report(client: Client, executor_id: str, report: Report) -> None:
     """An executor publishes each result or drop once, at once (6D.12, 8.6), QoS 1."""
     kind: Literal["result", "status"] = "result" if report.outcome == "done" else "status"
     k = report.key
+    if HOP is not None:
+        HOP(k.task_id, k.attempt, "exec start", report.start)
+        HOP(k.task_id, k.attempt, "exec finish", report.finish)
+        HOP(k.task_id, k.attempt, "publish called", None)
     client.publish(
         topics.car_result(str(k.task_id[0])),  # task_id = (car_id, epoch, seq)
         ResultMessage(kind, executor_id, report),
@@ -593,6 +602,8 @@ class Zone:
     def _intake(self, rec: TaskRecord, b_car: float) -> None:
         now = self._clock.now
         task = rec.task
+        if HOP is not None:
+            HOP(task.task_id, 0, "intake (upload complete)", None)
         rec.t_rx = now
         rec.d_a = anchor_deadline(
             now, b_car, rec.w_radio, task.input_bits, rec.rate, self._mean_radio
@@ -706,6 +717,8 @@ class Zone:
             rec.earlier.append(prev)
         attempt = self.anchor.next_attempt(task.task_id)
         key = AttemptKey(task.task_id, self.zone_id, attempt)
+        if HOP is not None:
+            HOP(task.task_id, attempt, f"sent ({option})", None)
         rec.option, rec.t_send = option, now
         rec.reply = rec.slot = rec.transfer = rec.t_at_executor = rec.budget = None
         rec.parts.pop("input", None)
@@ -1134,6 +1147,8 @@ class Zone:
             msg = d.payload
             assert isinstance(msg, ResultMessage)
             self.counts[f"{msg.kind} message received"] += 1
+            if HOP is not None and msg.kind == "result":
+                HOP(msg.key.task_id, msg.key.attempt, f"result at {self.zone_id}", None)
             if msg.kind == "result" and car_id not in self._cars:
                 self.counts["result received, car not attached here"] += 1
             forward = self._cfg.ablation.result_forwarding or msg.key.anchor_id == self.zone_id
@@ -1236,6 +1251,8 @@ class Zone:
         zone, which publishes the ack."""
         now = self._clock.now
         self.counts["confirm from the car; ack published"] += 1
+        if HOP is not None:
+            HOP(result.task_id, result.attempt, "confirm at the serving zone", None)
         tid: tuple[int | str, ...] = result.task_id
         self._confirmed.setdefault(car_id, set()).add(tid)  # 9.5.3: this session has it
         up = hops.delay(self._streams, hops.ACK_UP, self._cfg.radio.uplink_delay, tid, result.attempt)
@@ -1278,6 +1295,8 @@ class Zone:
             self.counts["ack after the task closed"] += 1
             return  # 9.5.4: repeat acks for a closed task are ignored
         self.counts["ack closes the task"] += 1
+        if HOP is not None:
+            HOP(c.task_id, c.attempt, "ack at the anchor", None)
         rec.confirm = c
         self._close(rec, self._outcome(rec.task, c.latency))
 
