@@ -26,15 +26,22 @@ class Mover:
 
 
 class Net:
-    """The fake network: records every request; uploads stay open until the test answers them."""
+    """The fake network: records every request; uploads stay open until the test answers them; attaches are
+    answered 200 unless `lose_attaches` (a zone not up yet: the request fails)."""
 
     def __init__(self) -> None:
         self.sent: list[tuple[str, str, str, Any]] = []
         self.open: dict[Any, Any] = {}
+        self.lose_attaches = 0
 
     def __call__(self, zone: str, method: str, path: str, body: Any, on_reply: Any) -> None:
         self.sent.append((zone, method, path, body))
-        if isinstance(body, Upload):
+        if isinstance(body, Attach):
+            if self.lose_attaches:
+                self.lose_attaches -= 1  # lost: no reply at all (connection refused)
+            else:
+                on_reply(200, None)
+        elif isinstance(body, Upload):
             self.open[body.task.task_id] = on_reply
         elif method == "DELETE":
             on_reply(200 if self.open.pop(body, None) else 409, None)  # still open: the cut works (9.7)
@@ -128,3 +135,20 @@ def test_a_smaller_fleet_keeps_its_ids_inside_the_fleet() -> None:
     assert car_ids("0-199/10:3")[:2] == ["c003", "c013"] and len(car_ids("0-199/10:3")) == 20
     assert car_ids("0-199/10:0", 20) == [f"c{i:03d}" for i in range(20)]  # one container: c000..c019
     assert car_ids("0-199/10:1", 40)[:2] == ["c001", "c003"] and car_ids("0-199/10:5", 40) == []
+
+
+def test_a_lost_attach_is_sent_again_until_the_zone_confirms_it() -> None:
+    """9.6: the zone must know the car to push its results (PLAN Q1: zones still starting refused the first
+    attach, and every result of those cars was lost)."""
+    _, clock, net, _ = fleet([(300.0, 300.0)])
+    net.lose_attaches = 2
+    clock.run_until(1.0)  # 10 GPS periods
+    attaches = [s for s in net.sent if s[2] == "/cars"]
+    assert len(attaches) == 3  # two lost, the third confirmed
+    assert all(a[0] == "z1" and isinstance(a[3], Attach) for a in attaches)
+
+
+def test_a_confirmed_attach_is_not_sent_again() -> None:
+    _, clock, net, _ = fleet([(300.0, 300.0)])
+    clock.run_until(1.0)
+    assert len([s for s in net.sent if s[2] == "/cars"]) == 1

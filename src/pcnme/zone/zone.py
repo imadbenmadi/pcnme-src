@@ -30,6 +30,7 @@ starts at the car's current rate and can be cut by a handover or a gap (9.7): no
 from __future__ import annotations
 
 import math
+from collections import Counter
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
@@ -385,6 +386,7 @@ class Zone:
         # The run's log of every task, keyed by (anchor, task id): a simulation record, not zone state, so a
         # serving zone can note the deliveries of a task anchored elsewhere (shared by the city).
         self.ledger = ledger if ledger is not None else {}
+        self.counts: Counter[str] = Counter()  # each step of a result's way back to the car (diagnosis, Q1)
         self._cars: dict[str, tuple[Car, float]] = {}  # the car registry follows the serving role (9.6)
         self._confirmed: dict[str, set[object]] = {}  # per served car: task ids confirmed this radio session
         self._anchored: dict[str, int] = {}  # per car: this zone's open tasks of it (the anchor role)
@@ -452,6 +454,7 @@ class Zone:
         drop the car from the registry (9.6)."""
         if self._cars.pop(car_id, None) is None:
             return
+        self.counts["car detached"] += 1
         self._confirmed.pop(car_id, None)
         timer = self._leave.pop(car_id, None)
         if timer is not None:
@@ -583,6 +586,8 @@ class Zone:
     def _left(self, car_id: str) -> None:
         """9.6: no GPS for T_leave: the car left (a gap): the serving role ends."""
         self._leave.pop(car_id, None)
+        if car_id in self._cars:
+            self.counts["detached: no GPS for T_leave"] += 1
         self.detach(car_id)
 
     def _intake(self, rec: TaskRecord, b_car: float) -> None:
@@ -1097,6 +1102,7 @@ class Zone:
         """9.5.5: no ack by the end (deadline, or deadline + L_max) is a drop (QUESTIONS Q23: + T_ack)."""
         rec.end_timer = None
         if self.anchor.is_open(rec.task.task_id):
+            self.counts["no ack by the end (drop)"] += 1
             self._close(rec, "drop_no_ack")
 
     # --- delivery, ack, close (6D, 6E, 8.6, 9.5, 10.3) ------------------------------------------------------
@@ -1127,6 +1133,9 @@ class Zone:
         if kind == "result":
             msg = d.payload
             assert isinstance(msg, ResultMessage)
+            self.counts[f"{msg.kind} message received"] += 1
+            if msg.kind == "result" and car_id not in self._cars:
+                self.counts["result received, car not attached here"] += 1
             forward = self._cfg.ablation.result_forwarding or msg.key.anchor_id == self.zone_id
             if car_id in self._cars and msg.kind == "result" and forward:
                 # serving role: results only, never status messages (8.6); 16.4 without forwarding: the
@@ -1191,7 +1200,9 @@ class Zone:
         self._clock.schedule(self._clock.now + down, lambda: self._at_car(car_id, msg))
 
     def _at_car(self, car_id: str, msg: ResultMessage) -> None:
+        self.counts["result at the serving zone"] += 1
         if car_id not in self._cars:
+            self.counts["result: the car left the zone"] += 1
             return  # the car left this access point before the copy reached it: the anchor republishes
         car, _ = self._cars[car_id]
         now = self._clock.now
@@ -1224,6 +1235,7 @@ class Zone:
         """9.5.2-3, 6D.13: the car confirmed a result copy; the confirm crosses the radio to this serving
         zone, which publishes the ack."""
         now = self._clock.now
+        self.counts["confirm from the car; ack published"] += 1
         tid: tuple[int | str, ...] = result.task_id
         self._confirmed.setdefault(car_id, set()).add(tid)  # 9.5.3: this session has it
         up = hops.delay(self._streams, hops.ACK_UP, self._cfg.radio.uplink_delay, tid, result.attempt)
@@ -1257,11 +1269,15 @@ class Zone:
 
     def _anchor_ack(self, ack: AckMessage) -> None:
         c = ack.confirm
+        self.counts["ack at a subscriber"] += 1
         if c.anchor_id != self.zone_id:
+            self.counts["ack for another anchor"] += 1
             return
         rec = self.records.get(c.task_id)
         if rec is None or not self.anchor.is_open(c.task_id):
+            self.counts["ack after the task closed"] += 1
             return  # 9.5.4: repeat acks for a closed task are ignored
+        self.counts["ack closes the task"] += 1
         rec.confirm = c
         self._close(rec, self._outcome(rec.task, c.latency))
 

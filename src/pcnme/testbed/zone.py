@@ -218,6 +218,8 @@ def main() -> None:  # pragma: no cover - runs in the container (the compose tes
         scenario, seed = os.environ.get("PCNME_SCENARIO", "S2"), int(os.environ.get("PCNME_SEED", "3000"))
         method = os.environ.get("PCNME_METHOD", "greedy")
         write_rows(zone._cfg, scenario, method, seed, zone.zone_id, closed, Path(os.environ["PCNME_RESULTS"]))
+        counts = Path(os.environ["PCNME_RESULTS"]) / f"counts-{zone.zone_id}.json"
+        counts.write_text(json.dumps(dict(zone.counts), indent=1), encoding="utf-8")  # diagnosis (PLAN Q1)
 
 
 if __name__ == "__main__":  # pragma: no cover

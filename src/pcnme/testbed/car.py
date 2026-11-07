@@ -73,6 +73,7 @@ class CarFleet:
         }
         self.apps: list[CarApp] = []
         self._by_id: dict[str, CarApp] = {}
+        self._attached: dict[str, str] = {}  # car id -> the zone that confirmed its attach (9.6)
         for car_id in car_ids:
             hot = int(car_id[1:]) < n_hot
             if mover is not None:
@@ -117,6 +118,8 @@ class CarFleet:
             z = choose_zone(pos, app.serving, self.centres, lay.zone_radius_m, lay.handover_hysteresis_m)
             if z != app.serving:
                 self._switch(app, z)
+            elif z is not None and self._attached.get(app.car.car_id) != z:
+                self._attach(app, z)  # not confirmed yet (a zone still starting, a lost request): again
             self._give_up(app, now)
             if app.serving is not None:
                 vx, vy = app.mover.velocity(now)
@@ -132,11 +135,23 @@ class CarFleet:
                 if zone == old:
                     del app.uploading[tid]
                     self._send(old, "DELETE", "/uploads", tid, self._on_cut(app, tid))
+        self._attached.pop(app.car.car_id, None)
         if new is not None:
-            dist = math.dist(app.car.position, self.centres[new])
-            self._send(new, "POST", "/cars", Attach(app.car.car_id, dist, self._url), _ignore)
+            self._attach(app, new)
             for tid in list(app.held):
                 self._upload(app, app.held.pop(tid))
+
+    def _attach(self, app: CarApp, zone: str) -> None:
+        """9.6: the serving zone must know the car to push its results; the car repeats the attach every GPS
+        period until the zone confirms it (PLAN Q1: zones still loading their model refused the first one)."""
+        car_id = app.car.car_id
+        dist = math.dist(app.car.position, self.centres[zone])
+
+        def confirmed(status: int, _reply: Any) -> None:
+            if status == 200 and app.serving == zone:
+                self._attached[car_id] = zone
+
+        self._send(zone, "POST", "/cars", Attach(car_id, dist, self._url), confirmed)
 
     def _on_cut(self, app: CarApp, tid: TaskId) -> OnReply:
         def cut(status: int, _reply: Any) -> None:
