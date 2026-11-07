@@ -66,12 +66,22 @@ x-zone: &zone
   deploy:
     resources:
       limits: {cpus: "${ZONE_CPUS:-1.0}"}   # --cpus limits only the zone's own work (final-design 15.5)
+  healthcheck:   # up = its HTTP server answers, i.e. its method (a trained model too) is loaded (PLAN Q1)
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/status', timeout=2)"]
+    interval: 2s
+    timeout: 3s
+    retries: 90
+    start_period: 2s
 
 x-car: &car
   <<: *pcnme
   profiles: ["testbed"]
   command: ["python", "-m", "pcnme.testbed.car"]
-  depends_on: [zone-1, zone-2, zone-3, zone-4]
+  depends_on:   # the cars start once every zone is up (a zone still loading refused the cars' first attach)
+    zone-1: {condition: service_healthy}
+    zone-2: {condition: service_healthy}
+    zone-3: {condition: service_healthy}
+    zone-4: {condition: service_healthy}
 
 services:
   broker:

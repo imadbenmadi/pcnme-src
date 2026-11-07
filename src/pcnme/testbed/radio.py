@@ -51,11 +51,16 @@ class RemoteCar:
 
     def receive(self, result: Result, now: float) -> Confirm | None:
         def done(status: int, content: bytes) -> None:
+            counts = getattr(self._zone, "counts", None)
             if status != 200:
+                if counts is not None:
+                    counts[f"POST /results answered {status}"] += 1
                 return  # no answer: no confirm; the anchor's T_ack timer notices (9.5.4)
             confirm = decode(content)
             if isinstance(confirm, Confirm):
                 self._zone.car_confirmed(self.car_id, result, confirm)
+            elif counts is not None:
+                counts["POST /results: 200 without a confirm"] += 1
 
         self._net.request("POST", self._url, "/results", encode(result), done)
         return None
