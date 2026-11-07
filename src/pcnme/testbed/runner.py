@@ -121,6 +121,8 @@ def run(
     )
     (zones_dir.parent / "containers.log").write_text(logs.stdout + logs.stderr, encoding="utf-8")
     _compose(env, "down", "-v", "--remove-orphans")
+    for f in (data_dir / "results").glob("counts-*.json"):  # each zone's diagnosis counts (PLAN Q1)
+        f.replace(zones_dir.parent / f.name)
     out = merge(zones_dir, scenario, method, seed)
     return out.write(data_dir / "results", {"scenario": scenario, "seed": seed, "seconds": seconds})
 
