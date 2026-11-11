@@ -26,7 +26,8 @@ const picker = new RunPicker((sel) => showRuns(sel));
 const liveView = new LiveView({ clock, controls, onSelect: select, setPanes: (panes) => { state.panes = panes; state.sel = null; panel.render(null); draw(true); } });
 const trainingView = new TrainingView();
 
-function select(hit, pane) {
+function select(hit, pane, ev) {
+  if (hit && ev) panel.place(ev.clientX, ev.clientY); // the popup opens at the click
   state.sel = hit ? { ...hit, pane: pane || state.panes[0] } : null;
   panel.render(state.sel, clock.t, state.panes.length > 1);
   draw(true);

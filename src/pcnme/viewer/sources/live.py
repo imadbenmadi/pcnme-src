@@ -27,6 +27,7 @@ from pcnme.viewer.sources.base import SourceInfo
 from pcnme.viewer.sources.replay import ATTEMPT_KEEP, ATTEMPT_TIMES, TASK_KEEP, TASK_TIMES
 
 OVERLAP_NS = 3_000_000_000  # a poll reads 3 s before its cursor (zones post once a second)
+LIVE_NS = 15_000_000_000  # a run with a point in the last 15 s is going now (zones sample every 0.2 s)
 HELP = ("No live run yet. Start one (Docker Desktop running, nothing else on the testbed):\n"
         "uv run python run_live.py --scenario S2 --method pcnme --minutes 10")  # fmt: skip
 
@@ -179,14 +180,29 @@ class LiveSource:
                 '  |> filter(fn: (r) => r._measurement == "live_zone" and r._field == "records")\n'
                 '  |> group(columns: ["run", "scenario", "method", "seed"]) |> last()'
             )
+            first = self.influx.query(
+                f"from(bucket: {_flux_str(self.influx.bucket)}) |> range(start: -30d)\n"
+                '  |> filter(fn: (r) => r._measurement == "live_zone" and r._field == "records")\n'
+                '  |> group(columns: ["run"]) |> first()'
+            )
         except OSError as e:
             return {"online": False, "error": str(e), "help": HELP, "runs": []}
-        runs = sorted(
-            ({"run": r["run"], "scenario": r.get("scenario", ""), "method": r.get("method", ""),
-              "seed": r.get("seed", ""), "last": r["_time"]} for r in last if r.get("run")),
-            key=lambda r: r["last"], reverse=True,
-        )  # fmt: skip
-        return {"online": True, "help": HELP, "runs": runs}
+        import time
+
+        starts = {r["run"]: _ns(r["_time"]) for r in first if r.get("run")}
+        now = time.time_ns()
+        runs: list[dict[str, Any]] = []
+        for r in last:
+            if not r.get("run"):
+                continue
+            end = _ns(r["_time"])
+            start = starts.get(r["run"], end)
+            runs.append({"run": r["run"], "scenario": r.get("scenario", ""), "method": r.get("method", ""),
+                         "seed": r.get("seed", ""), "start": start / 1e9, "last": end / 1e9,
+                         "minutes": round((end - start) / 6e10, 1),
+                         "live": now - end < LIVE_NS})  # fmt: skip
+        runs.sort(key=lambda r: r["last"], reverse=True)
+        return {"online": True, "help": HELP, "runs": runs, "any_live": any(r["live"] for r in runs)}
 
     def t0(self, run: str) -> int:
         """The run's first point (ns): time 0 of the page."""

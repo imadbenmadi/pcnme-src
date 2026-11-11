@@ -44,8 +44,17 @@ def map_config(name: str, path: Path = DEFAULT_CONFIG_PATH) -> Config:
     return config_from_mapping(map_source(name, path))
 
 
+# How the testbed runs, not what is measured: left out of the identity, so adding or tuning them (11 Nov, Q62)
+# does not mark trained models, evaluations or testbed rows as made with another config.
+TESTBED_RUNTIME = ("zone_cpus", "zone_cpus_learning", "trainer_sync_s", "preflight_s", "preflight_max_no_ack")
+
+
 def config_hash(source: Mapping[str, Any]) -> str:
-    """A short hash of the full resolved mapping (sorted keys): equal hashes, equal configs."""
+    """A short hash of the full resolved mapping (sorted keys): equal hashes, equal configs; the testbed's
+    runtime settings (TESTBED_RUNTIME) left out."""
+    tb = source.get("testbed")
+    if isinstance(tb, Mapping):
+        source = {**source, "testbed": {k: v for k, v in tb.items() if k not in TESTBED_RUNTIME}}
     text = json.dumps(source, sort_keys=True, default=str)
     return hashlib.sha256(text.encode()).hexdigest()[:16]
 

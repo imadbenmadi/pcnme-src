@@ -8,10 +8,17 @@ finished run appends one row per mode to data/vfc/testbed/summary.csv (every 16.
 config hash, setup), and gap.md / gap.csv give, per scenario and method, the means over the seeds both modes
 ran and the difference.
 
-Resumable: a (scenario, method, seed) finished in both modes is skipped; rows of another commit, config or
-setup are refused (move the file away to start over). Seed-major: every scenario and method of the first
-seed, then the next seed, so a stopped batch still covers everything. Never while train.py or evaluate.py
-runs.
+Resumable: a (scenario, method, seed) finished in both modes is skipped; rows of another config or setup are
+refused (move the file away to start over). Each row keeps the commit it ran on: a fix to the testbed does not
+void the cells it did not touch; the cells it did are archived first (`--archive-frozen`, `--redo`).
+Seed-major: every scenario and method of the first seed, then the next seed, so a stopped batch still covers
+everything.
+Never while train.py or evaluate.py runs.
+
+Before a batch, a pre-flight run per method (S2, testbed.preflight_s) must pass `health()`: every zone wrote
+its rows (none crashed), every learning zone made online updates through a live trainer (Q62), and at most
+testbed.preflight_max_no_ack of the tasks ended without an ack. During the batch a crashed zone or a learner
+without updates stops it.
 """
 
 from __future__ import annotations
@@ -52,12 +59,12 @@ def read_done(path: Path, ident: Mapping[str, str]) -> set[Key]:
         return set()
     with path.open(encoding="utf-8", newline="") as f:
         rows = list(csv.DictReader(f))
-    keys = ("commit", "config_hash", "setup")
+    keys = ("config_hash", "setup")  # the commit is kept per row (a testbed fix voids only what it touched)
     mine = tuple(ident.get(k, "") for k in keys)
     other = {tuple(r.get(k, "") for k in keys) for r in rows} - {mine}
     if other:
         raise RuntimeError(
-            f"{path} has rows of another config or commit or setup {sorted(other)}; this batch is {mine}. "
+            f"{path} has rows of another config or setup {sorted(other)}; this batch is {mine}. "
             "Move the file away to start a new batch."
         )
     return {(r["scenario"], r["method"], int(r["seed"]), r["mode"]) for r in rows}
@@ -132,6 +139,102 @@ def write_gap(folder: Path) -> None:
         w.writerows(rows)
 
 
+def _read(path: Path) -> list[dict[str, str]]:
+    if not path.exists():
+        return []
+    with path.open(encoding="utf-8", newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def _write(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fields = list(dict.fromkeys(k for r in rows for k in r))
+    with path.open("w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader()
+        w.writerows(rows)
+
+
+def archive(folder: Path, pick: Any, label: str, slug: str) -> int:
+    """Move the summary rows `pick(row)` selects, and their run folders, to archive/<slug>/ with a `label`
+    column (kept for the record, out of the gap table). Returns the rows moved."""
+    import shutil
+
+    rows = _read(folder / "summary.csv")
+    moved = [r for r in rows if pick(r)]
+    if not moved:
+        return 0
+    dest = folder / "archive" / slug
+    _write(dest / "summary.csv", _read(dest / "summary.csv") + [{**r, "label": label} for r in moved])
+    for r in moved:
+        src = folder / "results" / r.get("run_dir", "")
+        if r.get("run_dir") and src.exists():
+            (dest / "results").mkdir(parents=True, exist_ok=True)
+            target = dest / "results" / src.name
+            if target.exists():
+                shutil.rmtree(target)
+            shutil.move(str(src), str(target))
+    _write(folder / "summary.csv", [r for r in rows if not pick(r)])
+    write_gap(folder)
+    return len(moved)
+
+
+def health(run_dir: Path, method: str, max_no_ack: float, zones: int = 4) -> list[str]:
+    """What is wrong with a testbed run, in words (empty: healthy). A zone that wrote no rows crashed; a
+    learning method's zone needs online updates and a live trainer (Q62); at most `max_no_ack` of the tasks
+    may end without an ack."""
+    import json
+
+    from pcnme.methods.learners import LEARNING
+
+    problems = []
+    wrote = {f.stem for f in (run_dir / "zones").glob("*.json")}
+    counts = {f.stem.removeprefix("counts-"): json.loads(f.read_text(encoding="utf-8"))
+              for f in run_dir.glob("counts-*.json")}  # fmt: skip
+    if len(wrote) < zones:
+        problems.append(f"{zones - len(wrote)} zone(s) wrote no rows (crashed): only {sorted(wrote)}")
+    log = run_dir / "containers.log"
+    if log.exists():
+        text = log.read_text(encoding="utf-8", errors="replace")
+        if "Traceback" in text:
+            last = [x for x in text.splitlines() if "Error" in x or "Exception" in x]
+            problems.append(f"a container raised: {last[-1].strip() if last else 'Traceback'}")
+    if method in LEARNING:
+        for z, c in sorted(counts.items()):
+            if c.get("agent updates", 0) <= 0:
+                problems.append(f"{z}: no online updates (agent not connected to its trainer?)")
+            elif c.get("trainer alive", 0) != 1:
+                problems.append(f"{z}: its trainer process died")
+    tasks = _task_count(run_dir)
+    no_ack = sum(c.get("no ack by the end (drop)", 0) for c in counts.values())
+    if tasks and no_ack / tasks > max_no_ack:
+        problems.append(f"{no_ack / tasks:.1%} of the tasks ended without an ack (limit {max_no_ack:.0%})")
+    return problems
+
+
+def _task_count(run_dir: Path) -> int:
+    f = run_dir / "tasks.parquet"
+    if not f.exists():
+        return 0
+    import pyarrow.parquet as pq
+
+    return int(pq.read_metadata(f).num_rows)
+
+
+def preflight(cfg: Any, methods: Sequence[str], folder: Path, containers: int) -> dict[str, list[str]]:
+    """One short S2 run per method (testbed.preflight_s, the first evaluation seed); its problems."""
+    from pcnme.testbed.runner import run
+
+    seed = cfg.fast_mode.seed_split["evaluation"].start
+    out = {}
+    for m in methods:
+        d = run(cfg, "S2", seed, m, cfg.testbed.preflight_s, folder / "preflight", containers,
+                models=folder.parent / "train")  # fmt: skip
+        out[m] = health(d, m, cfg.testbed.preflight_max_no_ack)
+        print(f"  pre-flight {m}: {'ok' if not out[m] else '; '.join(out[m])}")
+    return out
+
+
 def fast_twin(scenario: str, method: str, seed: int, seconds: float, cars: int, results: Path) -> Path:
     """The same scenario, method, seed and fleet in fast mode; trained methods deployed as in the zones."""
     from pcnme.config import load_config
@@ -173,6 +276,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--containers", type=int, default=2, help="car containers of 20 cars (M9.3: 40 cars)")
     ap.add_argument("--yes", action="store_true", help="start without waiting for Enter")
     ap.add_argument("--smoke", action="store_true", help="print the plan only (no Docker)")
+    ap.add_argument("--archive-frozen", action="store_true",
+                    help="move every learning method's rows to archive/frozen-bug/ (the testbed agents ran "
+                         "frozen before 11 Nov) and stop")  # fmt: skip
+    ap.add_argument("--redo", action="store_true",
+                    help="run the chosen cells again; their old rows go to archive/superseded/")  # fmt: skip
     args = ap.parse_args(argv)
     if (["vfc"] if args.all else args.maps) != ["vfc"]:
         print(
@@ -186,6 +294,14 @@ def main(argv: list[str] | None = None) -> int:
 
     cfg = load_config()
     folder = MapPaths("vfc").testbed
+    if args.archive_frozen:
+        from pcnme.methods.learners import LEARNING
+
+        n = archive(folder, lambda r: r["method"] in LEARNING, "frozen (bug)", "frozen-bug")
+        print(
+            f"{n} rows of the learning methods moved to {folder / 'archive' / 'frozen-bug'} (frozen (bug))."
+        )
+        return 0
     first = cfg.fast_mode.seed_split["evaluation"].start
     seeds = list(range(first, first + args.seeds))
     scenarios = args.scenarios or list(cfg.scenarios)
@@ -200,6 +316,12 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as e:
         print(e)
         return 2
+    if args.redo and not args.smoke:
+        chosen = {(s, m, seed) for s in scenarios for m in args.methods for seed in seeds}
+        n = archive(folder, lambda r: (r["scenario"], r["method"], int(r["seed"])) in chosen, "superseded",
+                    "superseded")  # fmt: skip
+        print(f"--redo: {n} earlier rows of these cells moved to {folder / 'archive' / 'superseded'}")
+        done = read_done(folder / "summary.csv", ident)
     todo = plan_runs(scenarios, args.methods, seeds, done)
     print(f"PCNME run_testbed.py   commit {ident['commit']}\n")
     print(f"  {len(scenarios)} scenarios x {len(args.methods)} methods x {len(seeds)} seeds, {cars} cars, "
@@ -217,6 +339,12 @@ def main(argv: list[str] | None = None) -> int:
     from pcnme.testbed.runner import run
 
     os.environ.setdefault("PCNME_DATA_DIR", str(data_dir()))
+    methods = list(dict.fromkeys(m for _, m, _ in todo))
+    print(f"\nPre-flight: {len(methods)} short check runs ({cfg.testbed.preflight_s:g} s each)")
+    failed = {m: p for m, p in preflight(cfg, methods, folder, args.containers).items() if p}
+    if failed:
+        print("\nNot started: the pre-flight check failed (data/vfc/testbed/preflight/ has the runs).")
+        return 3
     summary = folder / "summary.csv"
     t_start = time.monotonic()
     for i, (s, m, seed) in enumerate(todo, 1):
@@ -228,6 +356,10 @@ def main(argv: list[str] | None = None) -> int:
         append_row(summary, _row(bed, "testbed", s, m, seed, t1 - t0, ident))
         append_row(summary, _row(twin, "fast", s, m, seed, t2 - t1, ident))
         write_gap(folder)
+        problems = health(bed, m, 1.0)  # under load many tasks may end without an ack: not a stop
+        if problems:
+            print(f"  STOPPED after {s} {m} seed {seed}: {'; '.join(problems)}")
+            return 4
         left = (time.monotonic() - t_start) / i * (len(todo) - i)
         print(f"  {i}/{len(todo)}  {s} {m} seed {seed}: {(t2 - t0) / 60:.1f} min; {left / 3600:.1f} h left")
     print(f"\ndone: {summary}; the gap table: {folder / 'gap.md'}")

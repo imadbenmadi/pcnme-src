@@ -91,16 +91,26 @@ class TrainingSource:
         with (d / "episodes.csv").open(encoding="utf-8", newline="") as f:
             rows = list(csv.DictReader(f))
         cols: dict[str, list[float | None]] = {k: [_float(r.get(k, "")) for r in rows] for k in NUMERIC}
-        budget = None
-        info = d / "training.json"
-        if info.exists():
+        info: dict[str, Any] = {}
+        tj = d / "training.json"
+        if tj.exists():
             try:
-                budget = json.loads(info.read_text(encoding="utf-8")).get("budget")
+                info = json.loads(tj.read_text(encoding="utf-8"))
             except (ValueError, OSError):
-                budget = None  # being rewritten by train.py: the next poll reads it
+                info = {}  # being rewritten by train.py: the next poll reads it
+        w_star = None
+        ws = d.parent.parent / "w_star.json"
+        if ws.exists():
+            try:
+                w_star = json.loads(ws.read_text(encoding="utf-8")).get("w_star")
+            except (ValueError, OSError):
+                w_star = None
         scenario, _, method = d.name.partition("-")
-        return {"run": run, "scenario": scenario, "method": method, "state": self._state(d), "budget": budget,
-                "episodes": cols, "log": _tail(d / "train.log", 30)}  # fmt: skip
+        details = {"expert_transitions": info.get("expert_transitions"), "agreement": info.get("agreement"),
+                   "epsilon_schedule": info.get("epsilon_schedule"), "w_star": w_star}  # fmt: skip
+        return {"run": run, "scenario": scenario, "method": method, "state": self._state(d),
+                "budget": info.get("budget"), "details": details, "episodes": cols,
+                "log": _tail(d / "train.log", 60)}  # fmt: skip
 
 
 def training_source(maps: Sequence[str] = ("vfc", "lust")) -> TrainingSource:

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import time
+from typing import Any
 
 from pcnme.pipeline.evaluate import METHODS
 
@@ -40,6 +41,35 @@ def main(argv: list[str] | None = None) -> int:
     print("  Viewer:  uv run python view.py   -> Live testbed")
     out = run(load_config(), a.scenario, a.seed, a.method, 60 * a.minutes, paths.testbed / "live",
               a.containers, models=paths.root / "train", live=name)  # fmt: skip
+    print(report(out, a.method))
     print(f"Done: {out}. Grafana and InfluxDB stay up; stop them with "
           "docker compose -f docker/compose.yaml --profile testbed down")  # fmt: skip
     return 0
+
+
+def report(run_dir: Any, method: str) -> str:
+    """The run's on-time share, each zone's online updates and trainer, and the health check's findings."""
+    import json
+    from pathlib import Path
+
+    from pcnme.config import load_config
+    from pcnme.metrics.stats import run_metrics
+    from pcnme.pipeline.testbed import health
+
+    d = Path(run_dir)
+    m = run_metrics(d, load_config().fast_mode.early_decisions).metrics
+    lines = [f"  on time {m['on_time']:.1%}, dropped {m['dropped']:.1%}, failed {m['failed']:.1%}, "
+             f"mean latency {1000 * m['latency_mean_s']:.0f} ms"]  # fmt: skip
+    for f in sorted(d.glob("counts-*.json")):
+        c = json.loads(f.read_text(encoding="utf-8"))
+        zone = f.stem.removeprefix("counts-")
+        if "agent updates" in c:
+            lines.append(f"  {zone}: {c['agent updates']} online updates, "
+                         f"{c.get('agent samples', 0)} samples, "
+                         f"{c.get('trainer weights installed', 0)} weight installs, "
+                         f"trainer {'alive' if c.get('trainer alive') else 'not running'}")  # fmt: skip
+        else:
+            lines.append(f"  {zone}: a rule, nothing learns")
+    problems = health(d, method, load_config().testbed.preflight_max_no_ack)
+    lines.append("  health: ok" if not problems else "  health: " + "; ".join(problems))
+    return "\n".join(lines)

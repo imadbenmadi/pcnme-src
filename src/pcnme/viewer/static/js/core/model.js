@@ -94,7 +94,7 @@ export class ReplayModel {
 
 const STEP = 0.2; // the replay's step (sources/replay.py STEP_S)
 const TASK_COLS = ["anchor", "type", "cls", "outcome", "attempts", "deadline", "latency", "energy", "upload", "forward", "wait", "run", "back"];
-const ATT_COLS = ["attempt", "executor", "option", "slot", "result", "send", "arrive", "start", "finish", "car", "energy"];
+const ATT_COLS = ["attempt", "executor", "option", "slot", "result", "reward", "decided", "send", "arrive", "start", "finish", "car", "energy"];
 
 function addSorted(list, t, item) { // samples arrive nearly in order; equal times replace
   let i = list.length;

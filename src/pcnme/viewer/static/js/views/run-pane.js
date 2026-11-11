@@ -45,7 +45,7 @@ export class RunPane {
       <div class="canvas-wrap"></div>`;
     root.appendChild(this.el);
     this.statEls = Object.fromEntries([...this.el.querySelectorAll("[data-k]")].map((e) => [e.dataset.k, e]));
-    this.city = new CityView(this.el.querySelector(".canvas-wrap"), model, { onSelect: (hit) => onSelect(hit, this), speed });
+    this.city = new CityView(this.el.querySelector(".canvas-wrap"), model, { onSelect: (hit, ev) => onSelect(hit, this, ev), speed });
   }
   draw(t, sel) { this.city.draw(t, sel && sel.pane === this ? sel : null); }
   updateStats(t) {
