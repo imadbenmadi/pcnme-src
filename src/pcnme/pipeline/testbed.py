@@ -195,10 +195,11 @@ def health(run_dir: Path, method: str, max_no_ack: float, zones: int = 4) -> lis
         problems.append(f"{zones - len(wrote)} zone(s) wrote no rows (crashed): only {sorted(wrote)}")
     log = run_dir / "containers.log"
     if log.exists():
-        text = log.read_text(encoding="utf-8", errors="replace")
-        if "Traceback" in text:
-            last = [x for x in text.splitlines() if "Error" in x or "Exception" in x]
-            problems.append(f"a container raised: {last[-1].strip() if last else 'Traceback'}")
+        raised = [
+            e for e in raised_in(log.read_text(encoding="utf-8", errors="replace")) if e not in HARMLESS
+        ]
+        if raised:
+            problems.append(f"a container raised: {raised[-1]}")
     if method in LEARNING:
         for z, c in sorted(counts.items()):
             if c.get("agent updates", 0) <= 0:
@@ -210,6 +211,26 @@ def health(run_dir: Path, method: str, max_no_ack: float, zones: int = 4) -> lis
     if tasks and no_ack / tasks > max_no_ack:
         problems.append(f"{no_ack / tasks:.1%} of the tasks ended without an ack (limit {max_no_ack:.0%})")
     return problems
+
+
+# exceptions that are not a fault of the run: a client that hung up mid-request (a car's request timed out
+# under load; the server logs it, nothing in the zone is touched)
+HARMLESS = frozenset({"starlette.requests.ClientDisconnect"})
+
+
+def raised_in(log: str) -> list[str]:
+    """The exception of every traceback in a compose log ("<container> | ..." lines): its last line's type."""
+    out = []
+    rows = [tuple(x.split("|", 1)) if "|" in x else ("", x) for x in log.splitlines()]
+    for i, (who, x) in enumerate(rows):
+        if not x.strip().startswith("Traceback (most recent call last)"):
+            continue
+        indent = len(x) - len(x.lstrip())
+        for other, y in rows[i + 1 :]:  # the same container's exception line, at the Traceback line's indent
+            if other == who and y.strip() and len(y) - len(y.lstrip()) == indent:
+                out.append(y.strip().split(":", 1)[0])  # "pkg.Type: message" -> "pkg.Type"
+                break
+    return out
 
 
 def _task_count(run_dir: Path) -> int:
