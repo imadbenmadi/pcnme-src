@@ -314,3 +314,15 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 - 10-minute live run after the fix (S2, PCNME, 40 cars, learning on): on time 80.0 % (per minute 85, 88, 79, 78,
   87, 80, 76, 85, 75, 70 %), dropped 17.2 %, failed 1.4 %, health ok; online updates z1 9 773, z2 5 338, z3 5 965,
   z4 4 137, every trainer alive. The slight decline over the run is still to explain (online learning, or load).
+
+## 12 Nov: testbed rerun after the fixes (S2, S3; PCNME, D3QN + greedy demos, QECO, Greedy; 5 seeds)
+
+- `run_testbed.py --scenarios S2 S3 --methods pcnme greedy qeco d3qn-greedy --redo` (stopped once by a false
+  alarm of the health check, ClientDisconnect, fixed in 09aca06; resumed). 40/40 runs, every run healthy (no zone
+  crashed, every learning zone learned online through its trainer).
+- On time, fast -> testbed (5 seeds): S2 PCNME 99.8 -> 84.0 % (frozen before: 86.6), D3QN + greedy demos 99.8 ->
+  87.1 (86.1), Greedy 99.8 -> 89.3 (91.3), QECO 98.3 -> 46.5 (77.8). S3 PCNME 98.3 -> 43.7, D3QN + greedy demos
+  96.5 -> 47.7, Greedy 91.0 -> 24.6 (36.8 % failed), QECO 78.3 -> 6.8.
+- Reading: with online learning on the testbed PCNME is within noise of its frozen self in S2 and S3; QECO gets
+  much worse when it learns on the testbed (its LSTM learner); S3 (rho 1.5) overloads the real zones far more than
+  fast mode models. Archived: data/vfc/testbed/archive/frozen-bug/ (frozen learners), archive/superseded/.
