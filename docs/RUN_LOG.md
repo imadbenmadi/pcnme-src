@@ -264,3 +264,28 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 - Open (to check before reporting S3): S3 testbed zones count 300-500 tasks per zone as "no ack by the end (drop)"
   (S1, S4, S6: 0-21). Possibly tasks still in flight when the 60 s stop, counted as drops on the testbed but not
   in the fast twin: an end-of-run artefact to rule out before the S3 gap is reported.
+
+## 11 Nov: live mode built (Grafana, viewer, training view); two testbed bugs found with it
+
+- Built: the zones push live points to InfluxDB when PCNME_LIVE=1 (testbed/live.py: closed tasks with their rows,
+  slots, served cars, the agent's updates, loss, Q and epsilon); `run_live.py` starts a live run with InfluxDB and
+  Grafana; Grafana dashboard "PCNME live"; the viewer's "Live testbed" source (the same city view, fed every
+  second from InfluxDB) and "Training" source (train.py's episodes, live while a training runs). Measured runs
+  keep live points off.
+- Checked with two 2-minute live runs (S2, PCNME, 40 cars): 9 137 tasks, the zones and 10 452 car positions in
+  the first 68 s reached the viewer; Grafana's data source answers.
+- Bug 1, the learning methods never learned online on the testbed: the city attaches each zone's agent to its
+  zone (its transitions feed the agent), the testbed zone did not. In the 10-11 Nov batch every learning method
+  ran frozen on the testbed while its fast twin learned online. Fixed (testbed/zone.py, test in test_entry.py).
+- With learning on, the second live run fell to 15 % on time (81 % frozen): the D3QN updates run on the zone's
+  loop thread inside its one CPU and the loop falls behind (58-478 events per zone over 200 ms late, about 10
+  frozen). Open: QUESTIONS Q62 (proposal: the updates in a learner thread of the zone).
+- Bug 2, a zone crashed when an upload's request timed out: the timeout cancels the request's future, t_rx then
+  set a result on it and the exception stopped the zone's loop. Fixed (testbed/http.py: 504 to the car, the loop
+  goes on; test in test_http.py). It hit 9 of the batch's 30 S3 testbed runs of the learning methods (one zone
+  lost each time: its tasks lost), part of S3's large gap.
+- Display only: on the testbed a task's creation time is its car's clock and its attempts are its anchor's (the
+  containers' clocks start apart; the metrics use durations, 5.4). The replay and the live view now move each
+  task onto its anchor's clock (first send - upload; replay.anchor_offsets).
+- What stands of the batch: Greedy and Random, every scenario (no learning, no zone lost). To redo after Q62:
+  the 6 learning methods on the testbed, every scenario (180 runs, about 9-12 h).

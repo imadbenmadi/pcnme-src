@@ -98,8 +98,34 @@ uv run python tools/testbed_gap.py --scenario S2 --method greedy --seed 3000 --s
 
 The first runs the testbed at 40 cars (2 car containers; the per-zone load is the 200-car one); the second runs
 fast mode on the same seed and fleet and writes the gap table (`data/vfc/testbed/gap-*.md`). `--method` takes any
-method (the trained ones from `data/vfc/train/`); PCNME on the testbed has an open bug (RUN_LOG 5 Nov).
-`PCNME_PROFILE=1` writes each zone's profile next to the runs. `run_testbed.py --maps vfc` prints the open items.
+method (the trained ones from `data/vfc/train/`). `PCNME_PROFILE=1` writes each zone's profile next to the runs.
+
+The whole batch (every method, S1-S6, 5 seeds, each next to its fast-mode twin; resumable; about 13 h):
+
+```bat
+uv run python run_testbed.py --maps vfc
+```
+
+Results: `data/vfc/testbed/summary.csv`, `gap.md`, `gap.csv`.
+
+## Live: watch the testbed and the training as they go
+
+```bat
+uv run python run_live.py --scenario S2 --method pcnme --minutes 10
+uv run python view.py
+```
+
+The first runs one long testbed run with live points on: every zone pushes its closed tasks, slots, cars and its
+agent's online learning to InfluxDB once a second. Watch it in the viewer (source "Live testbed": the city, the
+tasks, the statistics and each zone's learning, a few seconds behind real time) or in Grafana
+(http://localhost:3000/d/pcnme-live, user admin, password GRAFANA_PASSWORD in docker/.env). It is not a
+measurement (the live points cost the zones a little CPU); its rows go to `data/vfc/testbed/live/results/`.
+InfluxDB and Grafana stay up afterwards; stop them with
+`docker compose -f docker/compose.yaml --profile testbed down`.
+
+The viewer's source "Training" shows every training of the learning methods (data/<map>/train/): on time, loss,
+mean ê and updates per episode, the decision budget and train.log; one that is running (train.py) updates by itself
+every few seconds.
 
 ## Viewer
 
@@ -108,7 +134,8 @@ uv run python view.py
 uv run python -m pcnme.viewer.export
 ```
 
-The first opens the replay viewer (http://127.0.0.1:8765, any run, two side by side). The second writes a copy
+The first opens the viewer (http://127.0.0.1:8765): any finished run, two side by side; the live testbed; the
+training. The second writes a copy
 that runs on another machine with Python alone: `F:\projects\pcnme-history-viewer` (then `python serve.py`).
 
 ## Checks on the results

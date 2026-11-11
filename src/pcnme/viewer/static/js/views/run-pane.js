@@ -14,7 +14,7 @@ const STATS = [
 function subtitle(meta) {
   const times = { off_peak: "off-peak (11:00)", mid: "midday (15:00)", peak: "peak (08:00)" };
   if (meta.mode === "traces") return `${meta.map === "lust" ? "LuST" : meta.map} · ${times[meta.scenario] || meta.scenario} · ${meta.fleet} vehicles in ${meta.end} s`;
-  return `${meta.scenario} · seed ${meta.seed} · ${meta.mode === "testbed" ? "testbed" : "fast mode"}${meta.fleet ? ` · ${meta.fleet} cars` : ""}`;
+  return `${meta.scenario} · seed ${meta.seed} · ${meta.mode === "testbed" ? "testbed" : meta.mode === "live" ? "live testbed" : "fast mode"}${meta.fleet ? ` · ${meta.fleet} cars` : ""}`;
 }
 
 // MissingPane: a selected run that does not exist (yet), and why.

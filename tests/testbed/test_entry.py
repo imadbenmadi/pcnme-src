@@ -115,3 +115,25 @@ def test_a_zone_deploys_the_trained_method_from_the_models_folder(tmp_path: Any)
     assert isinstance(zone_placement(cfg, streams, z, "greedy", "S1", 3000, tmp_path), Greedy)
     with pytest.raises(FileNotFoundError):
         zone_placement(cfg, streams, z, "pcnme", "S1", 3000, tmp_path)
+
+
+def test_a_testbed_zone_feeds_its_learning_method_its_transitions(tmp_path: Any) -> None:
+    """13.5, Q42: the deployed agent keeps learning online on the testbed, as in the city, which attaches
+    each zone's placement to the zone (experiments/city.py). Found 11 Nov in a live run: 0 updates."""
+    pytest.importorskip("torch")
+    from pcnme.methods.learners import d3qn_session, run_session
+    from pcnme.pipeline import checkpoint
+    from pcnme.testbed.netloop import NetLoop
+    from pcnme.testbed.zone import build_zone
+
+    cfg = fixed_delay_config()
+    zones = cfg.layout.active_zones
+    trained = run_session(cfg, d3qn_session(cfg, "d3qn-scratch", "S1", zones, 200, seconds=2.0, n_cars=20))
+    (tmp_path / "S1-d3qn-scratch").mkdir()
+    checkpoint.save(trained, tmp_path / "S1-d3qn-scratch" / "trained.pt")
+    clock = RealClock()
+    zone, _ = build_zone(cfg, "z1", "S1", 3000, clock, FakeBus(), {"cloud": "http://cloud:8000"},
+                         "d3qn-scratch", net=NetLoop(clock), models=tmp_path)  # fmt: skip
+    buf = zone.transitions
+    assert buf.on_decision_hook == zone._placement._decision  # type: ignore[attr-defined]
+    assert buf.on_replay_hook == zone._placement._transition  # type: ignore[attr-defined]

@@ -3,8 +3,8 @@
 A source is one thing the viewer can show. Each has a `kind`, which decides the API it answers:
 
     replay          a finished run, read from its logs: `runs()` and `replay(run_id)`      (sources/replay.py)
-    live-testbed    the Docker testbed while it runs (MQTT -> WebSocket)                   (later, PLAN V3)
-    live-training   an RL agent while it learns: episodes, loss, on-time, decisions        (later)
+    live-testbed    the Docker testbed while it runs: `runs()`, `delta(run, since)`    (sources/live.py)
+    live-training   the learning methods' training: `runs()`, `curve(run)`             (sources/training.py)
 
 The page asks /api/sources for the list and picks the view by kind. A source that is not ready yet
 (`status="development"`) is listed so the page can show its state, and answers nothing else.
@@ -81,6 +81,12 @@ class Registry:
 
     def get(self, source_id: str) -> Source:
         return self._by_id[source_id]
+
+    def of_kind(self, source_id: str, kind: str) -> Source:
+        s = self.get(source_id)
+        if s.info.status != "ready" or s.info.kind != kind:
+            raise KeyError(f"{source_id} is not a ready {kind} source")
+        return s
 
     def replay_source(self, source_id: str) -> ReplaySource:
         s = self.get(source_id)

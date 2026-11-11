@@ -143,13 +143,17 @@ def make_app(clock: RealClock, target: Target, timeout: float = 5.0) -> Any:
 
         def rx() -> None:
             uploads.pop(tid, None)
-            fut.set_result(UploadReply(tid, zone.zone_id))
+            if not fut.done():  # its request may have timed out (a slow loop): the loop must go on
+                fut.set_result(UploadReply(tid, zone.zone_id))
 
         clock.call_soon(lambda: zone.upload(obj.task, rate=obj.rate, b_car=obj.b_car, on_rx=rx))
         try:
             reply = await asyncio.wait_for(asyncio.wrap_future(fut), timeout)
         except Cut:
             raise HTTPException(409, "upload cut before its last bit") from None
+        except TimeoutError:
+            uploads.pop(tid, None)
+            raise HTTPException(504, "no t_rx in time") from None
         return Response(encode(reply), media_type="application/json")
 
     @app.delete("/uploads")
@@ -159,7 +163,7 @@ def make_app(clock: RealClock, target: Target, timeout: float = 5.0) -> Any:
         def run() -> bool:
             done = bool(target.cut_upload(tid))  # type: ignore[attr-defined]
             fut = uploads.pop(tid, None)
-            if done and fut is not None:
+            if done and fut is not None and not fut.done():
                 fut.set_exception(Cut())
             return done
 
