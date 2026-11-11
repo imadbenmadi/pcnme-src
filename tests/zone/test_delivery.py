@@ -233,3 +233,20 @@ def test_the_zone_counts_its_subscriptions_per_role() -> None:
     s.clock.run_until(1.0)
     assert s.closed[0].outcome == "on_time" and counts() == [1, 1, 0, 0]
     assert s.bus.subscribers("car/c01/gps") == ()
+
+
+def test_a_car_attach_looks_only_at_its_open_tasks_not_every_record_of_the_run() -> None:
+    """6D.14 republishes on an attach the open tasks of the car with a result and no ack. Walking every record
+    the zone ever anchored made each attach slower as a run went on; on the testbed cars attach again often
+    (9.6, Q61) and the zone's loop fell behind after 1-2 minutes (PLAN Q1, 11 Nov). A closed task leaves the
+    car's open index; the record itself stays (late reports until close + G)."""
+    from tests.zone.harness import Fixed, fixed_delay_config, one_zone, task_now
+
+    s = one_zone(fixed_delay_config(), Fixed("here"))
+    task = task_now(s, "T1")
+    s.zone.upload(task)
+    assert task.task_id in s.zone._open_by_car[task.car_id]
+    s.clock.run_until(1.0)
+    assert s.closed and s.closed[0].task.task_id == task.task_id
+    assert task.task_id not in s.zone._open_by_car[task.car_id]
+    assert task.task_id in s.zone.records
