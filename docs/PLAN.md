@@ -156,8 +156,8 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
      `kill zone-3` + `kill zone-4`; `restart broker`.
   Decided: Q54 Greedy first, then the agent with CPU-only torch in the zone image; Q55 bind mount, MinIO removed;
   Q56 the in-order jitter bias (+8–24 %) is reported in the gap.
-- [~] **M9.4** (Greedy done 5 Nov: S1 96.9 % vs 99.9 %, S2 96.6 % vs 99.8 % on time, data/vfc/testbed/gap-*.md;
-  the agent waits on the confirm bug) Same scenario and seed in fast mode and on the testbed, at M9.3's reduced scale, Greedy first (no trained model needed), then the agent: report the gap (16.3). Tool ready: `tools/testbed_gap.py` (fast-mode run with the testbed's fleet and seed, one Markdown table of the 16.3 metrics). Waits on M9.3's open item; the in-order jitter bias (Q56) is part of the gap.
+- [~] **M9.4** (done 11 Nov: every method, S1-S6, 5 seeds, 40 cars, data/vfc/testbed/gap.md, RUN_LOG 10-11 Nov;
+  open: the S3 end-of-run drops to rule out) Same scenario and seed in fast mode and on the testbed, at M9.3's reduced scale, Greedy first (no trained model needed), then the agent: report the gap (16.3). Tool ready: `tools/testbed_gap.py` (fast-mode run with the testbed's fleet and seed, one Markdown table of the 16.3 metrics). Waits on M9.3's open item; the in-order jitter bias (Q56) is part of the gap.
 
 ## T — Training and results (the runs behind the paper; the user starts the full runs)
 

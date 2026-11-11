@@ -251,3 +251,16 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   50 ms deadline and a 23 ms run, the median task sits at the deadline: the tight scenarios (S4, S5) and S6 show
   the largest gaps. Reducing it further means changing the transport (persistent sockets instead of HTTP
   requests, fewer broker hops): not cheap, not done.
+
+## 10-11 Nov: the testbed batch, every method at 40 cars (PLAN M9.4)
+
+- `uv run python run_testbed.py --maps vfc`, commit 249a59851c8d: 6 scenarios x 8 methods x 5 seeds, 60 s each,
+  testbed run plus its fast-mode twin; 240/240 done (paused once for about an hour, resumed). Results:
+  data/vfc/testbed/summary.csv, gap.md, gap.csv; run folders (4.9 GB, git-ignored) backed up to
+  F:/projects/pcnme-results-backup/vfc-testbed-2026-11-11.
+- On time, fast -> testbed: S1 99.5-99.9 % -> 95.7-98.6 % (gap -1 to -4 pp); S2 -> 76.6-91.3 % (-9 to -22 pp);
+  S3 -> 20-50 % (-47 to -62 pp); S4/S5 -> 31-65 % (-27 to -62 pp); S6 -> 40-71 % (-27 to -42 pp). Greedy has the
+  smallest gap in S1, S2, S4-S6; PCNME and the D3QN variants next; QECO and Tang & Wong the largest.
+- Open (to check before reporting S3): S3 testbed zones count 300-500 tasks per zone as "no ack by the end (drop)"
+  (S1, S4, S6: 0-21). Possibly tasks still in flight when the 60 s stop, counted as drops on the testbed but not
+  in the fast twin: an end-of-run artefact to rule out before the S3 gap is reported.
