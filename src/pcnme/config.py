@@ -600,6 +600,11 @@ class TestbedEvent:
 class Testbed:
     drain_s: float  # s after the last arrival before the run ends (as the fast-mode city)
     events: tuple[TestbedEvent, ...]
+    zone_cpus: float = 1.0  # 15.5: a zone's --cpus
+    zone_cpus_learning: float = 2.0  # 15.5, Q62: a learning zone's, its trainer process included
+    trainer_sync_s: float = 0.5  # Q62: how often the trainer's newest weights go to the zone
+    preflight_s: float = 45.0  # the check run before a long batch
+    preflight_max_no_ack: float = 0.02  # the largest share of a check run's tasks closed without an ack
 
 
 @dataclass(frozen=True, slots=True)
@@ -1356,7 +1361,15 @@ def _testbed(n: _Node) -> Testbed:
                         service=e.text("service"),
                     )
                 )
-        return Testbed(drain_s=drain, events=tuple(sorted(events, key=lambda ev: ev.at_s)))
+        return Testbed(
+            drain_s=drain,
+            events=tuple(sorted(events, key=lambda ev: ev.at_s)),
+            zone_cpus=n.number("zone_cpus", gt=0.0),
+            zone_cpus_learning=n.number("zone_cpus_learning", gt=0.0),
+            trainer_sync_s=n.number("trainer_sync_s", gt=0.0),
+            preflight_s=n.number("preflight_s", gt=0.0),
+            preflight_max_no_ack=n.number("preflight_max_no_ack", ge=0.0, le=1.0),
+        )
 
 
 def _fast_mode(n: _Node) -> FastMode:

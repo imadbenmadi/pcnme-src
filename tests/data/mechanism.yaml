@@ -227,6 +227,12 @@ ablation:                        # final-design 16.4 switches; every default is 
 
 testbed:                         # the M9.3 runner (final-design 15.4, 15.7)
   drain_s: 30.0                  # R: after the last arrival, as the fast-mode city (experiments/city.py DRAIN)
+  zone_cpus: 1.0                 # final doc 15.5: --cpus of a zone (its own work: agent, queues, MQTT)
+  zone_cpus_learning: 2.0        # final doc 15.5 (Q62, 11 Nov): a learning zone, + one CPU for its trainer process
+  trainer_sync_s: 0.5            # E: the trainer sends its newest weights this often; the zone installs them
+                                 # between two decisions (Q62)
+  preflight_s: 45.0              # E: the short check run before a long batch (pipeline/testbed.py)
+  preflight_max_no_ack: 0.02     # E: refuse a long run when more of a check run's tasks end without an ack
   events: []                     # STAND-IN (QUESTIONS Q57): [{at_s, action: start | kill | restart, service}]
 
 maps:                            # the city maps (final-design 16.2, 18); train.py / evaluate.py --maps <name>

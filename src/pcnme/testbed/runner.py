@@ -71,6 +71,12 @@ def run_env(cfg: Config, scenario: str, seed: int, method: str, seconds: float) 
     }
 
 
+def zone_cpus(cfg: Config, method: str) -> float:
+    """15.5 (Q62): a zone's CPUs; a learning method's zone has one more, for its trainer process."""
+    learning = method not in ("greedy", "random") and cfg.ablation.online
+    return cfg.testbed.zone_cpus_learning if learning else cfg.testbed.zone_cpus
+
+
 def live_env(live: str | None) -> dict[str, str]:
     """The zones' live switch (compose: PCNME_LIVE, PCNME_LIVE_RUN); measured runs keep it off."""
     return {"PCNME_LIVE": "1", "PCNME_LIVE_RUN": live} if live else {"PCNME_LIVE": "", "PCNME_LIVE_RUN": ""}
@@ -116,6 +122,7 @@ def run(
     env["PCNME_FLEET"] = str(CARS_PER_CONTAINER * containers)
     env["PCNME_MODELS_HOST"] = str(models or data_dir.parent / "train")
     env.update(live_env(live))
+    env["ZONE_CPUS"] = f"{zone_cpus(cfg, method):g}"  # 15.5, Q62: + one CPU for a learning zone's trainer
     testbed = [*CORE, *ZONES, *CARS[:containers]]
     if live:
         _compose(env, "rm", "-s", "-f", *testbed)  # InfluxDB keeps the earlier live runs

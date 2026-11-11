@@ -117,10 +117,13 @@ def test_a_zone_deploys_the_trained_method_from_the_models_folder(tmp_path: Any)
         zone_placement(cfg, streams, z, "pcnme", "S1", 3000, tmp_path)
 
 
-def test_a_testbed_zone_feeds_its_learning_method_its_transitions(tmp_path: Any) -> None:
-    """13.5, Q42: the deployed agent keeps learning online on the testbed, as in the city, which attaches
-    each zone's placement to the zone (experiments/city.py). Found 11 Nov in a live run: 0 updates."""
+def test_a_testbed_learning_agent_is_connected_to_its_trainer(tmp_path: Any) -> None:
+    """13.5, Q42, Q62: on the testbed the deployed agent keeps learning online, in its own trainer process.
+    The zone attaches the agent to its transitions (as the city does), the agent's samples go to the trainer,
+    and the trainer's weights come back and are installed on the zone's loop. Fails if any link is missing
+    (found 11 Nov: the testbed agents never learned)."""
     pytest.importorskip("torch")
+    from pcnme.agent.nstep import Sample
     from pcnme.methods.learners import d3qn_session, run_session
     from pcnme.pipeline import checkpoint
     from pcnme.testbed.netloop import NetLoop
@@ -134,6 +137,27 @@ def test_a_testbed_zone_feeds_its_learning_method_its_transitions(tmp_path: Any)
     clock = RealClock()
     zone, _ = build_zone(cfg, "z1", "S1", 3000, clock, FakeBus(), {"cloud": "http://cloud:8000"},
                          "d3qn-scratch", net=NetLoop(clock), models=tmp_path)  # fmt: skip
-    buf = zone.transitions
-    assert buf.on_decision_hook == zone._placement._decision  # type: ignore[attr-defined]
-    assert buf.on_replay_hook == zone._placement._transition  # type: ignore[attr-defined]
+    agent: Any = zone._placement
+    trainer: Any = zone.trainer  # type: ignore[attr-defined]
+    try:
+        assert zone.transitions.on_replay_hook == agent._transition  # fed by its zone, as in the city
+        assert trainer.connected and agent.trainer is trainer
+        before = {k: v.clone() for k, v in agent.online.state_dict().items()}
+        s = tuple(0.1 * (i % 7) for i in range(48))
+        sample = Sample(s, 0, -1.0, (True,) * 6, False, True, s, (True,) * 6, 0.9,
+                        False, 0, 0.0, None, None, 0.0)  # fmt: skip
+        agent._add([sample] * 400)  # the zone does not learn in place: the samples go to the trainer
+        threading.Thread(target=clock.run_for, args=(60.0,), name="zone-loop", daemon=True).start()
+        deadline = threading.Event()
+        for _ in range(600):
+            if agent.updates > 0:
+                break
+            deadline.wait(0.1)
+        assert trainer.sent == 400 and agent.new_samples >= 400
+        assert agent.updates > 0 and trainer.installed > 0  # weights came back and were installed
+        after = agent.online.state_dict()
+        assert any(not before[k].equal(after[k]) for k in before)
+    finally:
+        clock.stop()
+        trainer.close()
+    assert not trainer.process.is_alive()

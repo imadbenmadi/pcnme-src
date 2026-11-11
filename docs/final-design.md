@@ -15,6 +15,7 @@ This is the one complete design of PCNME. It merges the PCNME Architecture doc, 
 | Date | Section | Change | Note |
 | --- | --- | --- | --- |
 | 28 Oct | 16.2 | ρ_fog uses every task of the whole mix, boulders included (not pebbles only), so S4–S6 keep S2's arrival rate | CHANGES C2 (QUESTIONS Q1) |
+| 11 Nov | 15.5 | On the testbed a zone that learns online gets a second CPU: its trainer runs in its own process (replay, updates), the zone sends it the samples and installs the trainer's newest weights between two decisions. Fast mode, which has no compute time, learns in place as before | QUESTIONS Q62 |
 | 7 Nov | 9.6 | A car always knows whether its serving zone serves it: the attach is repeated until confirmed, and a zone names the cars it does not serve in its reply to their GPS, which then attach again (testbed transport detail) | QUESTIONS Q61 |
 | 6 Nov | 16.2, 18 | S6 (mixed fog) has loose deadlines, not tight: with tight ones every method was near a capacity ceiling (the hard tasks need 80 % of the 4 GPU slots with 14–20 ms of slack), so S6 measured which tasks a method sacrifices rather than placement on unequal nodes. The TOF-Broker is now exercised in S4 and S5 | QUESTIONS Q60 |
 | 28 Oct | 13.2 | Random draws keyed by task, not by event order: a run time is a uniform keyed by (seed, task id, attempt) through the inverse CDF of the row it runs on; a delay is keyed by (seed, task id, attempt, hop); arrivals and mobility stay sequential per car | CHANGES C3 (QUESTIONS Q6) |
@@ -860,6 +861,8 @@ To verify when coding: the routing through wan-gw, netem's jitter distribution a
 ### 15.5 Compute
 
 A fog node's size comes from its slot counts and its time table. --cpus only limits the zone's own work (agent, queues, MQTT). Optionally one zone runs real YOLO in one scenario to validate the table and d_abort.
+
+A zone whose agent learns online (13.5) gets a second CPU on the testbed, for its **trainer**: a separate process that holds the replay buffer and makes the updates. The zone turns its decisions and transitions into samples as in fast mode and sends them to the trainer; the trainer sends its newest weights back (testbed.trainer_sync_s) and the zone installs them only between two decisions. Learning in the zone's own loop would delay its decisions, messages and timers by the length of each update (QUESTIONS Q62). Fast mode has no compute time and learns in place.
 
 ### 15.6 The pipeline
 

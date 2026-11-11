@@ -21,7 +21,7 @@ export class CityView {
     this.t = 0; this.sel = null;
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(container);
-    this.canvas.addEventListener("click", (e) => onSelect(this.hit(e)));
+    this.canvas.addEventListener("click", (e) => onSelect(this.hit(e), e));
     this.canvas.addEventListener("mousemove", (e) => this.canvas.classList.toggle("hover", !!this.hit(e)));
   }
   destroy() { this.observer.disconnect(); this.canvas.remove(); }
@@ -201,6 +201,12 @@ export class CityView {
     g.beginPath(); g.arc(rx, ry, 7, 0, Math.PI * 2); // the metro-edge router
     g.fillStyle = C.surface; g.fill(); g.strokeStyle = C.muted; g.lineWidth = 1.5; g.stroke();
     g.fillStyle = C.faint; g.fillText("metro edge", rx, ry - 14);
+    const bx = rx, by = ry + 58, bw = 92, bh = 26, pickedB = sel && sel.kind === "broker"; // the MQTT broker
+    g.strokeStyle = alpha(C.faint, 0.5); g.lineWidth = 1; g.setLineDash([3, 4]); line(g, rx, ry + 7, bx, by - bh / 2); g.setLineDash([]);
+    g.fillStyle = C.surface; g.strokeStyle = pickedB ? C.accent : C["border-strong"]; g.lineWidth = pickedB ? 2 : 1;
+    roundRect(g, bx - bw / 2, by - bh / 2, bw, bh, 6); g.fill(); g.stroke();
+    g.fillStyle = C.muted; g.font = `500 11px ${C.font}`; g.textAlign = "center"; g.fillText("MQTT broker", bx, by + 4);
+    this.hits.push({ x: bx, y: by, kind: "broker", w: bw / 2, h: bh / 2 });
     const picked = sel && sel.kind === "cloud"; // the cloud
     g.fillStyle = C.surface; g.strokeStyle = picked ? C.accent : C["border-strong"]; g.lineWidth = picked ? 2 : 1;
     roundRect(g, cx - cw / 2, cy - ch / 2, cw, ch, 7); g.fill(); g.stroke();

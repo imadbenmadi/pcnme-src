@@ -68,8 +68,10 @@ def build_zone(
     net: NetLoop,
     models: Path = Path("/models"),
     also_on_close: Any = None,
+    trainer: bool = True,
 ) -> tuple[Zone, list[TaskRecord]]:
-    """One zone as the city builds it (experiments/city.py), on a real network."""
+    """One zone as the city builds it (experiments/city.py), on a real network. A learning method learns
+    online in its own trainer process (testbed/trainer.py; 15.5, Q62); `trainer=False` keeps it in place."""
     from pcnme.experiments.runner import method_config
 
     cfg, _ = software_radio(method_config(cfg, method))  # the base radio delays are netem's (15.3)
@@ -110,6 +112,12 @@ def build_zone(
     attach = getattr(placement, "attach", None)
     if attach is not None:  # a learning method learns online from its zone's transitions, as in the city
         attach(zone)  # (experiments/city.py; 13.5, Q42)
+        if trainer and getattr(placement, "learn", False):
+            from pcnme.testbed.trainer import RemoteTrainer
+
+            zone.trainer = RemoteTrainer.start(  # type: ignore[attr-defined]
+                cfg, placement, clock, zone_id, method, scenario, seed, models
+            )
     own = f"http://127.0.0.1:{PORT}"  # the watchdog probes its own executor too (9.4), as in fast mode
     sizes = {name: round(t.input_bits / 8) for name, t in cfg.task_types.items()}
     zone.calls = HttpCalls(clock, {**urls, zone_id: own}, net, input_bytes=sizes)
@@ -195,6 +203,20 @@ def write_rows(
     return path
 
 
+def agent_counts(zone: Zone) -> dict[str, int]:
+    """The online learning at the end of a run, for the pre-flight check (pipeline/testbed.py): the agent's
+    updates, and its trainer's samples, installs and whether it is still alive (Q62). Nothing for a rule."""
+    agent = zone._placement
+    if not hasattr(agent, "updates"):
+        return {}
+    out = {"agent updates": int(agent.updates), "agent samples": int(getattr(agent, "new_samples", 0))}
+    trainer = getattr(zone, "trainer", None)
+    if trainer is not None:
+        out.update({"trainer samples sent": trainer.sent, "trainer weights installed": trainer.installed,
+                    "trainer alive": int(trainer.process.is_alive())})  # fmt: skip
+    return out
+
+
 def live_tags(zone_id: str) -> dict[str, str]:
     """The tags of every live point: the live run (the runner's PCNME_LIVE_RUN), scenario, method, seed."""
     scenario, seed = os.environ.get("PCNME_SCENARIO", "S2"), os.environ.get("PCNME_SEED", "3000")
@@ -258,12 +280,14 @@ def main() -> None:  # pragma: no cover - runs in the container (the compose tes
         method = os.environ.get("PCNME_METHOD", "greedy")
         write_rows(zone._cfg, scenario, method, seed, zone.zone_id, closed, Path(os.environ["PCNME_RESULTS"]))
         counts = Path(os.environ["PCNME_RESULTS"]) / f"counts-{zone.zone_id}.json"
-        diag = {**zone.counts, **clock.lag, **clock.slow}
+        diag = {**zone.counts, **clock.lag, **clock.slow, **agent_counts(zone)}
         counts.write_text(json.dumps(diag, indent=1), encoding="utf-8")  # diagnosis (PLAN Q1)
         if tracer is not None:
             tracer.write(Path(os.environ["PCNME_RESULTS"]))
     if pusher is not None:
         pusher.close()
+    if getattr(zone, "trainer", None) is not None:
+        zone.trainer.close()  # type: ignore[attr-defined]
 
 
 if __name__ == "__main__":  # pragma: no cover

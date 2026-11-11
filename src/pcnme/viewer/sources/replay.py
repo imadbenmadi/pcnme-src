@@ -66,8 +66,12 @@ def _table(d: Path, name: str, columns: list[str]) -> dict[str, list[Any]]:
     f = d / f"{name}.parquet"
     if not f.exists():
         return {c: [] for c in columns}
-    out: dict[str, list[Any]] = pq.read_table(f, columns=columns).to_pydict()
-    return out
+    have = set(pq.read_schema(f).names)
+    out: dict[str, list[Any]] = pq.read_table(f, columns=[c for c in columns if c in have]).to_pydict()
+    n = len(next(iter(out.values()), []))
+    for c in columns:
+        out.setdefault(c, [None] * n)  # a column an older run did not log
+    return {c: out[c] for c in columns}
 
 
 def _r(x: float | None, digits: int = 4) -> float | None:
@@ -193,7 +197,7 @@ TASK_KEEP = {"anchor": "anchor", "type": "type", "cls": "cls", "outcome": "outco
 TASK_TIMES = {"deadline": "deadline_s", "latency": "latency_s", "energy": "energy_j", "upload": "upload_s",
               "forward": "forward_s", "wait": "wait_s", "run": "run_s", "back": "return_s"}  # fmt: skip
 ATTEMPT_KEEP = {"attempt": "attempt", "executor": "executor", "option": "option", "slot": "slot_type",
-                "result": "result"}  # fmt: skip
+                "result": "result", "reward": "reward", "decided": "decided"}  # fmt: skip
 ATTEMPT_TIMES = {"send": "t_send_s", "arrive": "t_at_executor_s", "start": "t_start_s",
                  "finish": "t_finish_s", "car": "t_result_at_car_s", "energy": "energy_j"}  # fmt: skip
 
