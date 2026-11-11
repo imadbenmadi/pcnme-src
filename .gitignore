@@ -56,4 +56,6 @@ checkpoints/
 docker/.env
 /data/*/testbed/results/
 /data/*/testbed/live/
+/data/*/testbed/preflight/
+/data/*/testbed/archive/*/results/
 /data/*/testbed/_test*/

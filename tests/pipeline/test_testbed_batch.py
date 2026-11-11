@@ -124,3 +124,24 @@ def test_health_finds_a_crashed_zone_a_learner_that_does_not_learn_and_lost_acks
     frozen = _run_dir(tmp_path / "c", zones, {**dict.fromkeys(zones, good), "z3": {"agent updates": 0}})
     assert health(frozen, "pcnme", 0.02) == ["z3: no online updates (agent not connected to its trainer?)"]
     assert health(frozen, "greedy", 0.02) == []  # a rule does not learn
+
+
+def test_a_client_that_hung_up_is_not_a_crash_but_any_other_exception_is() -> None:
+    """11 Nov: the rerun stopped on a car's request that timed out under S3's load (the server logs a
+    ClientDisconnect traceback; every zone wrote its rows). Other containers' lines interleave in the log."""
+    from pcnme.pipeline.testbed import HARMLESS, raised_in
+
+    log = "\n".join([
+        "zone-3-1  | ERROR:    Exception in ASGI application",
+        "zone-3-1  | Traceback (most recent call last):",
+        'zone-3-1  |   File "/app/src/pcnme/testbed/zone.py", line 148, in gps',
+        "broker-1   | WARNING: Default (insecure) Erlang cookie is in use.",
+        "zone-3-1  |     g = decode(await request.body())",
+        "zone-3-1  | starlette.requests.ClientDisconnect",
+        "zone-1-1  | Traceback (most recent call last):",
+        'zone-1-1  |   File "/app/src/pcnme/testbed/http.py", line 146, in rx',
+        "zone-1-1  | concurrent.futures._base.InvalidStateError: CANCELLED: <Future>",
+    ])  # fmt: skip
+    got = raised_in(log)
+    assert got == ["starlette.requests.ClientDisconnect", "concurrent.futures._base.InvalidStateError"]
+    assert [e for e in got if e not in HARMLESS] == ["concurrent.futures._base.InvalidStateError"]
