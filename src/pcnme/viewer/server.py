@@ -6,9 +6,13 @@ A standard-library HTTP server: the page (static/) and a small JSON API over the
     GET /api/runs?source=vfc                 a replay source's runs (scenario, method, seed, mode)
     GET /api/replay?source=vfc&run=<run_id>  one run as a replay (gzip)
     GET /api/status?source=vfc               the design's scenarios x methods and what exists of each
+    GET /api/live/runs?source=live           the live testbed runs in InfluxDB (or why there are none)
+    GET /api/live?source=live&run=<run>&since=<ns>   what is new in a live run since the cursor
+    GET /api/training/runs?source=training   every trained or training scenario x method and its state
+    GET /api/training?source=training&run=<map>/<S>-<method>   its episodes and the log's last lines
 
-Live sources (live-testbed, live-training) will add a streaming endpoint (`/api/stream?source=...`,
-server-sent events or a WebSocket); the page picks the view by the source's kind.
+The live kinds are polled (about once a second; a training run every few seconds): simple, and it survives a
+restart of either side. The page picks the view by the source's kind.
 """
 
 from __future__ import annotations
@@ -43,6 +47,15 @@ def api(registry: Registry, path: str, q: dict[str, str]) -> Any:
         return registry.replay_source(q["source"]).replay(q["run"])
     if path == "/api/status":
         return registry.replay_source(q["source"]).status()
+    if path == "/api/live/runs":
+        return registry.of_kind(q["source"], "live-testbed").runs()  # type: ignore[attr-defined]
+    if path == "/api/live":
+        src = registry.of_kind(q["source"], "live-testbed")
+        return src.delta(q["run"], int(q.get("since", "0") or 0))  # type: ignore[attr-defined]
+    if path == "/api/training/runs":
+        return registry.of_kind(q["source"], "live-training").runs()  # type: ignore[attr-defined]
+    if path == "/api/training":
+        return registry.of_kind(q["source"], "live-training").curve(q["run"])  # type: ignore[attr-defined]
     raise KeyError(path)
 
 
@@ -76,6 +89,8 @@ def handler(registry: Registry) -> type[BaseHTTPRequestHandler]:
                     return self._json(api(registry, url.path, q))
                 except KeyError as e:
                     return self._json({"error": f"not found: {e}"}, HTTPStatus.NOT_FOUND)
+                except OSError as e:  # a live source's InfluxDB went away: the page says so and retries
+                    return self._json({"error": f"unavailable: {e}"}, HTTPStatus.SERVICE_UNAVAILABLE)
             name = "index.html" if url.path in ("", "/") else url.path.lstrip("/")
             f = (STATIC / name).resolve()
             if STATIC.resolve() not in f.parents or not f.is_file():

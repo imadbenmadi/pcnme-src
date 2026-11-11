@@ -111,7 +111,7 @@ def _replay(run_dir: str, map_name: str) -> dict[str, Any]:
         "cars": {"ids": cars, "step": STEP_S, "x": xs, "y": ys, "speed": sp, "zone": zn},
         "zones": _zones(d, n),
         "pipes": _pipes(d, n),
-        **_tasks(d, index),
+        **_tasks(d, index, rebase=d.name.endswith("-testbed")),
     }
 
 
@@ -198,10 +198,32 @@ ATTEMPT_TIMES = {"send": "t_send_s", "arrive": "t_at_executor_s", "start": "t_st
                  "finish": "t_finish_s", "car": "t_result_at_car_s", "energy": "energy_j"}  # fmt: skip
 
 
-def _tasks(d: Path, cars: dict[str, int]) -> dict[str, Any]:
-    """Tasks sorted by creation time (the page bisects on it); attempts point at a task by its index."""
+def anchor_offsets(t: dict[str, list[Any]], a: dict[str, list[Any]]) -> dict[str, float]:
+    """Per anchor zone: its clock minus the cars' clocks, for display. On the testbed a task's creation time
+    is its car's clock and its attempts' times are its anchor's (each container's clock starts with it; the
+    metrics use durations only, final-design 5.4). The median over the anchor's tasks of first send - upload -
+    created."""
+    import statistics
+
+    first: dict[str, tuple[int, float]] = {}
+    for tid, att, send in zip(a["task_id"], a["attempt"], a["t_send_s"], strict=True):
+        if send is not None and (tid not in first or att < first[tid][0]):
+            first[tid] = (att, send)
+    gaps: dict[str, list[float]] = {}
+    for tid, created, up, anchor in zip(t["task_id"], t["time_s"], t["upload_s"], t["anchor"], strict=True):
+        if tid in first:
+            gaps.setdefault(anchor, []).append(first[tid][1] - (up or 0.0) - created)
+    return {z: statistics.median(v) for z, v in gaps.items()}
+
+
+def _tasks(d: Path, cars: dict[str, int], rebase: bool = False) -> dict[str, Any]:
+    """Tasks sorted by creation time (the page bisects on it); attempts point at a task by its index.
+    `rebase` (testbed runs): creation times moved onto the anchor's clock (anchor_offsets), display only."""
     t = _table(d, "tasks", ["time_s", "task_id", *TASK_KEEP.values(), *TASK_TIMES.values()])
     a = _table(d, "attempts", ["task_id", *ATTEMPT_KEEP.values(), *ATTEMPT_TIMES.values()])
+    if rebase and t["time_s"]:
+        off = anchor_offsets(t, a)
+        t["time_s"] = [c + off.get(z, 0.0) for c, z in zip(t["time_s"], t["anchor"], strict=True)]
     order = sorted(range(len(t["time_s"])), key=lambda i: t["time_s"][i])
     pos = {t["task_id"][i]: k for k, i in enumerate(order)}
     tasks: dict[str, list[Any]] = {k: [] for k in ("id", "car", "t", "close", *TASK_KEEP, *TASK_TIMES)}

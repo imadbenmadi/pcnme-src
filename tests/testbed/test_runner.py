@@ -47,3 +47,24 @@ def test_the_zones_rows_merge_into_one_run(tmp_path: Path) -> None:
     log = merge(zones, "S2", "greedy", 3000)
     assert log.run_id == "S2-greedy-3000-testbed"
     assert sorted(r["task_id"] for r in log.rows["tasks"]) == ["z1-0", "z1-1", "z2-0"]
+
+
+def test_live_points_are_switched_on_only_for_a_live_run() -> None:
+    """PLAN R2b: measured runs push nothing (PCNME_LIVE empty); a live run names itself for Grafana."""
+    from pcnme.testbed.runner import MONITORING, live_env
+
+    assert live_env(None) == {"PCNME_LIVE": "", "PCNME_LIVE_RUN": ""}
+    assert live_env("S2-pcnme-3000-1111-120000") == {
+        "PCNME_LIVE": "1",
+        "PCNME_LIVE_RUN": "S2-pcnme-3000-1111-120000",
+    }
+    assert MONITORING == ["influxdb", "grafana"]
+
+
+def test_a_live_run_name_is_readable_and_unique_per_start() -> None:
+    from pcnme.pipeline.live import live_name
+
+    a = live_name("S2", "d3qn-greedy", 3000, now=1_800_000_000.0)
+    assert a.startswith("S2-d3qn-greedy-3000-") and a != live_name(
+        "S2", "d3qn-greedy", 3000, now=1_800_000_001.0
+    )

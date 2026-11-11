@@ -42,6 +42,9 @@ x-zone-env: &zone-env
   PCNME_TRACE: ${PCNME_TRACE:-}     # every n-th task's hop times (analysis only, final-design 5.4)
   PCNME_DRAIN: ${PCNME_DRAIN:-30}
   PCNME_SECONDS: ${PCNME_SECONDS:-3600}
+  PCNME_LIVE: ${PCNME_LIVE:-}             # 1: live points to InfluxDB (testbed/live.py; off in measured runs)
+  PCNME_LIVE_RUN: ${PCNME_LIVE_RUN:-}     # the live run's name (the runner sets it)
+  INFLUX_URL: http://10.40.0.3:8086       # on mgmt_net, never shaped; INFLUX_ORG/BUCKET/TOKEN from .env
 
 x-car-env: &car-env
   PCNME_ROLE: car
@@ -352,6 +355,7 @@ services:
     depends_on: [influxdb]
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+      GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 1s   # the live dashboard refreshes every 2 s
       INFLUX_ORG: ${INFLUX_ORG}
       INFLUX_BUCKET: ${INFLUX_BUCKET}
       INFLUX_TOKEN: ${INFLUX_TOKEN}

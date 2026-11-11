@@ -19,6 +19,11 @@
       <label class="toggle"><input type="checkbox" id="compare"> Compare with</label>
       <select id="method2" disabled></select>
     </div>
+    <div class="pickers" id="live-bar" hidden>
+      <label class="field">Live run <select id="live-run"></select></label>
+      <span class="live-state" id="live-state"></span>
+      <button class="text-btn" id="live-go" title="Back to the newest data">Go live</button>
+    </div>
     <div class="spacer"></div>
     <button class="icon-btn" id="hide-bar" title="Hide the bar (H)" aria-label="Hide the bar">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 10l4-4 4 4"/></svg>
@@ -36,6 +41,7 @@
     <section id="stage"></section>
     <aside id="panel" hidden aria-live="polite"></aside>
     <section id="dev" hidden></section>
+    <section id="training" hidden></section>
   </main>
 
   <footer id="controls">

@@ -11,6 +11,8 @@ import { DetailsPanel } from "./views/panel.js";
 import { RunPicker } from "./views/picker.js";
 import { renderPlaceholder } from "./views/placeholder.js";
 import { MissingPane, RunPane } from "./views/run-pane.js";
+import { LiveView } from "./views/live.js";
+import { TrainingView } from "./views/training.js";
 
 const clock = new Clock();
 const controls = new TransportControls(clock);
@@ -21,6 +23,8 @@ const panel = new DetailsPanel($("panel"), {
   onSelectTask: (i) => select({ kind: "task", id: i }, state.sel && state.sel.pane),
 });
 const picker = new RunPicker((sel) => showRuns(sel));
+const liveView = new LiveView({ clock, controls, onSelect: select, setPanes: (panes) => { state.panes = panes; state.sel = null; panel.render(null); draw(true); } });
+const trainingView = new TrainingView();
 
 function select(hit, pane) {
   state.sel = hit ? { ...hit, pane: pane || state.panes[0] } : null;
@@ -50,9 +54,12 @@ async function setSource(id, hash = {}) {
   $("sources").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.id === info.id)));
   state.adapter = adapterFor(info);
   const ready = !!state.adapter;
+  liveView.close(); trainingView.close();
   document.body.classList.toggle("dev-mode", !ready);
+  document.body.classList.toggle("training-mode", ready && info.kind === "live-training");
   $("dev").hidden = ready;
   $("pickers").style.visibility = ready ? "visible" : "hidden";
+  $("pickers").style.display = info.kind === "replay" ? "" : "none";
   if (!ready) {
     clock.pause(); select(null); clearPanes();
     renderPlaceholder($("dev"), info);
@@ -63,6 +70,12 @@ async function setSource(id, hash = {}) {
     const [runs, status] = await Promise.all([state.adapter.listRuns(), state.adapter.status().catch(() => null)]);
     picker.setRuns(runs, status, hash);
     await showRuns(picker.selection());
+  } else if (info.kind === "live-testbed") {
+    select(null); clearPanes();
+    await liveView.open(state.adapter, hash.run);
+  } else if (info.kind === "live-training") {
+    clock.pause(); select(null); clearPanes(); $("stage").innerHTML = "";
+    await trainingView.open(state.adapter, hash.run);
   }
 }
 
@@ -114,8 +127,10 @@ addEventListener("keydown", (e) => {
 });
 
 function parseHash() {
-  const [id, scenario = "S3", method = "pcnme", seed = "3000", mode = "fast", method2] = location.hash.slice(1).split("/");
-  return { id: id || "vfc", want: { scenario, method, seed, mode, method2 } };
+  const parts = location.hash.slice(1).split("/");
+  const [id, scenario = "S3", method = "pcnme", seed = "3000", mode = "fast", method2] = parts;
+  const run = parts.length > 1 ? decodeURIComponent(parts.slice(1).join("/")) : undefined; // #live/<run>, #training/<run>
+  return { id: id || "vfc", want: { scenario, method, seed, mode, method2, run } };
 }
 addEventListener("hashchange", () => { const h = parseHash(); setSource(h.id, h.want); }); // a pasted or typed link
 

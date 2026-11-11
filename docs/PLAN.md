@@ -156,8 +156,9 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
      `kill zone-3` + `kill zone-4`; `restart broker`.
   Decided: Q54 Greedy first, then the agent with CPU-only torch in the zone image; Q55 bind mount, MinIO removed;
   Q56 the in-order jitter bias (+8–24 %) is reported in the gap.
-- [~] **M9.4** (done 11 Nov: every method, S1-S6, 5 seeds, 40 cars, data/vfc/testbed/gap.md, RUN_LOG 10-11 Nov;
-  open: the S3 end-of-run drops to rule out) Same scenario and seed in fast mode and on the testbed, at M9.3's reduced scale, Greedy first (no trained model needed), then the agent: report the gap (16.3). Tool ready: `tools/testbed_gap.py` (fast-mode run with the testbed's fleet and seed, one Markdown table of the 16.3 metrics). Waits on M9.3's open item; the in-order jitter bias (Q56) is part of the gap.
+- [~] **M9.4** (batch 10-11 Nov: every method, S1-S6, 5 seeds, 40 cars, data/vfc/testbed/gap.md; Greedy and
+  Random stand; the learning methods ran frozen on the testbed (bug fixed 11 Nov) and 9 S3 runs lost a zone (bug
+  fixed): rerun the 6 learning methods after QUESTIONS Q62; RUN_LOG 11 Nov) Same scenario and seed in fast mode and on the testbed, at M9.3's reduced scale, Greedy first (no trained model needed), then the agent: report the gap (16.3). Tool ready: `tools/testbed_gap.py` (fast-mode run with the testbed's fleet and seed, one Markdown table of the 16.3 metrics). Waits on M9.3's open item; the in-order jitter bias (Q56) is part of the gap.
 
 ## T — Training and results (the runs behind the paper; the user starts the full runs)
 
@@ -284,8 +285,11 @@ testbed correct"). Claude owns these; an item is done only when its check passes
 
 - [x] **V1 Replay viewer** (done 5 Nov: `uv run python view.py`, src/pcnme/viewer/README.md; every scenario, method and seed, fast mode and testbed, two runs side by side) (after M3): reads one run's Parquet files (the Q28 schema: positions, events, attempts, zones) and draws the VFC grid, the zone circles, the cars and their tasks; play, pause and speed; click a car or a task to see it. The data source sits behind one interface, so V3 only adds another source.
 - [ ] **V2 LuST map** (when LuST is added): the road map drawn from the SUMO net file.
-- [ ] **V3 Live mode** (M9): the same viewer fed live from the MQTT broker over WebSocket.
-- [ ] **V4 Live training**: a `live-training` source and view (episodes, loss, on-time, decisions changing); extension points in src/pcnme/viewer/README.md.
+- [x] **V3 Live mode** (11 Nov): the same viewer fed live, polled from InfluxDB (the zones' live points;
+  `run_live.py`); Grafana dashboard "PCNME live". Built on InfluxDB rather than MQTT: one live store for Grafana
+  and the viewer, and nothing added to the measured broker.
+- [x] **V4 Live training** (11 Nov): the "Training" source: every training's episodes (on time, loss, mean ê,
+  updates), budget and log, live while train.py runs.
 - [ ] **V5 Responsive, polished UI** (Imed, 6 Nov: not responsive enough yet): one layout system for every width
   from a laptop to a projector: the top bar collapses into a menu below about 1100 px (no horizontal scroll),
   the statistics strip wraps cleanly, the side panel becomes an overlay sheet on narrow screens, the map keeps

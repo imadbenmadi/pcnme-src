@@ -30,6 +30,7 @@ ZONES = ["zone-1", "zone-2", "zone-3", "zone-4"]
 CARS = [f"car-{i}" for i in range(1, 11)]
 CARS_PER_CONTAINER = 20  # compose: PCNME_CARS "0-199/10:k" with PCNME_FLEET = 20 x containers
 CORE = ["broker", "broker-net", "wan-gw", "cloud"]
+MONITORING = ["influxdb", "grafana"]  # live runs only (PLAN R2b): never during a measured run
 
 
 def _ms(x: float) -> str:
@@ -70,6 +71,11 @@ def run_env(cfg: Config, scenario: str, seed: int, method: str, seconds: float) 
     }
 
 
+def live_env(live: str | None) -> dict[str, str]:
+    """The zones' live switch (compose: PCNME_LIVE, PCNME_LIVE_RUN); measured runs keep it off."""
+    return {"PCNME_LIVE": "1", "PCNME_LIVE_RUN": live} if live else {"PCNME_LIVE": "", "PCNME_LIVE_RUN": ""}
+
+
 def merge(zones_dir: Path, scenario: str, method: str, seed: int) -> RunLog:
     """One run's rows from the zones' files (each zone logs the tasks it anchored)."""
     log = RunLog(scenario, method, seed, "testbed")
@@ -93,9 +99,13 @@ def run(
     data_dir: Path,
     containers: int = 10,
     models: Path | None = None,
+    live: str | None = None,
 ) -> Path:
     """One testbed run, end to end; returns the run's results directory. `containers` car containers of 20
-    cars each; the per-zone load is the scenario's for any fleet (lambda_car scales with it, 18)."""
+    cars each; the per-zone load is the scenario's for any fleet (lambda_car scales with it, 18).
+
+    `live`: a live run's name. The zones push live points (testbed/live.py) to InfluxDB, which starts with
+    Grafana and stays up after the run (its data kept between live runs), for Grafana and the viewer."""
     log = RunLog(scenario, method, seed, "testbed")
     zones_dir = data_dir / "results" / log.run_id / "zones"
     zones_dir.mkdir(parents=True, exist_ok=True)
@@ -105,8 +115,14 @@ def run(
     env["PCNME_RESULTS_HOST"] = str(data_dir / "results")
     env["PCNME_FLEET"] = str(CARS_PER_CONTAINER * containers)
     env["PCNME_MODELS_HOST"] = str(models or data_dir.parent / "train")
-    _compose(env, "down", "-v", "--remove-orphans")
-    _compose(env, "up", "-d", "--build", *CORE, *ZONES, *CARS[:containers])
+    env.update(live_env(live))
+    testbed = [*CORE, *ZONES, *CARS[:containers]]
+    if live:
+        _compose(env, "rm", "-s", "-f", *testbed)  # InfluxDB keeps the earlier live runs
+        _compose(env, "up", "-d", "--build", *MONITORING, *testbed)
+    else:
+        _compose(env, "down", "-v", "--remove-orphans")
+        _compose(env, "up", "-d", "--build", *testbed)
     t0 = time.monotonic()
     for ev in cfg.testbed.events:  # 15.7, in time order
         time.sleep(max(0.0, t0 + ev.at_s - time.monotonic()))
@@ -120,7 +136,10 @@ def run(
         [*COMPOSE, "logs", "--no-color"], env={**os.environ, **env}, capture_output=True, text=True
     )
     (zones_dir.parent / "containers.log").write_text(logs.stdout + logs.stderr, encoding="utf-8")
-    _compose(env, "down", "-v", "--remove-orphans")
+    if live:
+        _compose(env, "rm", "-s", "-f", *testbed)  # Grafana and InfluxDB stay up to look at the run
+    else:
+        _compose(env, "down", "-v", "--remove-orphans")
     for pattern in ("counts-*.json", "trace-*.jsonl"):  # diagnosis counts and hop traces (PLAN Q1)
         for f in (data_dir / "results").glob(pattern):
             f.replace(zones_dir.parent / f.name)

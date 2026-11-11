@@ -30,5 +30,10 @@ def map_source(map_name: str, label: str) -> Source:
 
 
 def default_registry() -> Registry:
-    """What `view.py` shows: the VFC grid and LuST, each with whatever runs and traces exist."""
-    return Registry([map_source("vfc", "VFC grid"), map_source("lust", "LuST (Luxembourg)")])
+    """What `view.py` shows: the VFC grid and LuST, each with whatever runs and traces exist; the live testbed
+    (InfluxDB, when a live run pushes to it); the training of the learning methods."""
+    from pcnme.viewer.sources.live import live_source
+    from pcnme.viewer.sources.training import training_source
+
+    return Registry([map_source("vfc", "VFC grid"), map_source("lust", "LuST (Luxembourg)"), live_source(),
+                     training_source()])  # fmt: skip

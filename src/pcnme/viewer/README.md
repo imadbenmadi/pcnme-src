@@ -5,7 +5,7 @@ uv run python view.py            # http://127.0.0.1:8765, opens the browser
 uv run python view.py --port 9000 --no-browser
 ```
 
-Version 1 replays finished runs: every scenario, method and seed under `data/<map>/results/runs/`, and the
+It replays finished runs: every scenario, method and seed under `data/<map>/results/runs/`, and the
 testbed runs under `data/<map>/testbed/results/`. Two runs on the same seed can be compared side by side. Everything
 on screen comes from a run's logs (METRICS.md); nothing is simulated in the page.
 
@@ -82,16 +82,19 @@ run or is being fed live.
 A replay source also answers `status()`: the design's scenarios, methods and seeds, and per scenario x method
 "evaluated" (with its seeds), "trained" or "not trained", plus notes per scenario.
 
-Planned kinds:
+The live kinds (built 11 Nov):
 
-- `live-testbed` (PLAN V3): the server subscribes to the testbed's MQTT broker and streams the same records the
-  logs hold (positions, zone rows, task and attempt rows) as server-sent events or over a WebSocket at
-  `/api/stream?source=...`. The adapter appends them to a `LiveModel` that implements the model contract with
-  growing arrays; the clock follows the newest time (seeking back replays the buffer). CityView, the panel and the
-  statistics need no change.
-- `live-training`: the training loop (pipeline/train.py) already reports per episode; the server streams those
-  reports (episode, on-time share, mean ê, loss, updates) and sampled decisions. It gets its own model and views
-  (training curves, a decision table), chosen by kind in `main.js`.
+- `live-testbed` (`sources/live.py`, PLAN V3): a testbed run started with `run_live.py` pushes live points to
+  InfluxDB (`testbed/live.py`). The page polls `/api/live?source=live&run=...&since=<cursor>` once a second; the
+  answer holds the tasks closed since the cursor (the replay's columns), the zones' samples (slots and the agent's
+  online learning) and the cars' positions. `LiveBuffer` (core/model.js) keeps them and `liveModel()` rebuilds a
+  ReplayModel after each poll, so CityView, the panel and the statistics read a live run through the same contract.
+  The clock runs in real time 3 s behind the newest data (a task is known once its anchor reports it closed).
+- `live-training` (`sources/training.py`, PLAN V4): every training under `data/<map>/train/` (episodes.csv,
+  train.log, training.json), "running" while train.py writes to it; `views/training.js` draws the curves and the
+  log and polls a running one every 5 s.
+
+Both are polled rather than streamed: simple, standard library only, and either side can restart.
 
 ## Add a view
 

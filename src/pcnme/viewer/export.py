@@ -47,7 +47,7 @@ def export(out: Path, seeds: set[int] | None, registry: Registry | None = None, 
     shutil.copy2(HERE / "standalone.py", out / "serve.py")
     (out / "start.bat").write_bytes(b"@echo off\r\npython serve.py\r\npause\r\n")
     registry = registry or default_registry()
-    sources = registry.describe()
+    sources = [s for s in registry.describe() if s["kind"] == "replay"]  # live kinds need the repo
     data = out / "data"
     (data / "runs").mkdir(parents=True, exist_ok=True)
     n = 0

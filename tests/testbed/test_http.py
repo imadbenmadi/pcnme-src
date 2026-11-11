@@ -221,3 +221,23 @@ def test_a_post_carries_the_tasks_input_bytes_and_the_target_reads_the_request()
     caller.run_for(0.5)
     tclock.stop()
     assert sum(seen) > 76_000 and target.got and len(out) == 1
+
+
+def test_an_upload_whose_request_timed_out_does_not_stop_the_zones_loop() -> None:
+    """Found 11 Nov (a live run): the request timed out on a slow loop, its future was cancelled, and t_rx
+    then set a result on it: InvalidStateError on the loop thread, and the zone stopped."""
+    from fastapi.testclient import TestClient
+
+    from pcnme.ids import TaskId
+    from pcnme.testbed.codec import encode
+
+    zone = FakeZone()
+    clock = RealClock()
+    threading.Thread(target=clock.run_for, args=(2.0,), name="target-loop", daemon=True).start()
+    http = TestClient(make_app(clock, zone, timeout=0.05), raise_server_exceptions=False)
+    assert http.post("/tasks", content=encode(_upload(1))).status_code == 504
+    ran = threading.Event()
+    clock.call_soon(lambda: zone.rx.pop(TaskId("c1", 0, 1))())  # t_rx after the request gave up
+    clock.call_soon(ran.set)
+    assert ran.wait(1.0)  # the loop is still running
+    clock.stop()

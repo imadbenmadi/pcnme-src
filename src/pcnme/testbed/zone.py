@@ -67,6 +67,7 @@ def build_zone(
     *,
     net: NetLoop,
     models: Path = Path("/models"),
+    also_on_close: Any = None,
 ) -> tuple[Zone, list[TaskRecord]]:
     """One zone as the city builds it (experiments/city.py), on a real network."""
     from pcnme.experiments.runner import method_config
@@ -81,6 +82,12 @@ def build_zone(
     sites = [Site(z, *lay.zone_positions_m[z], lay.zone_radius_m) for z in active if z != zone_id]
     placement = zone_placement(cfg, streams, zone_id, method, scenario, seed, models)
     closed: list[TaskRecord] = []
+
+    def on_close(r: TaskRecord) -> None:
+        closed.append(r)
+        if also_on_close is not None:
+            also_on_close(r)  # the live metrics (testbed/live.py), off the decision path
+
     zone = Zone(
         zone_id,
         clock,  # type: ignore[arg-type]
@@ -95,18 +102,21 @@ def build_zone(
         bus=bus,
         start_sites=tuple(sites),
         fog_classes=sc.fog,
-        on_close=closed.append,
+        on_close=on_close,
     )
     # The other active zones (deployment configuration, 7.5.2): the predictor reads their ids (10.2); the
     # calls to them go over HTTP, never through these entries.
     zone.peers = {z: None for z in active if z != zone_id}  # type: ignore[misc]
+    attach = getattr(placement, "attach", None)
+    if attach is not None:  # a learning method learns online from its zone's transitions, as in the city
+        attach(zone)  # (experiments/city.py; 13.5, Q42)
     own = f"http://127.0.0.1:{PORT}"  # the watchdog probes its own executor too (9.4), as in fast mode
     sizes = {name: round(t.input_bits / 8) for name, t in cfg.task_types.items()}
     zone.calls = HttpCalls(clock, {**urls, zone_id: own}, net, input_bytes=sizes)
     return zone, closed
 
 
-def zone_app(clock: RealClock, zone: Zone, closed: list[TaskRecord], net: NetLoop) -> Any:
+def zone_app(clock: RealClock, zone: Zone, closed: list[TaskRecord], net: NetLoop, live: Any = None) -> Any:
     from fastapi import HTTPException, Request, Response
 
     from pcnme.testbed.codec import decode, encode
@@ -135,6 +145,8 @@ def zone_app(clock: RealClock, zone: Zone, closed: list[TaskRecord], net: NetLoo
         def each() -> list[str]:
             for f in fixes:  # each fix as its own message (5.2)
                 zone.gps(f.car_id, f.x, f.y, f.vx, f.vy, f.car_time)
+                if live is not None:
+                    live.fix(f.car_id, f.x, f.y, f.vx, f.vy)
             # QUESTIONS Q61: the cars this zone does not serve (T_leave fired, 9.6): they attach again
             return [f.car_id for f in fixes if f.car_id not in zone._cars]
 
@@ -183,6 +195,14 @@ def write_rows(
     return path
 
 
+def live_tags(zone_id: str) -> dict[str, str]:
+    """The tags of every live point: the live run (the runner's PCNME_LIVE_RUN), scenario, method, seed."""
+    scenario, seed = os.environ.get("PCNME_SCENARIO", "S2"), os.environ.get("PCNME_SEED", "3000")
+    method = os.environ.get("PCNME_METHOD", "greedy")
+    run = os.environ.get("PCNME_LIVE_RUN") or f"{scenario}-{method}-{seed}-live"
+    return {"run": run, "scenario": scenario, "method": method, "seed": seed, "zone": zone_id}
+
+
 def urls_from_env(spec: str) -> dict[str, str]:
     return dict(kv.split("=", 1) for kv in spec.split(",") if kv)
 
@@ -200,6 +220,11 @@ def main() -> None:  # pragma: no cover - runs in the container (the compose tes
     if tracer is not None:  # analysis only (final-design 5.4)
         zone_module.HOP = tracer.mark
     bus = MqttBus(clock, os.environ.get("MQTT_HOST", "broker"))
+    from pcnme.testbed.live import LivePusher, LiveZone
+
+    zone_id = os.environ["PCNME_ZONE_ID"]
+    pusher = LivePusher.from_env(live_tags(zone_id))  # off unless PCNME_LIVE=1 (PLAN R2b)
+    hook: list[LiveZone] = []
     zone, closed = build_zone(
         cfg,
         os.environ["PCNME_ZONE_ID"],
@@ -211,8 +236,14 @@ def main() -> None:  # pragma: no cover - runs in the container (the compose tes
         os.environ.get("PCNME_METHOD", "greedy"),
         net=(net := NetLoop(clock)),
         models=Path(os.environ.get("PCNME_MODELS", "/models")),
+        also_on_close=lambda r: hook[0].closed(r) if hook else None,
     )
-    serve(zone_app(clock, zone, closed, net))
+    live = None
+    if pusher is not None:
+        live = LiveZone(pusher, zone, zone._cfg, clock)
+        hook.append(live)
+        live.start()
+    serve(zone_app(clock, zone, closed, net, live))
     seconds = float(os.environ.get("PCNME_SECONDS", "3600")) + float(os.environ.get("PCNME_DRAIN", "30"))
     if os.environ.get("PCNME_PROFILE"):  # where the loop thread spends its time (testbed tuning)
         import cProfile
@@ -231,6 +262,8 @@ def main() -> None:  # pragma: no cover - runs in the container (the compose tes
         counts.write_text(json.dumps(diag, indent=1), encoding="utf-8")  # diagnosis (PLAN Q1)
         if tracer is not None:
             tracer.write(Path(os.environ["PCNME_RESULTS"]))
+    if pusher is not None:
+        pusher.close()
 
 
 if __name__ == "__main__":  # pragma: no cover
