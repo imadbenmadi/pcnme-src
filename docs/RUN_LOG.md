@@ -289,3 +289,28 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   task onto its anchor's clock (first send - upload; replay.anchor_offsets).
 - What stands of the batch: Greedy and Random, every scenario (no learning, no zone lost). To redo after Q62:
   the 6 learning methods on the testbed, every scenario (180 runs, about 9-12 h).
+
+## 11 Nov (later): Q62 trainer, pre-flight check, the testbed's long-run slowdown fixed
+
+- Q62 (Imed): each learning zone's online trainer runs in its own process with its own CPU (2 CPUs per zone);
+  the zone sends it the samples and installs its weights between two decisions (testbed/trainer.py,
+  final-design 15.5). Test: tests/testbed/test_entry.py fails if a testbed agent is not connected to its trainer.
+- Pre-flight (pipeline/testbed.py health, preflight): before a batch, one short S2 run per method must show every
+  zone's rows (no crash), online updates in every learning zone through a live trainer, and at most 2 % of the
+  tasks without an ack; during the batch a crash or a learner without updates stops it. `--archive-frozen` moves
+  the learning methods' rows (they ran frozen) to data/vfc/testbed/archive/frozen-bug/ labelled "frozen (bug)";
+  `--redo` reruns chosen cells (old rows to archive/superseded/). Batch rows keep their commit; only the config
+  and setup must match. The new testbed settings (zone CPUs, trainer sync, pre-flight) are left out of the
+  config hash (maps.TESTBED_RUNTIME), so trained models and results keep their identity.
+- First 10-minute live run (S2, PCNME, 40 cars): every zone learned (3 677-5 994 updates), but on time fell from
+  71-82 % (minutes 0-4) to 0 % from minute 6. A 10-minute Greedy live run fell to 0 % from minute 1: not the
+  learning. A 3-minute Greedy run without live points stayed healthy but declined (96 % -> 73 % by 120 s).
+- Cause: zone.records keeps every task a zone anchored, and 6D.14's republish on a car attach walked all of them;
+  on the testbed cars attach again often (T_leave, Q61), so every attach got slower through the run until the
+  zone's loop fell behind (results reached the cars after D + L_max: no ack). Fixed: each zone keeps the open
+  records of each car (zone/zone.py `_open_by_car`); same behaviour and order, fast mode bit-identical (the pinned
+  event-log hash passes). The 60 s batch runs were mostly before the slowdown set in; S3 (the most tasks) the most
+  exposed.
+- 10-minute live run after the fix (S2, PCNME, 40 cars, learning on): on time 80.0 % (per minute 85, 88, 79, 78,
+  87, 80, 76, 85, 75, 70 %), dropped 17.2 %, failed 1.4 %, health ok; online updates z1 9 773, z2 5 338, z3 5 965,
+  z4 4 137, every trainer alive. The slight decline over the run is still to explain (online learning, or load).

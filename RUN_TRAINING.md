@@ -106,7 +106,20 @@ The whole batch (every method, S1-S6, 5 seeds, each next to its fast-mode twin; 
 uv run python run_testbed.py --maps vfc
 ```
 
-Results: `data/vfc/testbed/summary.csv`, `gap.md`, `gap.csv`.
+Results: `data/vfc/testbed/summary.csv`, `gap.md`, `gap.csv`. Each batch starts with a pre-flight check (one short
+S2 run per method) and refuses to start if a zone crashed, a learning zone made no online updates or more than
+2 % of the tasks ended without an ack.
+
+After the 11 Nov fixes (the learning methods ran frozen on the testbed before; a long-run slowdown), first archive
+the frozen rows once, then rerun:
+
+```bat
+uv run python run_testbed.py --maps vfc --archive-frozen
+uv run python run_testbed.py --maps vfc --scenarios S2 S3 --methods pcnme greedy qeco d3qn-greedy --redo
+```
+
+The second is 40 runs (2 scenarios x 4 methods x 5 seeds, about 2.5 h plus the pre-flight); `--redo` moves the
+earlier Greedy S2/S3 rows to `archive/superseded/`.
 
 ## Live: watch the testbed and the training as they go
 

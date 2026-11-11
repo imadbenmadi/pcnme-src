@@ -392,6 +392,9 @@ class Zone:
         self._placement = placement
         self.anchor = AnchorTable(zone_id)
         self.records: dict[object, TaskRecord] = {}
+        # the open records of each car, in creation order: 6D.14's republish on an attach looks at these only
+        # (a closed record has no copy to republish), not at every record of the run (PLAN Q1, 11 Nov)
+        self._open_by_car: dict[str, dict[object, TaskRecord]] = {}
         # The run's log of every task, keyed by (anchor, task id): a simulation record, not zone state, so a
         # serving zone can note the deliveries of a task anchored elsewhere (shared by the city).
         self.ledger = ledger if ledger is not None else {}
@@ -512,6 +515,7 @@ class Zone:
         )
         rec = TaskRecord(task=task, anchor=self.zone_id, rate=rate, upload_start=now, radio_delay=d)
         self.records[task.task_id] = rec
+        self._open_by_car.setdefault(task.car_id, {})[task.task_id] = rec
         self.ledger[(self.zone_id, task.task_id)] = rec
 
         def arrived(tr: RadioTransfer) -> None:
@@ -532,7 +536,8 @@ class Zone:
         up = self._uploads.pop(task_id, None)
         if up is None or not self.uplink.cancel(up):
             return False
-        del self.records[task_id]
+        rec = self.records.pop(task_id)
+        self._open_by_car.get(rec.task.car_id, {}).pop(task_id, None)
         del self.ledger[(self.zone_id, task_id)]
         return True
 
@@ -1279,9 +1284,9 @@ class Zone:
     def _republish_for(self, car_id: str) -> None:
         """6D.14: on a new attach, republish the copy of every open task of the car that has a result but
         no ack yet."""
-        for rec in self.records.values():
+        for rec in list(self._open_by_car.get(car_id, {}).values()):
             open_ = self.anchor.is_open(rec.task.task_id)
-            if open_ and rec.task.car_id == car_id and rec.copy is not None and rec.confirm is None:
+            if open_ and rec.copy is not None and rec.confirm is None:
                 self._republish(rec)
 
     def _anchor_ack(self, ack: AckMessage) -> None:
@@ -1314,6 +1319,7 @@ class Zone:
         """6E.15: close; cancel any other live attempt; stop every timer."""
         now = self._clock.now
         self.anchor.close(rec.task.task_id, outcome, now)  # raises if closed twice
+        self._open_by_car.get(rec.task.car_id, {}).pop(rec.task.task_id, None)
         rec.copy = None  # 6E.15: the result copy is deleted
         if rec.end_timer is not None:
             self._clock.cancel(rec.end_timer)
