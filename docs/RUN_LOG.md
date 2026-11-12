@@ -326,3 +326,12 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 - Reading: with online learning on the testbed PCNME is within noise of its frozen self in S2 and S3; QECO gets
   much worse when it learns on the testbed (its LSTM learner); S3 (rho 1.5) overloads the real zones far more than
   fast mode models. Archived: data/vfc/testbed/archive/frozen-bug/ (frozen learners), archive/superseded/.
+
+## 12 Nov: testbed rerun S1, S4, S5, S6 (same 4 methods, 5 seeds): the testbed table is complete for them
+
+- 80/80 runs healthy. On time, fast -> testbed: S1 Greedy 99.9 -> 98.4 %, D3QN + greedy 98.3, PCNME 97.1, QECO 92.8;
+  S4 Greedy 91.8 -> 61.9, D3QN + greedy 49.1, PCNME 39.8, QECO 15.0; S5 Greedy 62.2, D3QN + greedy 47.7, PCNME
+  39.7, QECO 14.8; S6 Greedy 97.2 -> 71.1, PCNME 62.3, D3QN + greedy 60.1, QECO 20.2 (gap.md).
+- Reading: on the testbed Greedy keeps the most in every scenario but S3, where the learners keep about twice its
+  on-time share. The tight scenarios (S4, S5: 50 ms) lose the most; PCNME's p99 there is 4x Greedy's (more
+  forwarding, each crossing a real hop). QECO learning online degrades in every loaded scenario.
