@@ -1,0 +1,33 @@
+{
+ "identity": {
+  "config_hash": "fae3529caa2dafbe",
+  "commit": "e28cf936c487",
+  "plan": {
+   "map": "lust",
+   "scenarios": [
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5",
+    "S6"
+   ],
+   "windows": 6,
+   "population": 40,
+   "generations": 20,
+   "budget": 1000000,
+   "train_seconds": null,
+   "n_cars": null,
+   "pretrain_updates": null,
+   "workers": null,
+   "checkpoint_every_s": null,
+   "smoke": false
+  }
+ },
+ "started": "2026-11-12T07:15:39+01:00",
+ "map": "lust",
+ "seeds": "training 2000-, NSGA-II 1000-",
+ "finished": "2026-11-13T17:53:11+01:00",
+ "w_star": 0.3439414887451465,
+ "hours": 34.62
+}

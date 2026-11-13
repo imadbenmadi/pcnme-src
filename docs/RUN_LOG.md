@@ -335,3 +335,10 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 - Reading: on the testbed Greedy keeps the most in every scenario but S3, where the learners keep about twice its
   on-time share. The tight scenarios (S4, S5: 50 ms) lose the most; PCNME's p99 there is 4x Greedy's (more
   forwarding, each crossing a real hop). QECO learning online degrades in every loaded scenario.
+
+## 12-13 Nov: LuST trained (every method, S1-S6)
+
+- `train.py --maps lust --windows 6 --population 40 --generations 20 --budget 1000000`: traces, NSGA-II (36
+  windows; S3 at the 08:00 peak about 900 tasks per window, the slowest), w* = 0.344 (VFC 0.414), demonstrations,
+  then the 36 trainings (D3QN family 3-5 h each, PPO 1.5-2 h, the LSTM baselines 11-19 h). Finished 13 Nov 17:53.
+- Backup: F:/projects/pcnme-results-backup/lust-train-2026-11-13. Next: `evaluate.py --maps lust`.
