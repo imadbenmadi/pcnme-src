@@ -202,10 +202,14 @@ def health(run_dir: Path, method: str, max_no_ack: float, zones: int = 4) -> lis
             problems.append(f"a container raised: {raised[-1]}")
     if method in LEARNING:
         for z, c in sorted(counts.items()):
-            if c.get("agent updates", 0) <= 0:
+            if "trainer alive" not in c:
                 problems.append(f"{z}: no online updates (agent not connected to its trainer?)")
-            elif c.get("trainer alive", 0) != 1:
+            elif c["trainer alive"] != 1:
                 problems.append(f"{z}: its trainer process died")
+            elif c.get("trainer samples sent", 0) > 0 and c.get("agent updates", 0) <= 0:
+                problems.append(f"{z}: its trainer got samples but made no update")
+            # sent nothing yet: PPO learns per full rollout (rl.ppo.rollout decisions), which a quiet zone may
+            # not fill in a short run (S1 z2: 899 of 1 024, 14 Nov): connected, nothing to learn from yet
     tasks = _task_count(run_dir)
     no_ack = sum(c.get("no ack by the end (drop)", 0) for c in counts.values())
     if tasks and no_ack / tasks > max_no_ack:

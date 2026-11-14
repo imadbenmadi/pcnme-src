@@ -112,7 +112,8 @@ def test_health_finds_a_crashed_zone_a_learner_that_does_not_learn_and_lost_acks
     made online updates through a live trainer, and few tasks ended without an ack."""
     from pcnme.pipeline.testbed import health
 
-    good = {"agent updates": 120, "trainer alive": 1, "no ack by the end (drop)": 0}
+    good = {"agent updates": 120, "trainer alive": 1, "trainer samples sent": 480,
+            "no ack by the end (drop)": 0}  # fmt: skip
     zones = ["z1", "z2", "z3", "z4"]
     ok = _run_dir(tmp_path / "a", zones, dict.fromkeys(zones, good))
     assert health(ok, "pcnme", 0.02) == []
@@ -124,6 +125,10 @@ def test_health_finds_a_crashed_zone_a_learner_that_does_not_learn_and_lost_acks
     frozen = _run_dir(tmp_path / "c", zones, {**dict.fromkeys(zones, good), "z3": {"agent updates": 0}})
     assert health(frozen, "pcnme", 0.02) == ["z3: no online updates (agent not connected to its trainer?)"]
     assert health(frozen, "greedy", 0.02) == []  # a rule does not learn
+    stuck = {"agent updates": 0, "trainer alive": 1, "trainer samples sent": 400}
+    idle = {"agent updates": 0, "trainer alive": 1, "trainer samples sent": 0}  # PPO: no full rollout yet
+    d = _run_dir(tmp_path / "d", zones, {**dict.fromkeys(zones, good), "z2": idle, "z3": stuck})
+    assert health(d, "vfc-ppo", 0.02) == ["z3: its trainer got samples but made no update"]
 
 
 def test_a_client_that_hung_up_is_not_a_crash_but_any_other_exception_is() -> None:
