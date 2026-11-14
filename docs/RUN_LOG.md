@@ -342,3 +342,11 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   windows; S3 at the 08:00 peak about 900 tasks per window, the slowest), w* = 0.344 (VFC 0.414), demonstrations,
   then the 36 trainings (D3QN family 3-5 h each, PPO 1.5-2 h, the LSTM baselines 11-19 h). Finished 13 Nov 17:53.
 - Backup: F:/projects/pcnme-results-backup/lust-train-2026-11-13. Next: `evaluate.py --maps lust`.
+
+## 14 Nov: LuST evaluated (every method, S1-S6, 20 seeds, 960 runs)
+
+- `evaluate.py --maps lust`. Results: data/lust/results/ (report.md, paired.md, figures), docs/RESULTS_LUST.md
+  (tables and findings). Backup: F:/projects/pcnme-results-backup/lust-eval-2026-11-14.
+- On time: S1/S2 every method 98-100 %; S3 (08:00 peak) 43-54 %, Greedy 52.6 and D3QN + greedy 53.7 beat PCNME
+  49.4 (-3.3 pp vs Greedy, p = 0.005), unlike the grid; S4/S5 PCNME beats Greedy by 0.9 / 1.2 pp (p < 0.001);
+  S6 PCNME 96.4 vs Greedy 97.0 (n.s.).
