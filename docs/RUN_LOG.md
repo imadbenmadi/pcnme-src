@@ -350,3 +350,10 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 - On time: S1/S2 every method 98-100 %; S3 (08:00 peak) 43-54 %, Greedy 52.6 and D3QN + greedy 53.7 beat PCNME
   49.4 (-3.3 pp vs Greedy, p = 0.005), unlike the grid; S4/S5 PCNME beats Greedy by 0.9 / 1.2 pp (p < 0.001);
   S6 PCNME 96.4 vs Greedy 97.0 (n.s.).
+
+## 14 Nov: F: full, backups moved to D:
+
+- The LuST evaluation backup (to F:) filled F: (0 GB free) and Docker Desktop could not start. Every backup moved to
+  D:\pcnme-results-backup (a separate SSD; 92.6 GB moved, then the LuST evaluation copied fresh: 9 626 files,
+  66.54 GB, identical to data/lust/results); the incomplete copy on F: deleted. F: 93.6 GB free, D: about 45 GB.
+  Earlier entries name the old place F:/projects/pcnme-results-backup.
