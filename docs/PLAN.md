@@ -254,7 +254,7 @@ testbed correct"). Claude owns these; an item is done only when its check passes
   viewer, in Grafana and in the run's Parquet files.
 - [ ] **Q7 LuST passes Q1-Q6 too** before its results are reported.
 
-## B — Backups (outside the repository: F:\projects\pcnme-results-backup\<map>-<date>\)
+## B — Backups (on another disk than the data: D:\pcnme-results-backup\<map>-<date>\; moved from F: on 14 Nov when F: was full)
 
 - [x] **B0** vfc-2026-11-05: data/vfc after the full training and evaluation (trained models, Parquet runs,
   testbed runs). It holds the tight-deadline S6 too (models, NSGA-II windows, runs).
