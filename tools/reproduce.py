@@ -22,7 +22,7 @@ from typing import Any
 def rerun(args: tuple[str, str, str, int, str]) -> dict[str, Any]:
     from pcnme.config import config_from_mapping
     from pcnme.experiments.city import City
-    from pcnme.experiments.runner import RunSpec, method_config, placement
+    from pcnme.experiments.runner import RunSpec, method_config, placement, report_constants, training_info
     from pcnme.maps import map_source
     from pcnme.metrics.stats import METRICS, run_metrics
     from pcnme.paths import MapPaths
@@ -41,7 +41,16 @@ def rerun(args: tuple[str, str, str, int, str]) -> dict[str, Any]:
     factory, _ = placement(source, cfg, spec, trained, seed)
     city = City(cfg, scenario, factory, seed, None, usage="evaluation", method_name=method)
     city = city.run(cfg.fast_mode.episode_length)
-    d = city.write(Path(out), {"method": method, "usage": "evaluation", "map": map_name})
+    extra = {
+        "method": method,
+        "usage": "evaluation",
+        "reward_w": cfg.reward.w,
+        "map": map_name,
+        "models_from": map_name,
+        "training": training_info(trained),
+        **report_constants(cfg, scenario),
+    }  # as evaluate.py: E_ref and the idle powers for the totals
+    d = city.write(Path(out), extra)
     m = run_metrics(d, cfg.fast_mode.early_decisions).metrics
     return {
         "map": map_name,
