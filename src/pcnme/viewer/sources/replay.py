@@ -59,6 +59,11 @@ class ParquetSource:
     def replay(self, run_id: str) -> dict[str, Any]:
         return _replay(str(self._dir(run_id)), self.map_name)
 
+    def modified(self, run_id: str) -> float:
+        """When the run was last written (a rerun under the same id is newer than its old replay)."""
+        d = self._dir(run_id)
+        return max(f.stat().st_mtime for f in d.iterdir() if f.is_file())
+
 
 def _table(d: Path, name: str, columns: list[str]) -> dict[str, list[Any]]:
     import pyarrow.parquet as pq

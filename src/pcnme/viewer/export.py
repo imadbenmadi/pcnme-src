@@ -66,7 +66,8 @@ def export(out: Path, seeds: set[int] | None, registry: Registry | None = None, 
         folder.mkdir(parents=True, exist_ok=True)
         for k, r in enumerate(runs, 1):
             f = folder / f"{r.run_id}.json.gz"
-            if not f.exists():  # a replay never changes once a run is written
+            stale = f.exists() and f.stat().st_mtime < src.modified(r.run_id)
+            if not f.exists() or stale:  # a run rerun under its id (testbed fixes, S6) replaces its replay
                 body = json.dumps(src.replay(r.run_id), separators=(",", ":"), allow_nan=False).encode()
                 f.write_bytes(gzip.compress(body, 6))
             n += 1
