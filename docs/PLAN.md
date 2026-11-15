@@ -107,13 +107,14 @@ Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.
 - [x] Baselines in the agent's seat with the same inputs, masks, reward and budget (16.1): D3QN from scratch, D3QN + greedy expert, VFC PPO, Tang & Wong, QECO, Greedy, Random, NSGA-II knee reference.
 - [x] Scenario runner S1–S6, seeds from the evaluation range only, metrics and CIs (16.3), ablations and sweeps (16.4).
 
-Open (not built in M7):
+Not built in M7; **Future work** (Imed, 16 Nov: no ablations, no longer training runs). The 16.4 runs (expert data, FedAvg variants, state period, sweeps) are not run either:
 
-- [ ] Queue-order variants: FIFO, classes + FIFO, the full rule (8.7; 16.4).
-- [ ] The fixed refusal penalty ablation (16.4; only if the refusal rate stays high).
-- [ ] IQL instead of DQfD (16.4).
-- [ ] 60 inputs: both slot types per option (16.4).
-- [ ] Zone join, zone kill, broker restart (15.7; 16.4).
+- [-] Queue-order variants: FIFO, classes + FIFO, the full rule (8.7; 16.4). Future work.
+- [-] The fixed refusal penalty ablation (16.4). Future work.
+- [-] IQL instead of DQfD (16.4). Future work.
+- [-] 60 inputs: both slot types per option (16.4). Future work.
+- [-] Zone join, zone kill, broker restart (15.7; 16.4; Q57). Future work.
+- [-] The training-budget test (a budget larger than 1 M decisions, QUESTIONS Q41). Future work.
 - [x] Missing metrics (16.3), 15 Nov: next-zone acc@1 and T_exit error, delivery success after a zone change, decisions until the on-time rate is stable, the hypervolume of the fronts (tools/extra_metrics.py; data/<map>/results/extra.md; definitions QUESTIONS Q63, stand-ins).
 
 ## M8 — Federated learning (phase 2)
@@ -123,7 +124,7 @@ Open (not built in M7):
 ## M9 — Docker testbed
 
 Skeleton already in `docker/` (Dockerfile, compose with every container and network of 15.4, `net-setup.sh` shaping, Grafana provisioning). Needs the home desktop (Docker Desktop, WSL2 backend).
-- [~] **M9.1** Entry points `pcnme.testbed.{zone,car,cloud,runner}` on the same zone/car/cloud code as fast mode, with MQTT and HTTP adapters behind the bus and call interfaces (15.2). FedAvg + fine-tuning (Q51): on the testbed the K fine-tune steps take real time; the personal copy takes over only after they finish, and the old model decides meanwhile (13.7).
+- [x] **M9.1** Entry points `pcnme.testbed.{zone,car,cloud,runner}` on the same zone/car/cloud code as fast mode, with MQTT and HTTP adapters behind the bus and call interfaces (15.2). FedAvg + fine-tuning (Q51): on the testbed the K fine-tune steps take real time; the personal copy takes over only after they finish, and the old model decides meanwhile (13.7).
   Steps (branch `m9-1-testbed`, one commit each, tests first):
   1. [x] `testbed/clock.py` RealClock: EventClock's interface on real time; other threads hand work in with `call_soon`.
   2. [x] `testbed/codec.py` payloads ⇄ JSON (registered types only).
@@ -131,9 +132,9 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   4. [x] `bus/calls.py` Calls / FastCalls: the zone's POST/GET/DELETE go through `zone.calls`; `testbed/http.py` HttpCalls + `make_app` (FastAPI). Fast mode unchanged: `tests/zone/test_calls_golden.py` pins an S2 run digest.
   5. [x] `testbed/radio.py`: the Shannon pipe runs in software at the zone's intake (15.3); the car's POST /tasks carries `Upload(task, b_car, rate)` and is answered at t_rx (409 if cut, 9.7); `software_radio()` leaves the base radio delays to netem; `RemoteCar` posts results to the car container and hands its Confirm to `Zone.car_confirmed`.
   6. [x] Entry points `pcnme.testbed.{zone,car,cloud}` (+ `serve.py`), Q53 built (no modelled delays, C7 from the written body, own-backhaul bookkeeping kept); zone endpoints POST /cars, POST /gps, GET /closed, GET /status; `@pytest.mark.testbed` compose test (broker, wan-gw, cloud, 4 zones, car-1 with 20 cars): tasks close on time end to end.
-  7. [~] FedAvg + fine-tuning on the testbed (not built; QUESTIONS Q64: it belongs to the trainer process since Q62), and the learning methods in the containers (done 5 Nov): **Q54** (proposal: Greedy for M9.2–M9.4 first; then CPU torch in the zone image).
+  7. [-] FedAvg + fine-tuning on the testbed: future work (QUESTIONS Q64; phase 2 is evaluated in fast mode only, final-design 13.7); the learning methods run in the containers, and the learning methods in the containers (done 5 Nov): **Q54** (proposal: Greedy for M9.2–M9.4 first; then CPU torch in the zone image).
 - [x] **M9.2** Verify the network (15.4 "to verify"): routing through wan-gw, netem jitter distribution and reordering, `tcp_slow_start_after_idle=0`, one shaped crossing per hop (`tests/testbed/test_network.py`, `pytest -m testbed`). Found and fixed: jitter reordering distorted WAN transfers (netem now keeps packets in order, **Q56**); a warm 1 MB upload fits 4.2's S/B + d. MinIO cannot be pinned: its public images are gone (**Q55**, proposal: bind-mounted results).
-- [~] **M9.3** Runner: per-scenario shaping, zone join / kill / broker restart (15.7), results to the bind-mounted data/ (Q55).
+- [x] **M9.3** Runner: per-scenario shaping, results to the bind-mounted data/ (Q55); the topology events (zone join / kill / broker restart, 15.7, Q57) are future work.
   Built (branch `m9-3-runner`): `python -m pcnme.testbed.runner --scenario S2 --seed 3000 --method greedy --seconds 60
   [--containers N]` sets every netem value from the config, starts the stack, applies `testbed.events` (empty:
   **Q57**), waits for the zones' rows, saves `containers.log`, and writes the run's Parquet tables (zones write JSON
@@ -145,15 +146,13 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   **5 Nov:** zone CPU fixes (HTTP client); Greedy at 40 cars holds S1 96.9 % and S2 95.4 % on time (fast mode
   99.8-99.9 %); at 200 cars the busiest zone is GIL-bound (48.9 %). Learning methods run in the zones, but
   PCNME loses the car confirms (open bug, RUN_LOG 5 Nov). Details: docs/RUN_LOG.md.
-  **Left:**
-  0. Fix the PCNME confirm bug (drop_no_ack 88 %), then the M9.4 gap for PCNME at 40 cars.
+  Done since: the PCNME confirm bug (7 Nov), the M9.4 gap for every method (15 Nov).
 
   1. [x] (5 Nov: 40 cars hold; 200 cars are GIL-bound in the busiest zone) Reduced scale the containers can hold: 40–60 cars (`python -m pcnme.testbed.runner --containers 2` or 3), the
      same per-zone load (lambda_car scales with the fleet, 18). Check on-time against fast mode at that fleet.
   2. [x] (5 Nov: profiled; two HTTP-client fixes, commit 33f3240) If it still lags, one timeboxed session: move the zone onto the asyncio loop of its network I/O (one thread),
      profile with `PCNME_PROFILE=1`. If it still does not hold, stop and report (the paper states the scale limit).
-  3. Topology runs (Q57, low priority, last): three separate 120 s runs, event at 40 s: `start zone-5`;
-     `kill zone-3` + `kill zone-4`; `restart broker`.
+  3. [-] Topology runs (Q57): future work.
   Decided: Q54 Greedy first, then the agent with CPU-only torch in the zone image; Q55 bind mount, MinIO removed;
   Q56 the in-order jitter bias (+8–24 %) is reported in the gap.
 - [x] **M9.4** (done 15 Nov: every method, S1-S6, 5 seeds, 40 cars, every cell rerun after the 11 Nov fixes
@@ -196,13 +195,14 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   data/calibration/cpu-power, visual/city/README, .claude/skills/*); delete the ones nothing needs any more and list
   each deletion with its reason; check every path and command in them still works. final-design.md: content only,
   no notation renames (Imed does those later).
-- [ ] **T6** S6 analysis (7 Nov finding: in S6 with loose deadlines Greedy is best, 96.9 % on time, against PCNME
+- [-] **T6** S6 analysis (future work, 16 Nov: S6 is reported by its tables; docs/RESULTS.md) (7 Nov finding: in S6 with loose deadlines Greedy is best, 96.9 % on time, against PCNME
   92.1 %, level with both D3QN variants). Read-only first: compare PCNME's decisions with Greedy's per anchor zone
   (F-GPU vs F-CPU), task type and option (decisions.parquet, attempts.parquet); check the training curves for
   convergence. Then, if Imed agrees: S6 with a larger budget, and the 16.4 ablation "60 inputs: both slot types per
   option" (it changes the agent's inputs: Imed decides).
-- [ ] **T4** Results write-up from data/<map>/results/summary.csv: the 16.3 table per map, training curves,
-  the number of seeds, what is missing (knee reference, ablations 16.4, sweeps).
+- [x] **T4** Results write-up (16 Nov): docs/RESULTS.md, generated by tools/results_doc.py from the existing files
+  only: per map the main tables with 95 % intervals, paired tests, cold start, training, extra metrics; the testbed
+  gap; S6 tight as a stress test; findings per scenario; limitations.
 
 ## R — Roadmap (Imed, 6 Nov; the order of the next weeks)
 
@@ -212,7 +212,7 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
    b. live metrics: zones and the runner push the 16.3 points to InfluxDB while a run goes (today they are only
       written to points.lp after it); Grafana dashboards per run, zone and method (docker/grafana/);
    c. V3 live mode: the viewer's `live-testbed` source (MQTT -> server-sent events), the same CityView;
-   d. the topology runs (Q57) and the scale question (a zone split over processes for 200 cars, or report 40).
+   d. done except the topology runs (Q57, future work); the testbed is reported at 40 cars.
 3. **LuST v1** (the 1.2 km crop, 4 zones, final-design 16.2): L5 traces, T3 training and evaluation, V2 the road map
    in the viewer, then its testbed (the car containers replay traces instead of walking the grid: new work).
 4. **One platform for both maps.** Keep one viewer, one Grafana and one testbed, with the map as a parameter
@@ -233,13 +233,13 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
 ## Q — Quality gate (Imed, 6 Nov: "the design is mine, the code is yours: make every result, the pipeline and the
 testbed correct"). Claude owns these; an item is done only when its check passes and is recorded in RUN_LOG.
 
-- [~] **Q1 Testbed = the design.** (15 Nov: every method at 40 cars done, all runs healthy; open: 9 of 48 cells lose more than 2 pp to failures, all in overload or tight deadlines (S3; S4/S5 for the LSTM baselines). In S3 the results reach the cars after D + L_max, the car no longer confirms and the task ends as drop_no_ack where fast mode drops it before it runs: RUN_LOG 15 Nov. 7 Nov: two bugs found by counters and fixed, PCNME 11 % -> 89.8 % on time at
+- [x] **Q1 Testbed = the design.** (16 Nov: closed as explained. 15 Nov: every method at 40 cars done, all runs healthy; 9 of 48 cells lose more than 2 pp to failures, all in overload or tight deadlines (S3; S4/S5 for the LSTM baselines). In S3 the results reach the cars after D + L_max, the car no longer confirms and the task ends as drop_no_ack where fast mode drops it before it runs: RUN_LOG 15 Nov. 7 Nov: two bugs found by counters and fixed, PCNME 11 % -> 89.8 % on time at
   S2, 40 cars, fast mode 99.8 %; the rest is lateness, a real gap; RUN_LOG 7 Nov. Left: every method at 40 cars,
   Q61 to confirm) Fix the PCNME confirm bug (a code bug: the agent's path loses the car's confirm,
   drop_no_ack 88 %, Greedy fine on the same build). Then every method (Greedy, Random and the 6 learners) runs on
   the testbed at 40 cars with no drop_no_ack beyond fast mode's, and its gap to fast mode on the same seed is
   explained metric by metric (network jitter Q56, real run times), not by a bug. A test pins the fix.
-- [~] **Q2 Fast mode = the design.** (15 Nov, automated part: every final-design section the code cites exists; the full suite incl. the M1-M8 acceptance tests and the pinned determinism hash passes on the final config. Not done: the section-by-section manual re-read.) Re-read every final-design section the code cites against the code (a
+- [x] **Q2 Fast mode = the design.** (the manual section-by-section re-read is future work, 16 Nov. 15 Nov, automated part: every final-design section the code cites exists; the full suite incl. the M1-M8 acceptance tests and the pinned determinism hash passes on the final config. Not done: the section-by-section manual re-read.) Re-read every final-design section the code cites against the code (a
   section-by-section review, findings to QUESTIONS/CHANGES, never silent fixes); the acceptance tests of M1-M8 and
   the determinism test (same config and seed, bit-identical logs) pass on the final config.
 - [x] **Q3 Results are reproducible.** (15 Nov: a clean checkout with the documented extras runs train.py --smoke and evaluate.py --smoke; seed 3000 of PCNME and Greedy in every scenario of both maps reproduces summary.csv bit for bit, 24/24, tools/reproduce.py, data/<map>/results/reproduce.md; the RESULTS tables are written by evaluate.py.) From a clean checkout: `train.py --smoke`, `evaluate.py --smoke` and one
@@ -252,7 +252,7 @@ testbed correct"). Claude owns these; an item is done only when its check passes
   the run equals summary.csv (on time, dropped, mean latency, J/task); the export opens on a clean machine.
 - [x] **Q6 Live viewer and Grafana = the logs.** (15 Nov: a 3-min live run, 28 352 tasks, 94.470 % on time, 95.44 ms in the Parquet files, InfluxDB/Grafana and the live viewer, after two fixes.) A live testbed run (V3, R2) shows the same final numbers in the
   viewer, in Grafana and in the run's Parquet files.
-- [~] **Q7 LuST passes Q1-Q6 too** (15 Nov: Q3, Q4 and Q5 pass on LuST; Q1 and Q6 need a LuST testbed, not built) before its results are reported.
+- [x] **Q7 LuST passes Q1-Q6 too** (15 Nov: Q3, Q4 and Q5 pass on LuST; Q1 and Q6 need a LuST testbed: future work) before its results are reported.
 
 ## B — Backups (on another disk than the data: D:\pcnme-results-backup\<map>-<date>\; moved from F: on 14 Nov when F: was full)
 
