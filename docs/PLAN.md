@@ -131,7 +131,7 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   4. [x] `bus/calls.py` Calls / FastCalls: the zone's POST/GET/DELETE go through `zone.calls`; `testbed/http.py` HttpCalls + `make_app` (FastAPI). Fast mode unchanged: `tests/zone/test_calls_golden.py` pins an S2 run digest.
   5. [x] `testbed/radio.py`: the Shannon pipe runs in software at the zone's intake (15.3); the car's POST /tasks carries `Upload(task, b_car, rate)` and is answered at t_rx (409 if cut, 9.7); `software_radio()` leaves the base radio delays to netem; `RemoteCar` posts results to the car container and hands its Confirm to `Zone.car_confirmed`.
   6. [x] Entry points `pcnme.testbed.{zone,car,cloud}` (+ `serve.py`), Q53 built (no modelled delays, C7 from the written body, own-backhaul bookkeeping kept); zone endpoints POST /cars, POST /gps, GET /closed, GET /status; `@pytest.mark.testbed` compose test (broker, wan-gw, cloud, 4 zones, car-1 with 20 cars): tasks close on time end to end.
-  7. [~] FedAvg + fine-tuning on the testbed (not yet), and the learning methods in the containers (done 5 Nov): **Q54** (proposal: Greedy for M9.2–M9.4 first; then CPU torch in the zone image).
+  7. [~] FedAvg + fine-tuning on the testbed (not built; QUESTIONS Q64: it belongs to the trainer process since Q62), and the learning methods in the containers (done 5 Nov): **Q54** (proposal: Greedy for M9.2–M9.4 first; then CPU torch in the zone image).
 - [x] **M9.2** Verify the network (15.4 "to verify"): routing through wan-gw, netem jitter distribution and reordering, `tcp_slow_start_after_idle=0`, one shaped crossing per hop (`tests/testbed/test_network.py`, `pytest -m testbed`). Found and fixed: jitter reordering distorted WAN transfers (netem now keeps packets in order, **Q56**); a warm 1 MB upload fits 4.2's S/B + d. MinIO cannot be pinned: its public images are gone (**Q55**, proposal: bind-mounted results).
 - [~] **M9.3** Runner: per-scenario shaping, zone join / kill / broker restart (15.7), results to the bind-mounted data/ (Q55).
   Built (branch `m9-3-runner`): `python -m pcnme.testbed.runner --scenario S2 --seed 3000 --method greedy --seconds 60
@@ -233,26 +233,26 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
 ## Q — Quality gate (Imed, 6 Nov: "the design is mine, the code is yours: make every result, the pipeline and the
 testbed correct"). Claude owns these; an item is done only when its check passes and is recorded in RUN_LOG.
 
-- [~] **Q1 Testbed = the design.** (7 Nov: two bugs found by counters and fixed, PCNME 11 % -> 89.8 % on time at
+- [~] **Q1 Testbed = the design.** (15 Nov: every method at 40 cars done, all runs healthy; open: 9 of 48 cells lose more than 2 pp to failures, all in overload or tight deadlines (S3; S4/S5 for the LSTM baselines). In S3 the results reach the cars after D + L_max, the car no longer confirms and the task ends as drop_no_ack where fast mode drops it before it runs: RUN_LOG 15 Nov. 7 Nov: two bugs found by counters and fixed, PCNME 11 % -> 89.8 % on time at
   S2, 40 cars, fast mode 99.8 %; the rest is lateness, a real gap; RUN_LOG 7 Nov. Left: every method at 40 cars,
   Q61 to confirm) Fix the PCNME confirm bug (a code bug: the agent's path loses the car's confirm,
   drop_no_ack 88 %, Greedy fine on the same build). Then every method (Greedy, Random and the 6 learners) runs on
   the testbed at 40 cars with no drop_no_ack beyond fast mode's, and its gap to fast mode on the same seed is
   explained metric by metric (network jitter Q56, real run times), not by a bug. A test pins the fix.
-- [ ] **Q2 Fast mode = the design.** Re-read every final-design section the code cites against the code (a
+- [~] **Q2 Fast mode = the design.** (15 Nov, automated part: every final-design section the code cites exists; the full suite incl. the M1-M8 acceptance tests and the pinned determinism hash passes on the final config. Not done: the section-by-section manual re-read.) Re-read every final-design section the code cites against the code (a
   section-by-section review, findings to QUESTIONS/CHANGES, never silent fixes); the acceptance tests of M1-M8 and
   the determinism test (same config and seed, bit-identical logs) pass on the final config.
-- [ ] **Q3 Results are reproducible.** From a clean checkout: `train.py --smoke`, `evaluate.py --smoke` and one
+- [x] **Q3 Results are reproducible.** (15 Nov: a clean checkout with the documented extras runs train.py --smoke and evaluate.py --smoke; seed 3000 of PCNME and Greedy in every scenario of both maps reproduces summary.csv bit for bit, 24/24, tools/reproduce.py, data/<map>/results/reproduce.md; the RESULTS tables are written by evaluate.py.) From a clean checkout: `train.py --smoke`, `evaluate.py --smoke` and one
   real evaluation seed per scenario reproduce summary.csv's rows for that seed exactly (same commit, same config);
   every number in RESULTS_VFC.md is generated from summary.csv (no hand-typed numbers left).
-- [ ] **Q4 Pipeline robustness.** Interrupting train.py and evaluate.py at any stage and rerunning resumes with
+- [x] **Q4 Pipeline robustness.** (15 Nov: train.py killed in NSGA-II and in learning, evaluate.py killed in its runs and in its report, each resumed: every result file identical to the uninterrupted run. Two fixes: a resumed job pins torch before it continues (its losses differed in the 9th digit), and the resume keeps the episodes' decisions used.) Interrupting train.py and evaluate.py at any stage and rerunning resumes with
   bit-identical results (test_resume extended to NSGA-II, demos and the revision path); mismatched configs and
   commits are refused with a clear message; nothing is ever deleted (only archived).
-- [ ] **Q5 Historical viewer = the logs.** For one run per scenario, the viewer's statistics strip at the end of
+- [x] **Q5 Historical viewer = the logs.** (15 Nov: one run per scenario on both maps: on time, dropped, J/task and, after a fix, the mean latency equal summary.csv; the export rewrites stale replays.) For one run per scenario, the viewer's statistics strip at the end of
   the run equals summary.csv (on time, dropped, mean latency, J/task); the export opens on a clean machine.
-- [ ] **Q6 Live viewer and Grafana = the logs.** A live testbed run (V3, R2) shows the same final numbers in the
+- [x] **Q6 Live viewer and Grafana = the logs.** (15 Nov: a 3-min live run, 28 352 tasks, 94.470 % on time, 95.44 ms in the Parquet files, InfluxDB/Grafana and the live viewer, after two fixes.) A live testbed run (V3, R2) shows the same final numbers in the
   viewer, in Grafana and in the run's Parquet files.
-- [ ] **Q7 LuST passes Q1-Q6 too** before its results are reported.
+- [~] **Q7 LuST passes Q1-Q6 too** (15 Nov: Q3, Q4 and Q5 pass on LuST; Q1 and Q6 need a LuST testbed, not built) before its results are reported.
 
 ## B — Backups (on another disk than the data: D:\pcnme-results-backup\<map>-<date>\; moved from F: on 14 Nov when F: was full)
 
@@ -284,13 +284,13 @@ testbed correct"). Claude owns these; an item is done only when its check passes
 ## V — Viewer (not research: it never changes a result)
 
 - [x] **V1 Replay viewer** (done 5 Nov: `uv run python view.py`, src/pcnme/viewer/README.md; every scenario, method and seed, fast mode and testbed, two runs side by side) (after M3): reads one run's Parquet files (the Q28 schema: positions, events, attempts, zones) and draws the VFC grid, the zone circles, the cars and their tasks; play, pause and speed; click a car or a task to see it. The data source sits behind one interface, so V3 only adds another source.
-- [ ] **V2 LuST map** (when LuST is added): the road map drawn from the SUMO net file.
+- [x] **V2 LuST map** (15 Nov): LuST runs replay on the crop's real streets, north up, as the traffic previews.
 - [x] **V3 Live mode** (11 Nov): the same viewer fed live, polled from InfluxDB (the zones' live points;
   `run_live.py`); Grafana dashboard "PCNME live". Built on InfluxDB rather than MQTT: one live store for Grafana
   and the viewer, and nothing added to the measured broker.
 - [x] **V4 Live training** (11 Nov): the "Training" source: every training's episodes (on time, loss, mean ê,
   updates), budget and log, live while train.py runs.
-- [ ] **V5 Responsive, polished UI** (Imed, 6 Nov: not responsive enough yet): one layout system for every width
+- [x] **V5 Responsive, polished UI** (15 Nov: the bar wraps, compared runs stack, the details popup becomes a bottom sheet; no sideways scroll at 375 px; checked by measuring the layout) (Imed, 6 Nov: not responsive enough yet): one layout system for every width
   from a laptop to a projector: the top bar collapses into a menu below about 1100 px (no horizontal scroll),
   the statistics strip wraps cleanly, the side panel becomes an overlay sheet on narrow screens, the map keeps
   readable zone cards at every size (no compact fallback needed above 900 px), touch targets of at least 32 px,
