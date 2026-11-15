@@ -345,6 +345,15 @@ def with_w_star(source: dict[str, Any], w: float) -> dict[str, Any]:
     return out
 
 
+def _deterministic() -> None:
+    """One thread and deterministic algorithms in this worker (agent/network.py deterministic()). A new agent
+    sets it when it is built; a resumed one comes from the checkpoint without that, so the job sets it first:
+    a resume then reproduces the uninterrupted training bit for bit."""
+    from pcnme.agent.network import deterministic
+
+    deterministic()
+
+
 def _train_job(map_name: str, scenario: str, method: str, w_star: float, plan: Plan, report: Any) -> str:
     from pcnme.config import config_from_mapping
     from pcnme.experiments.runner import method_config, training_info
@@ -355,6 +364,7 @@ def _train_job(map_name: str, scenario: str, method: str, w_star: float, plan: P
     d = paths.train(scenario, method)
     d.mkdir(parents=True, exist_ok=True)
     done, ckpt, log = d / "trained.pt", d / "checkpoint.pt", d / "train.log"
+    _deterministic()  # before a resume too: an unpickled agent does not run its own setup (PLAN Q4, 15 Nov)
     if done.exists():
         report(status="skipped", phase="trained before", message="already trained (trained.pt): skipped")
         return "skipped"
@@ -506,8 +516,22 @@ def _episode_row(n: int, ep: Any, used: int, wall: float) -> dict[str, Any]:
 
 
 def _rewrite_episodes(d: Path, session: Any) -> None:
-    """episodes.csv from the session itself (the checkpoint is the truth after a restart)."""
-    rows = [_episode_row(i + 1, ep, 0, 0.0) for i, ep in enumerate(session.out.episodes)]
+    """episodes.csv from the session itself (the checkpoint is the truth after a restart). The decisions used
+    and the wall time of each checkpointed episode are not in the session: they are kept from the rows written
+    before (a resume must not turn them into 0; PLAN Q4, 15 Nov); the rows past the checkpoint are dropped."""
+    before: list[dict[str, str]] = []
+    f = d / "episodes.csv"
+    if f.exists():
+        with f.open(encoding="utf-8", newline="") as h:
+            before = list(csv.DictReader(h))
+
+    def kept(i: int, key: str, cast: Any) -> Any:
+        return cast(before[i][key]) if i < len(before) and before[i].get(key) not in (None, "") else cast(0)
+
+    rows = [
+        _episode_row(i + 1, ep, kept(i, "decisions_used", int), kept(i, "wall_s", float))
+        for i, ep in enumerate(session.out.episodes)
+    ]
     _write_csv(d / "episodes.csv", rows, fields=list(_episode_row(0, _Blank(), 0, 0.0)))
 
 
