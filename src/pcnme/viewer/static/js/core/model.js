@@ -38,8 +38,9 @@ export class ReplayModel {
     const cum = (f) => { const out = new Float64Array(n + 1); order.forEach((i, k) => (out[k + 1] = out[k] + f(i))); return out; };
     this.cumOn = cum((i) => (this.cls[i] === "on_time" ? 1 : 0));
     this.cumDrop = cum((i) => (this.cls[i] === "dropped" ? 1 : 0));
-    this.cumLat = cum((i) => T.latency[i] ?? 0);
-    this.cumLatN = cum((i) => (T.latency[i] == null ? 0 : 1));
+    const delivered = (i) => T.latency[i] != null && (this.cls[i] === "on_time" || this.cls[i] === "late");
+    this.cumLat = cum((i) => (delivered(i) ? T.latency[i] : 0)); // the logs' mean latency: delivered tasks only
+    this.cumLatN = cum((i) => (delivered(i) ? 1 : 0)); // (metrics/stats.py; a dropped task may still have one)
     this.cumE = cum((i) => T.energy[i] ?? 0);
     this.byCar = Array.from({ length: d.cars.ids.length }, () => []);
     T.car.forEach((c, i) => c >= 0 && this.byCar[c].push(i));
