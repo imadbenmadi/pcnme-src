@@ -536,7 +536,7 @@ def main() -> int:
         "",
     ]
     path = REPO / "docs" / "RESULTS.md"
-    path.write_bytes(("\n".join(out) + "\n").encode())
+    path.write_bytes(("\n".join(out).rstrip("\n") + "\n").encode())
     print(path)
     return 0
 
