@@ -376,3 +376,33 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 - Reading: Greedy keeps the most on the testbed except in S3, where the D3QN-family learners (PCNME, D3QN + greedy)
   keep about twice its share; the LSTM baselines (Tang & Wong, QECO) collapse when they learn online on real
   hardware; the tight scenarios S4/S5 cost every method 30-55 pp.
+
+## 15 Nov (overnight): missing metrics, the quality checks, the viewer
+
+- Missing 16.3 metrics, from the existing runs (tools/extra_metrics.py; data/<map>/results/extra.md; definitions
+  QUESTIONS Q63, stand-ins): next-zone acc@1 82.5 % on the grid (75.0 % in S5), 84-86 % on LuST and 57.9 % at its
+  peak hour; median T_exit error 3.5 s (grid), 6-7 s (LuST; the mean is pulled up by cars stopped at lights);
+  delivery after a zone change (few such tasks: 0-4 per run on the grid, 33 at the LuST peak); decisions until the
+  on-time rate is stable (about 1 000 in S1/S2: the first full window); the NSGA-II fronts' hypervolume, 1.05-4.3x
+  the greedy plan's on the grid, 1.3-6.7x on LuST.
+- Q3: 24 evaluation runs (seed 3000, PCNME and Greedy, every scenario, both maps) rerun with today's code: every
+  metric identical to summary.csv. A clean checkout with the documented extras (dev, analysis, ml) runs the
+  train.py and evaluate.py smoke tests.
+- Q4: train.py killed in NSGA-II and in learning, evaluate.py killed in its runs and its report; each resumed to
+  results identical to an uninterrupted run, after two fixes: a resumed training job did not pin torch (the agent
+  comes unpickled and skips its own setup), so Tang & Wong's losses differed in the 9th digit; and the resume
+  wrote decisions_used 0 for the checkpointed episodes.
+- Q5: the viewer's end-of-run numbers equal summary.csv for one run per scenario on both maps (after a fix: the mean
+  latency now counts delivered tasks only, as the logs). Q6: a 3-min live run, the same 28 352 tasks, 94.470 % and
+  95.44 ms in the Parquet files, Grafana and the live viewer (two fixes: Grafana's latency over delivered tasks;
+  a frame re-uploaded to a second zone has two rows in the logs and now two in the viewer).
+- Q1 open: 9 of 48 testbed cells lose more than 2 pp to failures, all overload or tight deadlines. S3 Greedy: the
+  cars answer 2 682 results per zone and run with no confirmation (32 in S2): they arrive after the car forgot the
+  task (D + L_max), so the task ends as drop_no_ack where fast mode drops it before it runs. The zones' loops are
+  not late (17 events over 200 ms per zone and run). An accounting difference under overload, not lost messages.
+- Q2 automated part: every final-design section the code cites exists; 1 075 tests pass, the pinned determinism
+  hash included. The manual section-by-section re-read is not done.
+- Viewer: LuST runs on the real streets (V2); responsive layout (V5); the export rewrites replays whose run was
+  rerun (the testbed and S6 replays in the exported folder were stale); exported again to
+  F:/projects/pcnme-history-viewer (339 runs, 186 MB; not pushed).
+- Not done: FedAvg on the testbed (QUESTIONS Q64, a design point since Q62).
