@@ -3,8 +3,8 @@ read from what train.py writes per episode (data/<map>/train/<scenario>-<method>
 training.json; pipeline/train.py).
 
 `runs()` lists every trained or training scenario x method with its state; `curve(run)` gives its episodes
-(on-time share, mean ê, loss, updates, decisions used of the budget) and the log's last lines. The page polls
-a running one every few seconds, so a new episode appears as train.py writes it. Nothing is recomputed.
+(on-time share, mean C^en, loss, updates, decisions used of the budget) and the log's last lines. The page
+polls a running one every few seconds, so a new episode appears as train.py writes it. Nothing is recomputed.
 """
 
 from __future__ import annotations

@@ -76,7 +76,7 @@ def test_the_placeholder_p5_factor_is_0_75(cfg: Config) -> None:
 
 
 def test_e_bar_is_still_11_7(cfg: Config) -> None:
-    # ē uses p95 only (12.3), which the fit keeps exact.
+    # C^en_max uses p95 only (12.3), which the fit keeps exact.
     assert round(cfg.derived.e_bar, 2) == 11.70
 
 

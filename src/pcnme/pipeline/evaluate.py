@@ -184,7 +184,7 @@ def write_outputs(
 
 
 def _training_curves(paths: MapPaths) -> None:
-    """One figure per scenario: on-time share and mean ê per training episode, every learning method."""
+    """One figure per scenario: on-time share and mean C^en per training episode, every learning method."""
     import matplotlib
 
     matplotlib.use("Agg")

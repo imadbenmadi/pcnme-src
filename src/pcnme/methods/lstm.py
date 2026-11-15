@@ -8,7 +8,7 @@ with the current 48 inputs and passes them through a hidden layer first. Both le
 random play, without pretraining or expert data: 1-step double-DQN targets with the time-based discount,
 uniform replay of rl.replay_agent own transitions, one update per 4 transitions, a hard target copy every
 1 000 updates, the baselines' ε schedule over the shared budget (18). Engineering choices: LSTM width 256
-(the hidden width of 18); the replay is the prioritized one with α = 0 and β = 0 (uniform, weights 1).
+(the hidden width of 18); the replay is the prioritized one with α_PER = 0 and β_PER = 0 (uniform, weights 1).
 """
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ def make_lstm(cfg: Config, variant: str, seed: int) -> LstmQNet:
 
 
 def plain_dqn(cfg: Config) -> Config:
-    """1-step double DQN with uniform replay: no n-step, no margin, α = 0, β = 0."""
+    """1-step double DQN with uniform replay: no n-step, no margin, α_PER = 0, β_PER = 0."""
     d = cfg.dqfd
     per = replace(d.per, alpha=0.0, beta0=0.0, beta_final=0.0)
     return replace(cfg, dqfd=replace(d, lambda_n=0.0, lambda_margin=0.0, per=per))

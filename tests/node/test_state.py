@@ -58,20 +58,20 @@ def test_the_wait_is_zero_while_a_slot_is_free() -> None:
 
 
 def test_the_pooled_formula_otherwise() -> None:
-    # 8.5: Ŵ_hard = (R + B_hard) / c, Ŵ_soft = (R + B_hard + B_soft) / c
+    # 8.5: Ŵ^queue,hard = (R + Ω^hard) / c, Ŵ^queue,soft = (R + Ω^hard + Ω^soft) / c
     assert wait_estimate(BUSY, "hard") == pytest.approx((0.012 + 0.008) / 2)
     assert wait_estimate(BUSY, "soft") == pytest.approx((0.012 + 0.008 + 0.025) / 2)
 
 
 def test_pending_sends_take_the_free_slot_and_join_the_backlog_of_their_class() -> None:
     # One slot free (u = 1 of 2), but the anchor has one pending hard send (8 ms) to this q: u + pending = c,
-    # so the estimate is the formula with that send in B_hard (R1, 9.2).
+    # so the estimate is the formula with that send in Ω^hard (R1, 9.2).
     one_free = SlotState(
         c=2, capacity=32, n_hard=0, n_soft=0, b_hard=0.0, b_soft=0.0, remaining=(0.0, 0.006), u=1
     )
     pending = [Pending(cls="hard", mean=0.008)]
     assert wait_estimate(one_free, "hard", pending) == pytest.approx((0.006 + 0.008) / 2)
-    # A pending soft send counts in B_soft: only soft estimates see it.
+    # A pending soft send counts in Ω^soft: only soft estimates see it.
     soft_pending = [Pending(cls="soft", mean=0.025), Pending(cls="hard", mean=0.008)]
     assert wait_estimate(BUSY, "hard", soft_pending) == pytest.approx((0.012 + 0.008 + 0.008) / 2)
     assert wait_estimate(BUSY, "soft", soft_pending) == pytest.approx((0.012 + 0.016 + 0.050) / 2)
@@ -99,7 +99,8 @@ def test_the_executors_own_estimate_is_the_8_5_formula_on_its_snapshot(
 
 
 def poisson_single_slot(run: float, rho: float, n: int, exponential: bool) -> tuple[np.ndarray, np.ndarray]:
-    """One slot, one hard class with equal budgets (EDF = FIFO), Poisson arrivals: (Ŵ, real wait) per task."""
+    """One slot, one hard class with equal budgets (EDF = FIFO), Poisson arrivals: (Ŵ^queue, real wait) per
+    task."""
     n_ = tiny([row("M", "cpu", run, distribution=Exponential(run) if exponential else None)])
     gaps = np.random.default_rng(2001).exponential(run / rho, n)
     estimates, arrival = [], {}
@@ -117,15 +118,15 @@ def poisson_single_slot(run: float, rho: float, n: int, exponential: bool) -> tu
 
 
 def test_one_slot_with_fixed_runs_the_estimate_is_exact() -> None:
-    # M/D/1, FIFO: the work ahead of a newcomer is exactly R + B_hard, so Ŵ equals its real wait, task by
-    # task.
+    # M/D/1, FIFO: the work ahead of a newcomer is exactly R + Ω^hard, so Ŵ^queue equals its real wait, task
+    # by task.
     est, waits = poisson_single_slot(run=0.010, rho=0.8, n=5_000, exponential=False)
     assert np.allclose(est, waits, rtol=0, atol=1e-12)
 
 
 def test_one_slot_with_exponential_runs_the_literal_r_underestimates() -> None:
-    # Q9: with exponential runs the expected remaining time stays Ê whatever has elapsed, but R counts only
-    # max(0, Ê - elapsed). This pins the size of that gap at ρ = 0.8, for Imed's answer to Q9.
+    # Q9: with exponential runs the expected remaining time stays T̄^run whatever has elapsed, but R counts
+    # only max(0, T̄^run - elapsed). This pins the size of that gap at ρ = 0.8, for Imed's answer to Q9.
     est, waits = poisson_single_slot(run=0.010, rho=0.8, n=50_000, exponential=True)
     ratio = est.mean() / waits.mean()
     assert 0.6 < ratio < 0.95, ratio

@@ -30,15 +30,15 @@ class OptionView:
     option: str
     masked: Reason | None
     slot: SlotType | None = None  # q*
-    wait: float = 0.0  # Ŵ on q*
-    run: float = 0.0  # Ê on q*
+    wait: float = 0.0  # Ŵ^queue on q*
+    run: float = 0.0  # T̄^run on q*
     t_in: float = 0.0
     t_ret: float = 0.0
     energy: float = 0.0  # Ê_k (12.4)
 
     @property
     def finish(self) -> float:
-        """The estimated finish at the car: T̂_in + Ŵ + Ê + T̂_ret."""
+        """The estimated finish at the car: T̂_in + Ŵ^queue + T̄^run + T̂_ret."""
         return self.t_in + self.wait + self.run + self.t_ret
 
 

@@ -43,7 +43,7 @@ Use the `implement-step` skill. In short: read the PLAN item → read every fina
 
 ```
 src/pcnme/
-  config.py        config loader + derived values (B_WAN, λ_car, E_ref, ē)       final-design 18
+  config.py        config loader + derived values (B_WAN, λ_car, E_ref, C^en_max) final-design 18
   ids.py           task ids, attempt keys, snapshot versions                     5.5
   sim/             discrete-event clock, seeded random streams                   15.2
   net/             FIFO pipe, radio (Shannon), backhaul, WAN in series            4

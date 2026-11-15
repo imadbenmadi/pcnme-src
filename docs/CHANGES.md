@@ -1,5 +1,7 @@
 # Design changes found while coding
 
+> Symbols in this file follow the old notation (up to final-design revision 128, before 15 Nov 2026); see [docs/NOTATION.md](NOTATION.md) for the new names.
+
 Every place where coding showed that `docs/final-design.md` must change. Nothing here is applied to the code until Imed approves it. After approval: update `docs/final-design.md`, then tell Imed so the master doc on claude.ai (and its "Changes after the printed copy" table) gets the same change.
 
 | Id | Date | Section | Problem | Proposed change | Touches the agent? | Status |

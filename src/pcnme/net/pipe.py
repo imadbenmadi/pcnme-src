@@ -3,7 +3,7 @@
     W_pipe = max(0, t_free - t_now)          t_free <- max(t_now, t_free) + S / B
     delivery = t_now + W_pipe + S / B + d
 
-S = size in bits, B = bandwidth in bit/s, d = the transfer's random delay. The delay does not hold the pipe:
+S = size in bits, B = bandwidth in bit/s, δ = the transfer's random delay. The delay does not hold the pipe:
 the next transfer waits only for this one's push, so it can even arrive first. The pipe is pure arithmetic;
 the caller draws d (keyed by task, attempt and hop: CHANGES C3) and schedules the delivery on its clock.
 """

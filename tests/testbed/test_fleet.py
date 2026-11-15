@@ -1,5 +1,5 @@
 """The car container (PLAN M9.1 step 6; final-design 15.3, 15.4, 9.7, 10): the fast-mode cars and mobility
-over HTTP: attach, GPS every period, uploads with B_car and R_car, cuts on a handover, held frames."""
+over HTTP: attach, GPS every period, uploads with T^bud_car and R_car, cuts on a handover, held frames."""
 
 from __future__ import annotations
 

@@ -1,5 +1,7 @@
 # PCNME on the VFC grid: results (5 Nov 2026)
 
+> Symbols in this file follow the old notation (up to final-design revision 128, before 15 Nov 2026); see [docs/NOTATION.md](NOTATION.md) for the new names.
+
 **Setup.** VFC grid: 1.2 km, 4 active fog zones (z5 joins only in the topology experiment), 200 cars, 60 s
 episodes, 6 scenarios (final-design 16.2). There are 8 methods (16.1). Each method was evaluated on the same 20
 seeds (3000–3019) in every scenario, 960 runs in total. Every number below is the mean over those seeds; the 95 %

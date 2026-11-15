@@ -1,5 +1,7 @@
 # Open questions for Imed
 
+> Symbols in this file follow the old notation (up to final-design revision 128, before 15 Nov 2026); see [docs/NOTATION.md](NOTATION.md) for the new names.
+
 Questions raised while coding. Each one blocks only the item it names; work on other items can go on.
 
 | Id | Date | Milestone item | Question | Answer |

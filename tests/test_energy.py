@@ -45,10 +45,11 @@ def test_return_energy_per_delivery(em: EnergyModel) -> None:
 
 def test_e_hat_is_capped_at_e_bar(em: EnergyModel, cfg: Config) -> None:
     assert em.e_hat("T1", 0.3001109) == pytest.approx(1.0, abs=1e-6)  # E = E_ref
-    assert em.e_hat("T1", 1e6) == pytest.approx(cfg.derived.e_bar)  # 12.3: capped at ē
+    assert em.e_hat("T1", 1e6) == pytest.approx(cfg.derived.e_bar)  # 12.3: capped at C^en_max
 
 
-# --- E_ref and ê per type equal tools/calc_defaults.py (M2 acceptance) --------------------------------------
+# --- E_ref and C^en per type equal tools/calc_defaults.py (M2 acceptance)
+# --------------------------------------
 
 
 def test_e_ref_and_the_worst_ratios_equal_calc_defaults(
@@ -85,7 +86,7 @@ def test_e_ref_and_the_worst_ratios_equal_calc_defaults(
 
 
 def test_a_task_delivered_here_at_its_mean_run_costs_exactly_e_ref(em: EnergyModel) -> None:
-    # 12.3: E_ref is the energy of running it here on the reference class, so ê = 1.
+    # 12.3: E_ref is the energy of running it here on the reference class, so C^en = 1.
     s = one_zone(fixed_delay_config(), Fixed("here"))
     s.zone.upload(task_now(s, "T1"))
     s.clock.run_until(1.0)
@@ -102,7 +103,7 @@ def test_a_task_delivered_here_at_its_mean_run_costs_exactly_e_ref(em: EnergyMod
 def test_a_cloud_delivery_by_hand(em: EnergyModel) -> None:
     """T4 to the cloud: forwarding (e_bh + e_wan) x 1.2 Mbit = 0.5544 mJ; execution 1.1 x 150 W x 12 ms =
     1.98 J; return (e_wan + e_bh + e_down) x 24 kbit = 0.1135 mJ; E_k = 1.9807 J;
-    ê = 1.9807 / 0.9376 = 2.11."""
+    C^en = 1.9807 / 0.9376 = 2.11."""
     s = one_zone(fixed_delay_config(), Fixed("cloud"))
     s.zone.upload(task_now(s, "T4"))
     s.clock.run_until(5.0)

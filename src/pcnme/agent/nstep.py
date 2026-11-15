@@ -2,13 +2,13 @@
 PLAN M6.2; QUESTIONS Q36). THIS TOUCHES THE AGENT.
 
 Time-based discount (11.3.6): a step of Δt is discounted by γ^(Δt/τ). The 1-step target bootstraps from s'
-with γ^(Δt/τ); the n-step one over the same anchor's next n decisions (13.5):
+with γ^(Δt/τ); the n-step one over the same anchor's next n_step decisions (13.5):
 
     R_n = Σ_{k<m} γ^((t_k - t_0)/τ) r_k,   bootstrap γ^((t_m - t_0)/τ) Q_target(s_m, a*)
 
 A transition with no s' (the anchor's last of an episode, truncated, Q36) is left out of every bootstrapped
 target: its own 1-step target, and every n-step chain stops before it. Engineering choice: near the end of a
-chain the n-step part uses the m < n steps that still have an s' (m = 0: no n-step target).
+chain the n-step part uses the m < n_step steps that still have an s' (m = 0: no n-step target).
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ class Sample:
     s1: tuple[float, ...] | None
     valid1: tuple[bool, ...] | None
     g1: float
-    # n-step over m <= n steps: the discounted reward sum, s_m, its valid actions and γ^((t_m - t_0)/τ)
+    # n-step over m <= n_step steps: the discounted reward sum, s_m, its valid actions and γ^((t_m - t_0)/τ)
     hasn: bool
     m: int
     rn: float

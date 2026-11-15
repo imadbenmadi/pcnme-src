@@ -5,7 +5,7 @@ Two tables, written like every run's logs (metrics/runlog.py: Parquet for the nu
 for Grafana): `learning`, one row per zone and phase every `every` updates (the means of td_loss, n_step_loss,
 margin_loss, total_loss and mean_q over those updates; epsilon; in pretraining the held-out expert agreement
 and the demonstration up-sample ratio when measured), and `episodes`, one row per online episode (on-time
-share and mean ê, 16.3; updates so far). tools/plot_curves.py draws them.
+share and mean C^en, 16.3; updates so far). tools/plot_curves.py draws them.
 """
 
 from __future__ import annotations

@@ -3,8 +3,8 @@
 A short positions-only run of the fleet on the map (no tasks): every GPS period each car's position is
 sampled; a sample is covered when the car is in some active zone's circle, and attached to the zone the
 attach rule (with hysteresis, C13) picks. From it:
-- the hotspot share h: set so that z1 holds hotspot_share of the covered samples (Q30);
-- coverage = the share of covered samples at that h. Task creations are Poisson, the same rate for every
+- the hotspot share h_hot: set so that z1 holds hotspot_share of the covered samples (Q30);
+- coverage = the share of covered samples at that h_hot. Task creations are Poisson, the same rate for every
   car, so this is the share of creations with coverage, and lambda_car is scaled by 1 / coverage (Q29).
 Run once per map and mobility by tools/calibrate_map.py; the results are config values (cars.calibrated).
 """
@@ -24,7 +24,7 @@ from pcnme.sim.rng import RandomStreams
 def measure(
     cfg: Config, mobility: str, h: float, seconds: float, seed: int, fleet: int
 ) -> tuple[float, float]:
-    """(coverage, z1's share of the covered samples) for hotspot share h."""
+    """(coverage, z1's share of the covered samples) for hotspot share h_hot."""
     clock = EventClock()
     streams = RandomStreams.from_config(cfg, seed, "training")
     lay = cfg.layout
@@ -64,9 +64,9 @@ def measure(
 def calibrate(
     cfg: Config, mobility: str, seconds: float, seed: int, fleet: int, steps: int = 12
 ) -> dict[str, float]:
-    """Q30: the hotspot share h by bisection so that z1 holds hotspot_share of the covered samples (z1 =
-    1.6 x the mean at 40 % over 4 zones); Q29: the coverage share at that h (hotspot cars are always
-    covered, so it depends on h)."""
+    """Q30: the hotspot share h_hot by bisection so that z1 holds hotspot_share of the covered samples (z1 =
+    1.6 x the mean at 40 % over 4 zones); Q29: the coverage share at that h_hot (hotspot cars are always
+    covered, so it depends on h_hot)."""
     target = cfg.cars.hotspot_share
     lo, hi = 0.0, 1.0
     for _ in range(steps):

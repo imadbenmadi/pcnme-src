@@ -1,9 +1,9 @@
 """The radio on the testbed (PLAN M9.1 step 5; final-design 15.3).
 
 tc cannot give every virtual car its own rate on one interface, so the uplink pipe runs in software at the
-zone's intake with the fast-mode code (Zone.upload with the car's R_car and B_car, net/radio.py), and netem
-adds only the radio's base delays. software_radio() therefore zeroes the modelled radio delays in the zone's
-config and returns them for netem, so they are not counted twice.
+zone's intake with the fast-mode code (Zone.upload with the car's R_car and T^bud_car, net/radio.py), and
+netem adds only the radio's base delays. software_radio() therefore zeroes the modelled radio delays in the
+zone's config and returns them for netem, so they are not counted twice.
 
 RemoteCar stands in for a car in the zone's registry: a result copy is POSTed to the car container
 (/results); the car's Confirm comes back in the HTTP reply and is handed to the zone loop

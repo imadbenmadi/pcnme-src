@@ -5,13 +5,13 @@ it (12.1). For one attempt (12.2):
 
     E_k = E_fwd + E_exec + E_ret
     E_fwd:  here 0;  neighbour e_bh S;  cloud (e_bh + e_wan) S            (waiting in a pipe costs nothing)
-    E_exec: PUE_k p T_run, T_run the real busy time of the slot, an abort's d_abort tail included
-    E_ret:  (backhaul crossings e_bh + WAN crossings e_wan + e_down) S_r per delivery; fog 2 backhaul, cloud
+    E_exec: PUE_k P̄ T^run, T^run the real busy time of the slot, an abort's T_abort tail included
+    E_ret:  (backhaul crossings e_bh + WAN crossings e_wan + e_down) S_res per delivery; fog 2 backhaul, cloud
             1 WAN + 1 backhaul; each republish pays it again
 
-e_bh and e_wan include PUE_network; e_down does not (QUESTIONS Q3). ê = min(E / E_ref, ē) (12.3). The energy
-per attempt follows 12.5; a task's energy is the sum over its attempts. The car's upload is reported only
-(12.1).
+e_bh and e_wan include PUE_network; e_down does not (QUESTIONS Q3). C^en = min(E / E_ref, C^en_max) (12.3).
+The energy per attempt follows 12.5; a task's energy is the sum over its attempts. The car's upload is
+reported only (12.1).
 """
 
 from __future__ import annotations
@@ -59,13 +59,14 @@ class EnergyModel:
         return self._cfg.derived.e_ref[task_type]
 
     def e_hat(self, task_type: str, energy: float) -> float:
-        """ê = min(E / E_ref, ē) (12.3)."""
+        """C^en = min(E / E_ref, C^en_max) (12.3)."""
         return min(energy / self.e_ref(task_type), self._cfg.derived.e_bar)
 
     def estimate(
         self, task_type: str, destination: Destination, hw: str, slot: SlotType, run: float
     ) -> float:
-        """Ê_k before placing (12.4): E_fwd + PUE_k p Ê + E_ret, with `run` the time-table estimate on q*."""
+        """Ê_k before placing (12.4): E_fwd + PUE_k P̄ T̄^run + E_ret, with `run` the time-table estimate on
+        q*."""
         t = self._cfg.task_types[task_type]
         node = self._cfg.hardware[hw]
         p = self._cfg.time_table.rows[(task_type, hw, slot)].p_dyn_w  # the row's power (12.2)
@@ -84,7 +85,7 @@ class EnergyModel:
             return AttemptEnergy(fwd, 0.0, 0.0)  # refused: forwarding only
         if report.outcome == "skipped":
             return AttemptEnergy(fwd, 0.0, 0.0)  # skipped in the queue: forwarding only
-        execution = report.energy  # PUE p T_run, the abort tail included (executor, 12.2)
+        execution = report.energy  # PUE P̄ T^run, the abort tail included (executor, 12.2)
         if report.outcome != "done":
             return AttemptEnergy(fwd, execution, 0.0)  # aborted / cancelled: forwarding + execution spent
         executor: Executor = "cloud" if rec.option == "cloud" else "fog"

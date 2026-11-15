@@ -9,9 +9,9 @@ them is final (OnlineChain), one gradient update per 1 / rl.updates_per_transiti
 target copy every rl.target_update_every updates. In training the neighbour order is shuffled per episode
 (13.6; City(shuffle_neighbours=True)).
 
-Engineering choices: β is β_final online; the agent's random draws (ε, replay) come from its own streams of a
-training seed, so they do not depend on the episodes' seeds; at an episode end the chain is flushed (the last
-transitions' n-step parts use the steps that have an s', Q36).
+Engineering choices: β_PER is β_final online; the agent's random draws (ε, replay) come from its own streams
+of a training seed, so they do not depend on the episodes' seeds; at an episode end the chain is flushed (the
+last transitions' n-step parts use the steps that have an s', Q36).
 """
 
 from __future__ import annotations
@@ -285,7 +285,8 @@ class OnlineAgent:
 
 @dataclass(frozen=True, slots=True)
 class Episode:
-    """One training episode's numbers (M6.6): on-time share and mean ê of its closed tasks, updates so far."""
+    """One training episode's numbers (M6.6): on-time share and mean C^en of its closed tasks, updates so
+    far."""
 
     seed: int
     on_time: float
@@ -296,8 +297,8 @@ class Episode:
 
 
 def episode_stats(cfg: Config, recs: Sequence[TaskRecord]) -> tuple[float, float]:
-    """16.3: the share of tasks delivered on time, and the mean ê (min(E / E_ref, ē) over every attempt;
-    ē for a drop, as in 13.2.4)."""
+    """16.3: the share of tasks delivered on time, and the mean C^en (min(E / E_ref, C^en_max) over every
+    attempt; C^en_max for a drop, as in 13.2.4)."""
     if not recs:
         return 0.0, 0.0
     e_bar = cfg.derived.e_bar
