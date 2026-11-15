@@ -357,3 +357,22 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   D:\pcnme-results-backup (a separate SSD; 92.6 GB moved, then the LuST evaluation copied fresh: 9 626 files,
   66.54 GB, identical to data/lust/results); the incomplete copy on F: deleted. F: 93.6 GB free, D: about 45 GB.
   Earlier entries name the old place F:/projects/pcnme-results-backup.
+
+## 15 Nov: the testbed table complete (every method, S1-S6, 5 seeds, after every fix)
+
+- Last batch: D3QN (scratch), VFC PPO, Tang & Wong, Random (`--redo` archived Random's earlier rows); stopped once by
+  a false alarm (a PPO zone that had not filled its 1 024-decision rollout; health check fixed, 3917f66), resumed.
+  Every one of the 240 testbed cells now ran after the 11 Nov fixes; all healthy.
+- On time on the testbed (fast mode 78-100 % for all):
+  | method | S1 | S2 | S3 | S4 | S5 | S6 |
+  | Greedy | 98.4 | 89.3 | 24.6 | 61.9 | 62.2 | 71.1 |
+  | D3QN + greedy demos | 98.3 | 87.1 | 47.7 | 49.1 | 47.7 | 60.1 |
+  | PCNME | 97.1 | 84.0 | 43.7 | 39.8 | 39.7 | 62.3 |
+  | D3QN (scratch) | 97.1 | 86.8 | 29.6 | 46.2 | 43.4 | 61.9 |
+  | VFC PPO | 98.1 | 89.4 | 35.8 | 46.4 | 46.6 | 60.3 |
+  | Tang & Wong | 94.0 | 59.4 | 7.1 | 16.7 | 11.3 | 21.8 |
+  | QECO | 92.8 | 46.5 | 6.8 | 15.0 | 14.8 | 20.2 |
+  | Random | 95.7 | 80.7 | 30.3 | 47.9 | 48.5 | 56.4 |
+- Reading: Greedy keeps the most on the testbed except in S3, where the D3QN-family learners (PCNME, D3QN + greedy)
+  keep about twice its share; the LSTM baselines (Tang & Wong, QECO) collapse when they learn online on real
+  hardware; the tight scenarios S4/S5 cost every method 30-55 pp.
