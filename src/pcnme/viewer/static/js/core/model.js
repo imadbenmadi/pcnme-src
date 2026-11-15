@@ -115,8 +115,9 @@ export class LiveBuffer {
     let changed = false;
     for (const t of d.tasks) {
       if (t.t == null) continue;
-      if (!this.tasks.has(t.id)) changed = true;
-      this.tasks.set(t.id, t);
+      const key = `${t.id}@${t.anchor}`; // a frame re-uploaded to another zone has two anchors and two rows (logs too)
+      if (!this.tasks.has(key)) changed = true;
+      this.tasks.set(key, t);
       this.now = Math.max(this.now, t.close ?? t.t);
     }
     for (const [zone, t, f] of d.zones) {
