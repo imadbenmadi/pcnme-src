@@ -114,7 +114,7 @@ Open (not built in M7):
 - [ ] IQL instead of DQfD (16.4).
 - [ ] 60 inputs: both slot types per option (16.4).
 - [ ] Zone join, zone kill, broker restart (15.7; 16.4).
-- [ ] Missing metrics (16.3): next-zone acc@1 and T_exit error, delivery success after a zone change, decisions until the on-time rate is stable, the hypervolume of the fronts in the report.
+- [x] Missing metrics (16.3), 15 Nov: next-zone acc@1 and T_exit error, delivery success after a zone change, decisions until the on-time rate is stable, the hypervolume of the fronts (tools/extra_metrics.py; data/<map>/results/extra.md; definitions QUESTIONS Q63, stand-ins).
 
 ## M8 — Federated learning (phase 2)
 
