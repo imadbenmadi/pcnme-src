@@ -105,6 +105,7 @@ The live screen is [`src/pcnme/pipeline/screen.py`](src/pcnme/pipeline/screen.py
 | [`run_testbed.py`](run_testbed.py) | every method on the Docker testbed next to its fast-mode twin (pre-flight check, resumable, gap table) | [`src/pcnme/pipeline/testbed.py`](src/pcnme/pipeline/testbed.py) |
 | [`run_live.py`](run_live.py) | one long testbed run to watch live in the viewer and Grafana (not a measurement) | [`src/pcnme/pipeline/live.py`](src/pcnme/pipeline/live.py) |
 | [`view.py`](view.py) | the viewer: replay any evaluated or testbed run (two side by side), the live testbed, the training curves | [`src/pcnme/viewer/`](src/pcnme/viewer/README.md) |
+| [`stop_all.py`](stop_all.py) | stop everything PCNME runs here: the containers (every compose profile), the project's networks, the five scripts above, ports 8765, 3000, 8086, 1883, 18083, 8000; `--images` / `--volumes` also delete the pcnme images / the InfluxDB and Grafana volumes; `--dry-run` only prints the plan. Never touches data/. Windows and WSL (each sees its own processes) | [`src/pcnme/pipeline/stop.py`](src/pcnme/pipeline/stop.py) |
 
 ## 8. How to read summary.csv
 
@@ -137,5 +138,7 @@ uv run python view.py
 S3, PCNME next to Greedy on seed 3000). How it is built and how to extend it: [`src/pcnme/viewer/README.md`](src/pcnme/viewer/README.md).
 For another machine: `uv run python -m pcnme.viewer.export` writes `../pcnme-history-viewer` (about 190 MB with
 the testbed and LuST runs; a rerun replaces its replay), which runs with `python serve.py` and nothing else installed.
+
+To stop everything (containers, networks, the scripts, the ports; it prints the plan first): `uv run python stop_all.py`.
 
 The full list, with times and outputs, is in [`RUN_TRAINING.md`](RUN_TRAINING.md).
