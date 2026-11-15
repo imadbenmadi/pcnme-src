@@ -169,9 +169,9 @@ def rec(cfg: Config, kind: str, outcome: str, latency: float | None, energy: flo
 def test_the_objectives_by_hand(cfg: Config) -> None:
     e_ref, e_bar = cfg.derived.e_ref, cfg.derived.e_bar
     rs = [
-        rec(cfg, "T1", "on_time", 0.05, 1.5 * e_ref["T1"]),  # c = 0.5, ê = 1.5
-        rec(cfg, "T4", "late", 1.5, 100 * e_ref["T4"]),  # c = 1.5 + 0.5 = 2, ê capped at ē
-        rec(cfg, "T1", "drop_lost", None, 0.0),  # C_drop = 5, ē
+        rec(cfg, "T1", "on_time", 0.05, 1.5 * e_ref["T1"]),  # C^time = 0.5, C^en = 1.5
+        rec(cfg, "T4", "late", 1.5, 100 * e_ref["T4"]),  # C^time = 1.5 + 0.5 = 2, C^en capped at C^en_max
+        rec(cfg, "T1", "drop_lost", None, 0.0),  # C_drop = 5, C^en_max
     ]
     o = objectives(cfg, rs)
     assert (o.n, o.drops) == (3, 1)

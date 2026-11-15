@@ -11,7 +11,7 @@ copy; the car's confirm reaches the serving zone, which publishes car/{id}/ack f
 
 The state plane (zone/statestore.py, M3.3): every zone and the cloud publish zone/{id}/state each state
 period, and every POST reply carries a snapshot; the anchor keeps the newest by version, counts its own
-pending sends (R1) and estimates ŵ_WAN from its cloud uploads (4.3). Placement (M3.5): here, a neighbour
+pending sends (R1) and estimates Ŵ_WAN from its cloud uploads (4.3). Placement (M3.5): here, a neighbour
 (POST over the own backhaul pipe, reply after the backhaul delay) or the cloud; a refusal gets the one
 re-decision (9.1). Loss detection (M3.6, 9.3-9.4): an upload timeout per send, the executor's last will,
 a watchdog from the accept, a status probe before any retry, retries with the normal masks, best-effort
@@ -97,7 +97,7 @@ class AttemptInfo:
     probes: int = 0
     probe_timer: EventHandle | None = None
     done_seen: bool = False  # a probe said done: if no result follows, it was lost (QUESTIONS Q23)
-    t_up: float = 0.0  # κ_up (T̂_in + δ̂_reply): the upload timeout, counted from the end of the own send (C7)
+    t_up: float = 0.0  # κ_up (T̂_in + δ̄_reply): the upload timeout, counted from the end of the own send (C7)
     decided: bool = False  # a placement decision sent it (11.3.1); False for a boulder or the soft fallback
     t_end: float | None = None  # when it ended at the anchor: refused, timed out, lost or cancelled (11.4)
     report: Report | None = None  # its executor's report, if one reached the anchor by close + G (12.5)
@@ -120,7 +120,7 @@ class TaskRecord:
     executor: str | None = None  # the zone id or "cloud" of the last attempt
     t_send: float | None = None
     t_at_executor: float | None = None  # when the input reached the executor
-    budget: float | None = None  # B_k sent to the executor (6C.9)
+    budget: float | None = None  # T^bud_k sent to the executor (6C.9)
     transfer: SeriesTransfer | None = None
     reply: str | None = None  # "accepted", "full", "late"
     slot: SlotType | None = None
@@ -284,7 +284,7 @@ class Cloud:
         start_state_loop(clock, config.stateplane, self._publish_state, self._queues)
 
     def snapshot(self) -> Snapshot:
-        """The cloud's state: it never publishes ŵ_WAN, it cannot see the router's queue (4.3)."""
+        """The cloud's state: it never publishes Ŵ_WAN, it cannot see the router's queue (4.3)."""
         slots = self.executor.snapshot()
         return Snapshot(CLOUD, self._versions.next(), slots, 0.0, None, busy_share(slots))
 
@@ -371,13 +371,13 @@ class Zone:
         )
         lk, sp = config.links, config.stateplane
         bh_d, wan_d = sum(lk.backhaul_delay) / 2, sum(lk.wan_delay) / 2  # mean delays
-        pub = {z: bh_d + lk.broker_extra_delay + bh_d for z in config.layout.zones}  # δ̂_pub (Q20)
+        pub = {z: bh_d + lk.broker_extra_delay + bh_d for z in config.layout.zones}  # δ̄_pub (Q20)
         pub[CLOUD] = wan_d + lk.broker_extra_delay + bh_d
         self.store = StateStore(zone_id, clock, sp.stale_after, pub, sp.wan_ewma_lambda)
-        self._est = PathEstimates(config, self.store)  # ŵ_WAN from the state store (4.3)
+        self._est = PathEstimates(config, self.store)  # Ŵ_WAN from the state store (4.3)
         self._reply_cloud = (
             wan_d + bh_d
-        )  # δ̂_reply,cloud: the HTTP reply crosses the WAN, then the backhaul (Q20)
+        )  # δ̄_reply,cloud: the HTTP reply crosses the WAN, then the backhaul (Q20)
         self._tof = TofBroker(config, self._est)
         self._em = EnergyModel(config)
         self._bh_d, self._wan_d = bh_d, wan_d
@@ -503,8 +503,9 @@ class Zone:
     ) -> None:
         """The car uploads its task over the zone's radio, sharing its airtime with the other uploads in
         progress (6A.2, CHANGES C6), at its current rate (`rate`, from its distance now; by default the rate
-        at its attach); the task exists at t_rx. On the testbed the car sends R_car and B_car with the upload
-        (5.3 POST /tasks, 15.3) and `on_rx` answers it at t_rx; in fast mode B_car comes from the car."""
+        at its attach); the task exists at t_rx. On the testbed the car sends R_car and T^bud_car with the
+        upload (5.3 POST /tasks, 15.3) and `on_rx` answers it at t_rx; in fast mode T^bud_car comes from the
+        car."""
         now = self._clock.now
         if rate is None or b_car is None:  # fast mode: the car is attached here; the testbed sends both
             car, attach_rate = self._cars[task.car_id]
@@ -748,7 +749,7 @@ class Zone:
         info = rec.attempts[attempt] = AttemptInfo(option, target, now, decided=decided)
         t_in = self._est.t_in_neighbour(task.input_bits, w_bh)
         self._upload_timer(rec, attempt, t_in, self._bh_d)
-        budget = rec.d_a - now - t_in - self._est.t_ret_fog()  # 6C.9: B_k = d_A - t_s - T̂_in - T̂_ret
+        budget = rec.d_a - now - t_in - self._est.t_ret_fog()  # 6C.9: T^bud_k = d_A - t_send - T̂_in - T̂_ret
         req = TaskRequest(key, task.task_type, task.cls, task.l_max, budget)
         self.store.add_pending(target, pend, view.slot, task.cls, view.run)  # R1 (9.2)
 
@@ -784,7 +785,7 @@ class Zone:
         info = rec.attempts[attempt]
         t_in = self._est.t_in_cloud(task.input_bits, w_bh)
         self._upload_timer(rec, attempt, t_in, self._reply_cloud)
-        budget = rec.d_a - now - t_in - self._est.t_ret_cloud()  # 6C.9: B_k = d_A - t_s - T̂_in - T̂_ret
+        budget = rec.d_a - now - t_in - self._est.t_ret_cloud()  # 6C.9: T^bud_k = d_A - t_send - T̂_in - T̂_ret
         d_bh = hops.delay(self._streams, hops.BH_OUT, self._cfg.links.backhaul_delay, task.task_id, attempt)
         d_wan = hops.delay(self._streams, hops.WAN_IN, self._cfg.links.wan_delay, task.task_id, attempt)
         req = TaskRequest(key, task.task_type, task.cls, task.l_max, budget)
@@ -861,7 +862,7 @@ class Zone:
         w_bh: float,
     ) -> None:
         """An executor's answer reaches the anchor (6C.10): its snapshot (R1), the pending send cleared, a
-        ŵ_WAN sample on a cloud accept (4.3); a refusal leads to the one re-decision (9.1, 9.2)."""
+        Ŵ_WAN sample on a cloud accept (4.3); a refusal leads to the one re-decision (9.1, 9.2)."""
         if snap is not None:
             self.store.on_snapshot(snap)
         self.store.clear_pending(executor_id, pend)
@@ -913,7 +914,8 @@ class Zone:
         self._close(rec, f"drop_refused_{reason}")
 
     def _cloud_can_finish(self, rec: TaskRecord) -> bool:
-        """9.1: T̂_in,cloud + Ê_cloud + T̂_ret,cloud <= time left + L_max (the cloud never queues, as 7.1.3)."""
+        """9.1: T̂_in,cloud + T̄^run_cloud + T̂_ret,cloud <= time left + L_max (the cloud never queues, as
+        7.1.3)."""
         task, now = rec.task, self._clock.now
         t = self._est.t_in_cloud(task.input_bits, self.backhaul.wait_at(now)) + self._est.e_cloud(
             task.task_type
@@ -936,7 +938,7 @@ class Zone:
         return self.cloud if executor_id == CLOUD else self.peers[executor_id]
 
     def _reply_delay(self, executor_id: str) -> float:
-        """δ̂_reply,k (Q20): 0 here, the backhaul to a neighbour, WAN + backhaul from the cloud."""
+        """δ̄_reply,k (Q20): 0 here, the backhaul to a neighbour, WAN + backhaul from the cloud."""
         if executor_id == self.zone_id:
             return 0.0
         return self._reply_cloud if executor_id == CLOUD else self._bh_d
@@ -944,7 +946,7 @@ class Zone:
     def _row_high(self, rec: TaskRecord, executor_id: str, slot: SlotType) -> float:
         row = self._cfg.time_table.row(rec.task.task_type, self._hw(executor_id), slot)
         assert row is not None
-        return row.p95  # Ê^high (14.4, 18)
+        return row.p95  # T^run,hi (14.4, 18)
 
     def _cap(self, rec: TaskRecord) -> float:
         """9.3: the watchdog is capped at d_A (hard) or d_A + L_max (soft): after that the task is dropped."""
@@ -952,14 +954,14 @@ class Zone:
 
     def _upload_timer(self, rec: TaskRecord, attempt: int, t_in: float, reply: float) -> None:
         """9.3, CHANGES C7: while the zone's own send is still going, only the deadline cap applies (an upload
-        still being sent is not a failure). T_up = κ_up (T̂_in + δ̂_reply) starts when that send is done."""
+        still being sent is not a failure). T^to = κ_up (T̂_in + δ̄_reply) starts when that send is done."""
         info = rec.attempts[attempt]
         info.t_up = self._kappa * (t_in + reply)
         cap = max(self._clock.now, self._cap(rec))
         info.timer = self._clock.schedule(cap, lambda: self._upload_cap(rec, attempt))
 
     def _sent(self, rec: TaskRecord, attempt: int) -> None:
-        """The own send is done (the input reached the executor): T_up starts, still capped (C7)."""
+        """The own send is done (the input reached the executor): T^to starts, still capped (C7)."""
         info = rec.attempts[attempt]
         if not info.live or info.timer is None or not self.anchor.is_open(rec.task.task_id):
             return  # replied already, or ended
@@ -994,8 +996,8 @@ class Zone:
         self._refused(rec, "no_reply")
 
     def _arm(self, rec: TaskRecord, attempt: int, t_reply: float, rest: float) -> None:
-        """9.3: t_wd = t_reply - δ̂_reply + (the time it still needs: Ŵ + Ê^high from an accept) + δ̂_pub
-        + m_wd, capped (after the cap the end timer drops the task)."""
+        """9.3: t_wd = t_reply - δ̄_reply + (the time it still needs: Ŵ^queue + T^run,hi from an accept) +
+        δ̄_pub + m_wd, capped (after the cap the end timer drops the task)."""
         info = rec.attempts[attempt]
         e = info.executor
         pub = self.store.pub_delay.get(e, self.store.pub_delay.get(self.zone_id, 0.0))
@@ -1040,7 +1042,7 @@ class Zone:
     ) -> None:
         """9.3: queued -> re-arm with the new estimate (a hard task that would now finish after d_A is retried
         elsewhere if the retry mask allows, and this attempt cancelled); running -> re-arm with the remaining
-        Ê^high; done -> wait δ̂_pub + m_wd; skipped, aborted, not found or no reply (by T_probe) -> lost."""
+        T^run,hi; done -> wait δ̄_pub + m_wd; skipped, aborted, not found or no reply (by T_probe) -> lost."""
         info = rec.attempts[attempt]
         if info.probes != n or info.probe_timer is None:
             return  # a later probe, or this one was already answered or timed out
@@ -1061,7 +1063,7 @@ class Zone:
         elif status == "running" and value is not None:
             self._arm(rec, attempt, now, value)
         elif status == "done":
-            info.done_seen = True  # wait δ̂_pub + m_wd for its result
+            info.done_seen = True  # wait δ̄_pub + m_wd for its result
             self._arm(rec, attempt, now + self._reply_delay(info.executor), 0.0)
         else:
             self._lost(rec, attempt)

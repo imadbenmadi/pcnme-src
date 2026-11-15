@@ -25,19 +25,19 @@ from pcnme.sim.rng import RandomStreams
 
 @dataclass(frozen=True, slots=True)
 class TaskRequest:
-    """What an executor receives with a task (6C step 9): its budget B_k, a duration, not a clock time."""
+    """What an executor receives with a task (6C step 9): its budget T^bud_k, a duration, not a clock time."""
 
     key: AttemptKey
     task_type: str
     cls: TaskClass
     l_max: float  # how late a soft task may still be delivered (= D, final-design 2)
-    budget: float  # B_k; the executor sets d_k = arrival + B_k
+    budget: float  # T^bud_k; the executor sets d_k = arrival + T^bud_k
 
 
 @dataclass(frozen=True, slots=True)
 class Accepted:
     slot: SlotType
-    wait: float  # Ŵ of the chosen slot type, as a duration (8.3 step 4)
+    wait: float  # Ŵ^queue_q of the chosen slot type, as a duration (8.3 step 4)
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,8 +67,8 @@ class Report:
     slot: SlotType  # the slot type it ran on, or whose queue it left
     start: float | None  # None if it never started
     finish: float  # when the slot finished with it, or when it was skipped
-    busy: float  # how long it held the slot (T_run, 12.2)
-    energy: float  # execution energy: PUE x p x T_run (12.2)
+    busy: float  # how long it held the slot (T^run, 12.2)
+    energy: float  # execution energy: PUE x P̄ x T^run (12.2)
 
 
 TraceEntry = tuple[str, float, AttemptKey, str]  # (event, time, attempt key, detail): for the event log
@@ -86,7 +86,7 @@ class _Queued:
     d_k: float
     arrival: float
     slot: SlotType
-    mean: float  # Ê on this queue's slot type
+    mean: float  # T̄^run on this queue's slot type
 
     @property
     def latest(self) -> float:
@@ -188,14 +188,14 @@ class Executor:
         return len(self._running[q])
 
     def _slot_remaining(self, q: SlotType, now: float) -> tuple[float, ...]:
-        """r_i of each of the c_q slots, ascending: max(0, Ê - elapsed) for a running task (Q9), its exact
-        tail after an abort, 0 for a free slot (8.5, CHANGES C4)."""
+        """T^rem_q,j of each of the c_q slots, ascending: max(0, T̄^run - elapsed) for a running task (Q9), its
+        exact tail after an abort, 0 for a free slot (8.5, CHANGES C4)."""
         busy = [self._left(r, now) for r in self._running[q]]
         return tuple(sorted(busy + [0.0] * (self._hw.slots(q) - len(busy))))
 
     @staticmethod
     def _left(r: _Running, now: float) -> float:
-        """One slot's remaining time: exact in an abort tail, else max(0, Ê - elapsed) (8.5; Q9)."""
+        """One slot's remaining time: exact in an abort tail, else max(0, T̄^run - elapsed) (8.5; Q9)."""
         if r.tail_end is not None:
             return r.tail_end - now
         return max(0.0, r.start + r.row.mean - now)
@@ -218,8 +218,9 @@ class Executor:
         )
 
     def wait_estimate(self, q: SlotType, cls: TaskClass) -> float:
-        """Ŵ_q for a new task of class `cls`: the 8.5 estimate on this executor's exact state, with no pending
-        sends (QUESTIONS Q8). One formula, shared with the anchor: `pcnme.node.state.wait_estimate`."""
+        """Ŵ^queue_q for a new task of class `cls`: the 8.5 estimate on this executor's exact state, with no
+        pending sends (QUESTIONS Q8). One formula, shared with the anchor:
+        `pcnme.node.state.wait_estimate`."""
         return wait_estimate(self._slot_state(q), cls)
 
     # --- arrival (8.3) --------------------------------------------------------------------------------------
@@ -239,7 +240,8 @@ class Executor:
         if not usable:
             return self._refuse(req, "full")  # 8.3.3: no usable queue has a place for its class
         waits = {q: self.wait_estimate(q, req.cls) for q in usable}
-        finishes = {q: waits[q] + self._row(req.task_type, q).mean for q in usable}  # F_q = Ŵ_q + Ê_q (8.3.1)
+        # F_q = Ŵ^queue_q + T̄^run_q (8.3.1)
+        finishes = {q: waits[q] + self._row(req.task_type, q).mean for q in usable}
         q = choose_slot(finishes)
         if now + finishes[q] > latest:
             return self._refuse(req, "late")  # 8.3.3: hard misses d_k; soft is later than d_k + L_max
@@ -251,7 +253,7 @@ class Executor:
         return Accepted(slot=q, wait=waits[q])
 
     def _has_place(self, q: SlotType, cls: TaskClass) -> bool:
-        """8.2.3: capacity Q_q; the last r places are for hard tasks."""
+        """8.2.3: capacity n^max_q; the last n_res places are for hard tasks."""
         cap = self._hw.queue[q]
         return len(self._queues[q]) < (cap if cls == "hard" else cap - self._reserve)
 
@@ -297,7 +299,7 @@ class Executor:
         return self._steal(q, now)  # step 5 (None: step 6)
 
     def _hopeless(self, task: _Queued, q: SlotType, now: float) -> bool:
-        """8.4 step 1: t + Ê_q^low > d_k (hard) or > d_k + L_max (soft)."""
+        """8.4 step 1: t + T^run,lo_q > d_k (hard) or > d_k + L_max (soft)."""
         return now + self._row(task.req.task_type, q).low > task.latest
 
     def _skip_hopeless_heads(self, q: SlotType, now: float) -> None:
@@ -332,8 +334,9 @@ class Executor:
         self._on_report(report)
 
     def _promotion_is_safe(self, q: SlotType, soft: _Queued, now: float) -> bool:
-        """8.4 step 2: with `soft` on this slot for Ê^high, list-schedule the queued hard tasks (EDF order) on
-        the c_q slots; every one must finish by its d_k. Run times: the mean or the high (QUESTIONS Q10)."""
+        """8.4 step 2: with `soft` on this slot for T^run,hi, list-schedule the queued hard tasks (EDF order)
+        on the c_q slots; every one must finish by its d_k. Run times: the mean or the high (QUESTIONS
+        Q10)."""
         hard = [t for t in self._queues[q] if t.req.cls == "hard"]
         if not hard:
             return True
@@ -372,7 +375,7 @@ class Executor:
 
     def _current_finish(self, q: SlotType, index: int, now: float) -> float:
         """The current estimated finish of the task at `index` in q's queue: now + (R + the mean runs of the
-        tasks ahead of it) / c + its own Ê (8.5 on what is ahead of it; QUESTIONS Q11)."""
+        tasks ahead of it) / c + its own T̄^run (8.5 on what is ahead of it; QUESTIONS Q11)."""
         queue = self._queues[q]
         c = self._hw.slots(q)
         if self.busy(q) < c:
@@ -407,7 +410,7 @@ class Executor:
 
     def _abort(self, q: SlotType, running: _Running, outcome: Outcome) -> None:
         """Stop a running task for good (8.6): the worker stops at the end of its current DAG step, so the
-        slot stays busy for min(remaining, d_abort), d_abort = the longest step of the task on this slot type.
+        slot stays busy for min(remaining, T_abort), T_abort = the longest step of the task on this slot type.
         The drop is reported at once with the energy of the whole busy time (12.2, 12.5)."""
         now = self._clock.now
         if running.event is not None:
@@ -432,7 +435,7 @@ class Executor:
             start=running.start,
             finish=slot_free,
             busy=busy,
-            energy=self._pue * running.row.power * busy,  # 12.2: PUE_k x p x T_run, the d_abort tail included
+            energy=self._pue * running.row.power * busy,  # 12.2: PUE_k x P̄ x T^run, the T_abort tail included
         )
         self._log(outcome, report.key, q)
         self._keep(report.key, outcome)
@@ -463,7 +466,7 @@ class Executor:
 
     def probe(self, key: AttemptKey) -> tuple[Status, float | None]:
         """GET /tasks/{id}?attempt=n&anchor=A (5.3, 9.3): queued with its wait (the C4 estimate over the tasks
-        ahead of it), running with its remaining time at Ê^high, or done, skipped, aborted, cancelled, not
+        ahead of it), running with its remaining time at T^run,hi, or done, skipped, aborted, cancelled, not
         found (no number)."""
         now = self._clock.now
         live = self._live.get(key)

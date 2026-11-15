@@ -1,7 +1,7 @@
 """Rewards, one per attempt (PLAN M4.2; final-design 11.4, 12.5, 13.2, 11.3.3; QUESTIONS Q32).
 
-By hand with the config's B = 1, w3 = 1, C_drop = 5 and ē = 11.697, and w pinned to 0.5 (the config's w is
-M5's w*, which the full NSGA-II runs will change). Scripted two zones
+By hand with the config's r_ok = 1, w3 = 1, C_drop = 5 and C^en_max = 11.697, and w pinned to 0.5 (the
+config's w is M5's w*, which the full NSGA-II runs will change). Scripted two zones
 (every delay and run at its mean): a T1 made at 0.1 s is in at t_rx = 0.1 + 5.226 ms; to z2 the input takes
 4.2 ms and the reply 3 ms; a result reaches the car 10 ms after its run ends (7 ms to the serving zone, 3 ms
 downlink).
@@ -95,7 +95,7 @@ def test_every_drop_is_worse_than_every_delivery(
 ) -> None:
     # 11.4, N18: for any w in (0, 1] and any energy. A delivered hard task has L <= D, a soft one
     # L <= D + L_max.
-    # (w starts at 1e-9: below that the gap, w (C_drop - c_time), is under float resolution next to ē.)
+    # (w starts at 1e-9: below that the gap, w (C_drop - C^time), is under float resolution next to C^en_max.)
     p = RewardParams(cfg.reward.b, cfg.reward.w3, cfg.reward.c_drop, w, cfg.derived.e_bar)
     t = cfg.task_types[kind]
     d = t.deadline[mode]  # type: ignore[index]
@@ -115,7 +115,7 @@ def settled(c: object, wait: float = 1.0) -> TaskRecord:
 
 
 def test_a_task_run_here_on_time(cfg: Config, p: RewardParams) -> None:
-    # L = upload 5.226 + run 8 + return 10 = 23.226 ms; E = PUE p T_run + the fog return = E_ref(T1).
+    # L = upload 5.226 + run 8 + return 10 = 23.226 ms; E = PUE P̄ T^run + the fog return = E_ref(T1).
     c = two(Fixed("here"), reward__w=W)
     c.zones["z1"].upload(city_task(c, "T1"))
     rec = settled(c)

@@ -132,7 +132,7 @@ stateplane:
 
 scheduler:
   reserve_hard_r: 4              # R
-  headroom_h: 2                  # R: small next to Q
+  headroom_h: 2                  # R: small next to n^max_q
   soft_promotion_A_max: 0.200    # R: 2 x the loose hard deadline
   probe_timeout: {fog: 0.050, cloud: 0.300}   # R: about 10 backhaul RTTs / the WAN RTT max + margin
   T_keep: 10.0                   # R: >= longest D + L_max = 6 s
@@ -145,7 +145,7 @@ timing:
   T_ack: 0.200                   # R: > result + radio + confirm (about 20 ms) with margin
   T_leave: 0.300                 # final doc
   gps_expiry: 1.0                # final doc
-  reward_grace_G: 0.500          # R: > the slowest status report (cloud one way 100 ms + broker) + d_abort
+  reward_grace_G: 0.500          # R: > the slowest status report (cloud one way 100 ms + broker) + T_abort
   encode: 0.0                    # M: the car's JPEG encode time (14.3), from the calibration run; placeholder 0 (Q14)
 
 tof:
@@ -157,7 +157,7 @@ reward:
   B: 1.0
   P: 2.0
   w3: 1.0
-  C_drop: 5.0                    # 1 + (1 + w3) L_max/D + P
+  C_drop: 5.0                    # 1 + (1 + w3) L_max/D + C_pen
   w: 0.414                       # C: w* = the median knee weight (13.3) over all first-results training windows
                                  # with a knee: 27 of 36 (S1-S6, 6 windows each, NSGA-II 40 x 20, calibrated
                                  # config; docs/results-first.md). Was 0.0788 (S2 only, 10 x 5). The full runs
@@ -231,7 +231,7 @@ ablation:                        # final-design 16.4 switches; every default is 
   neighbours: true               # false: here + cloud only (the 4 neighbour positions empty)
   predictor: true                # false: no predictor (exit = inf, next zone = stays)
   result_forwarding: true        # false: the result reaches the car only through its anchor (9.6)
-  tof: true                      # false: no TOF-Broker (alpha = inf: no boulders; B_WAN unchanged)
+  tof: true                      # false: no TOF-Broker (α_TOF = inf: no boulders; B_WAN unchanged)
   expert: keep                   # expert data online (13.5, 16.4): keep (with priorities) | fade (its sampling
                                  # share and the margin weight shrink linearly to 0 over the training budget) |
                                  # clear (dropped after pretraining)

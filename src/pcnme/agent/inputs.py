@@ -2,7 +2,8 @@
 
 All built from the anchor's own memory (the DecisionContext: its exact state, its state store, its own pending
 sends, its car registry and predictor), with no network call. Times are divided by the task's D and capped at
-2 (= 1 + L_max/D: an option needing longer is masked anyway); energies are min(Ê_k / E_ref, ē) / ē.
+2 (= 1 + L_max/D: an option needing longer is masked anyway); energies are min(Ê_k / E_ref, C^en_max) /
+C^en_max.
 
     Task (5)         input_size, ref_exec, slack, hard, D_norm
     Per option (36)  for here, n1-n4, cloud in that order: present, wait, exec, network, energy, age

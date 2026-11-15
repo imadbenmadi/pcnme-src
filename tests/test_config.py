@@ -217,7 +217,7 @@ def test_cloud_eligible_bits_include_hard_boulders(raw: dict[str, Any]) -> None:
 
 @pytest.mark.parametrize("task", ["T1", "T3", "T4", "T2"])
 def test_e_ref(cfg: Config, task: str) -> None:
-    # final-design 12.3: PUE_fog x p x T on the reference class's fastest slot + E_ret here
+    # final-design 12.3: PUE_fog x P̄ x T on the reference class's fastest slot + E_ret here
     assert cfg.derived.e_ref[task] == pytest.approx(E_REF[task], rel=1e-12)
 
 

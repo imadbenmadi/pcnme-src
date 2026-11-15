@@ -1,7 +1,7 @@
 """The knee point and the weight w (final-design 13.3; PLAN M5.3). THIS TOUCHES THE AGENT: w is input 48 and
 the time weight of every reward (11.4).
 
-Normalise the final front: f̃_i = (f_i - f_i^min) / R_i with R_i = f_i^max - f_i^min. The knee is the point
+Normalise the final front: f̃_i = (f_i - f_i^min) / Δf_i with Δf_i = f_i^max - f_i^min. The knee is the point
 with the smallest f̃1 + f̃2 (the farthest from the line through the two extremes). The local slope from its two
 neighbours on the front sorted by f̃1 (one-sided at an end):
 
@@ -9,7 +9,7 @@ neighbours on the front sorted by f̃1 (one-sided at an end):
 
 and back through the ranges to the raw per-task costs the reward uses:
 
-    w = (w̃ / R1) / (w̃ / R1 + (1 - w̃) / R2),    w1 = w, w2 = 1 - w
+    w = (w̃ / Δf_1) / (w̃ / Δf_1 + (1 - w̃) / Δf_2)
 
 Every front point p gets its own w_p by the same formulas (conditioning, 13.3). w* = the median knee weight
 over the training windows. Engineering choices: duplicate points count once; a tie on f̃1 + f̃2 goes to the
@@ -29,10 +29,10 @@ Point = tuple[float, float]
 class Knee:
     point: Point  # (f1, f2) of the knee
     index: int  # among the front's distinct points sorted by f1
-    slope: float  # s
+    slope: float  # σ
     w_tilde: float  # on normalised axes
-    w: float  # on the raw costs: w1 = w, w2 = 1 - w
-    ranges: tuple[float, float]  # R1, R2
+    w: float  # on the raw costs: w for time, 1 - w for energy
+    ranges: tuple[float, float]  # Δf_1, Δf_2
 
 
 def distinct_sorted(points: Sequence[Point]) -> list[Point]:
@@ -49,7 +49,7 @@ def _normalised(pts: list[Point]) -> tuple[list[Point], float, float]:
 
 
 def weight_at(pts: list[Point], i: int) -> tuple[float, float, float, float, float]:
-    """(s, w̃, w, R1, R2) at the i-th of the distinct points sorted by f1 (13.3)."""
+    """(σ, w̃, w, Δf_1, Δf_2) at the i-th of the distinct points sorted by f1 (13.3)."""
     n, r1, r2 = _normalised(pts)
     lo, hi = max(i - 1, 0), min(i + 1, len(n) - 1)  # one-sided at an end
     s = (n[lo][1] - n[hi][1]) / (n[hi][0] - n[lo][0])

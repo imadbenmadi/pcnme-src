@@ -6,12 +6,12 @@ the current one kept unless another is handover_hysteresis_m closer, C13), and s
 zone. A car in no zone's coverage is in a gap (C12): it talks to nobody. A task the car creates goes to its
 serving zone at the rate of its current distance; if the car changes zone or enters a gap before the
 upload's last bit, the upload is cut (9.7): the car keeps the frame and uploads it to the zone it reaches
-next with the same task id and its new B_car. It gives the frame up when the budget is gone (9.7.3): hard,
+next with the same task id and its new T^bud_car. It gives the frame up when the budget is gone (9.7.3): hard,
 below the fastest possible upload + run + return; soft, past D + L_max (a car-side drop, logged).
 
-The hotspot (18, QUESTIONS Q30): a share h of the cars stays on the roads between z1's intersections, the
-rest roam the whole grid; h comes from the map calibration run (experiments/calibrate.py), so that z1 holds
-hotspot_share of the covered load (1.6 x the mean).
+The hotspot (18, QUESTIONS Q30): a share h_hot of the cars stays on the roads between z1's intersections, the
+rest roam the whole grid; h_hot comes from the map calibration run (experiments/calibrate.py), so that z1
+holds hotspot_share of the covered load (1.6 x the mean).
 """
 
 from __future__ import annotations
@@ -447,7 +447,7 @@ class City:
     # --- logs (16.3, METRICS.md, Q28) ----------------------------------------------------------------------
 
     def _sample(self) -> None:
-        """Every state period: per zone and slot type (queues, busy slots, refusals, ŵ_WAN) and per pipe
+        """Every state period: per zone and slot type (queues, busy slots, refusals, Ŵ_WAN) and per pipe
         (wait, bits pushed, TI over the period)."""
         now, period = self.clock.now, self.cfg.stateplane.state_period
         for z, zone in self.zones.items():

@@ -1,7 +1,7 @@
 """Executor: slots, queues, slot-type choice, refusals (PLAN M1.5; final-design 8.1-8.3, 8.5, 6C, 12.2).
 
-An F-GPU node from the config: c_GPU = 2, c_CPU = 2, Q_GPU = 32, Q_CPU = 16, r = 4. Run times are the
-placeholder means (deterministic), so every number below is computed by hand.
+An F-GPU node from the config: c_GPU = 2, c_CPU = 2, n^max_GPU = 32, n^max_CPU = 16, n_res = 4. Run times are
+the placeholder means (deterministic), so every number below is computed by hand.
 """
 
 from __future__ import annotations
@@ -31,8 +31,9 @@ def test_an_empty_node_takes_the_faster_slot_type_with_no_wait(make_node: Callab
 
 def test_the_cpu_is_chosen_once_the_gpu_would_finish_later(make_node: Callable[..., Node]) -> None:
     # n T1 tasks submitted at t = 0. Tasks 1-2 start on the 2 GPU slots. For task n >= 3 the GPU estimate is
-    # Ŵ = (R + B_hard) / 2 = (2 x 8 + (n - 3) x 8) / 2 ms = 4 (n - 1) ms, so F_GPU = 4 (n - 1) + 8 ms, against
-    # F_CPU = 0 + 90 ms (CPU free). The GPU wins while 4 (n - 1) + 8 <= 90, so n <= 21: task 22 goes to a CPU.
+    # Ŵ^queue = (R + Ω^hard) / 2 = (2 x 8 + (n - 3) x 8) / 2 ms = 4 (n - 1) ms, so F_GPU = 4 (n - 1) + 8 ms,
+    # against F_CPU = 0 + 90 ms (CPU free). The GPU wins while 4 (n - 1) + 8 <= 90, so n <= 21: task 22 goes
+    # to a CPU.
     node = make_node()
     replies = [node.submit("T1", 0.100) for _ in range(22)]
     slots = [r.slot for r in replies if isinstance(r, Accepted)]
@@ -61,8 +62,8 @@ def test_a_hard_task_is_refused_full_when_every_queue_is_full(make_node: Callabl
 
 
 def test_a_soft_task_needs_a_place_below_q_minus_r(make_node: Callable[..., Node]) -> None:
-    # T2 is soft and GPU only: 2 run and 28 queue (Q_GPU - r = 28). The 31st T2 has no place: refused "full".
-    # A soft T4 can still go to the free CPU slots.
+    # T2 is soft and GPU only: 2 run and 28 queue (n^max_GPU - n_res = 28). The 31st T2 has no place: refused
+    # "full". A soft T4 can still go to the free CPU slots.
     node = make_node()
     assert node.submit("T2", LONG) == Accepted(slot="gpu", wait=0.0)
     assert node.submit("T2", LONG) == Accepted(slot="gpu", wait=0.0)
@@ -74,8 +75,8 @@ def test_a_soft_task_needs_a_place_below_q_minus_r(make_node: Callable[..., Node
 
 
 def test_a_hard_task_can_take_the_reserved_places(make_node: Callable[..., Node]) -> None:
-    # After 28 queued soft T2, the GPU queue still admits hard tasks (it holds fewer than Q_GPU = 32). T1 goes
-    # to the CPU while that finishes earlier, then to the GPU's reserved places.
+    # After 28 queued soft T2, the GPU queue still admits hard tasks (it holds fewer than n^max_GPU = 32). T1
+    # goes to the CPU while that finishes earlier, then to the GPU's reserved places.
     node = make_node()
     for _ in range(30):
         node.submit("T2", LONG)
@@ -90,13 +91,14 @@ def test_a_soft_task_is_refused_full_when_only_reserved_places_are_left(
     node = make_node()
     for _ in range(30):
         node.submit("T2", LONG)  # GPU: no soft place left
-    for _ in range(2 + 12):  # CPU: 2 running + 12 queued = Q_CPU - r
+    for _ in range(2 + 12):  # CPU: 2 running + 12 queued = n^max_CPU - n_res
         assert isinstance(node.submit("T4", LONG), Accepted)
     assert node.executor.queue_length("cpu") == 12
     assert node.submit("T4", LONG) == Refused(reason="full")
 
 
-# --- R5, R8: refused late (8.3.3); d_k = arrival + B_k (6C) -------------------------------------------------
+# --- R5, R8: refused late (8.3.3); d_k = arrival + T^bud_k (6C)
+# -------------------------------------------------
 
 
 def test_a_hard_task_that_cannot_finish_by_its_deadline_is_refused_late(
@@ -147,7 +149,7 @@ def test_one_task_per_slot_and_runs_take_their_drawn_time(make_node: Callable[..
 
 
 def test_the_finish_report_carries_the_execution_energy(make_node: Callable[..., Node]) -> None:
-    # final-design 12.2: E_exec = PUE_fog x p x T_run = 1.5 x 25 W x 8 ms = 0.3 J on the F-GPU GPU slot.
+    # final-design 12.2: E_exec = PUE_fog x P̄ x T^run = 1.5 x 25 W x 8 ms = 0.3 J on the F-GPU GPU slot.
     node = make_node()
     node.submit("T1", LONG)
     node.run(1.0)
@@ -171,7 +173,7 @@ def starts(node: Node) -> list[object]:
 
 
 def test_a_free_slot_takes_hard_before_soft_then_earliest_deadline(make_node: Callable[..., Node]) -> None:
-    # Both CPU slots run a T3 (110 ms), so they free before the soft task has waited A_max = 200 ms (no soft
+    # Both CPU slots run a T3 (110 ms), so they free before the soft task has waited T_age = 200 ms (no soft
     # promotion, 8.4 step 2, which test_scheduler.py covers).
     node = make_node("F-CPU")
     for _ in range(2):
@@ -209,8 +211,8 @@ def test_ties_go_by_arrival_time_then_task_id(make_node: Callable[..., Node]) ->
 
 
 def test_wait_estimates_follow_8_5_on_the_exact_queue(make_node: Callable[..., Node]) -> None:
-    # Q8 / Q9: the executor's own Ŵ = 0 with a free slot, else (R + B_hard) / c for hard and
-    # (R + B_hard + B_soft) / c for soft; R = the remaining part of the running tasks' mean runs.
+    # Q8 / Q9: the executor's own Ŵ^queue = 0 with a free slot, else (R + Ω^hard) / c for hard and
+    # (R + Ω^hard + Ω^soft) / c for soft; R = the remaining part of the running tasks' mean runs.
     node = make_node()
     ex = node.executor
     assert ex.wait_estimate("gpu", "hard") == 0.0

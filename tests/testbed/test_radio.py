@@ -1,6 +1,6 @@
 """The radio uplink on the testbed (PLAN M9.1 step 5; final-design 15.3, 5.3 POST /tasks): the car sends R_car
-and B_car with its upload, the zone's software pipe (the fast-mode code) shares the airtime, and a remote car
-confirms later through its HTTP reply."""
+and T^bud_car with its upload, the zone's software pipe (the fast-mode code) shares the airtime, and a remote
+car confirms later through its HTTP reply."""
 
 from __future__ import annotations
 
@@ -23,7 +23,8 @@ def test_the_upload_brings_its_own_b_car_and_rate() -> None:
     (rec,) = s.closed
     push = task.input_bits / rate
     assert rec.t_rx == pytest.approx(push + 0.003, rel=1e-6)
-    assert rec.d_a == pytest.approx(rec.t_rx + 0.080 - (push + 0.003), rel=1e-9)  # 6A.3 with the sent B_car
+    # 6A.3 with the sent T^bud_car
+    assert rec.d_a == pytest.approx(rec.t_rx + 0.080 - (push + 0.003), rel=1e-9)
 
 
 def test_a_car_that_confirms_later_still_closes_its_task_on_time() -> None:

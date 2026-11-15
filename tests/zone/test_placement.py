@@ -26,7 +26,7 @@ def refuse(c: City, zone: str, reason: str = "full") -> None:
 
 def test_a_t1_run_at_a_neighbour_by_hand() -> None:
     """6C.9, 4.3, 10.3. Created at 0.1 s; t_rx = +5.226 ms, d_A = 0.2 s.
-    T̂_in = 0 + 1.2e6 / 1e9 + 3 ms = 4.2 ms; T̂_ret = 3 + 1 + 3 + 3 = 10 ms; B_k = 100 - 5.226 - 4.2 - 10 =
+    T̂_in = 0 + 1.2e6 / 1e9 + 3 ms = 4.2 ms; T̂_ret = 3 + 1 + 3 + 3 = 10 ms; T^bud_k = 100 - 5.226 - 4.2 - 10 =
     80.574 ms. The input reaches z2 4.2 ms after the send; it runs 8 ms at once; z2 publishes the result:
     3 + 1 + 3 ms to z1 (the serving zone), + 3 ms radio: L = 5.226 + 4.2 + 8 + 10 = 27.426 ms."""
     c = two(Fixed("n1"))
@@ -41,7 +41,7 @@ def test_a_t1_run_at_a_neighbour_by_hand() -> None:
     assert rec.report is not None and rec.report.start == pytest.approx(rec.t_at_executor)
     assert rec.confirm is not None and rec.confirm.latency == pytest.approx(0.027426, rel=1e-3)
     assert sum(rec.parts.values()) == pytest.approx(rec.confirm.latency, abs=1e-12)
-    assert c.zones["z1"].store.wan.last_sample is None  # only cloud uploads sample ŵ_WAN (4.3)
+    assert c.zones["z1"].store.wan.last_sample is None  # only cloud uploads sample Ŵ_WAN (4.3)
 
 
 def test_the_neighbours_reply_carries_its_snapshot_and_clears_the_pending_send() -> None:

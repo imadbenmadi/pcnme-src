@@ -1,5 +1,7 @@
 # Run log: what was run, when, and what came out
 
+> Symbols in this file follow the old notation (up to final-design revision 128, before 15 Nov 2026); see [docs/NOTATION.md](NOTATION.md) for the new names.
+
 Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 
 ## 3 Nov 2026: calibration (PLAN C, Q52)

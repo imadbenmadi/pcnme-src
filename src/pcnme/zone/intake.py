@@ -3,9 +3,9 @@
 A task exists only once its whole upload has arrived (t_rx, 6A.2, 9.7.1). The anchor sets its deadline on its
 own clock, taking off the upload time (6A.3):
 
-    d_A = t_rx + B_car - Û_up,    Û_up = W_radio + S / R_car + δ̂_radio
+    d_A = t_rx + T^bud_car - T̂_radio,    T̂_radio = W_radio + S / R_car + δ̄_radio
 
-W_radio is known exactly because the zone owns its uplink; δ̂_radio is the mean radio delay.
+W_radio is known exactly because the zone owns its uplink; δ̄_radio is the mean radio delay.
 """
 
 from __future__ import annotations

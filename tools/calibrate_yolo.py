@@ -1,7 +1,7 @@
 """Calibration run C: measure the time table on this PC (final-design 14.4, 15.6 "Calibrate", 18).
 
 Per task type and slot type: mean, p5, p95 of the run time, the longest step (decode, preprocess,
-inference, postprocess; 11.x d_abort), the dynamic GPU energy per run (nvidia-smi / NVML), and the JPEG
+inference, postprocess; 11.x T_abort), the dynamic GPU energy per run (nvidia-smi / NVML), and the JPEG
 sizes at quality 80. A GPU slot is one inference stream; the F-GPU class has c_gpu streams on one GPU, so
 they run concurrently and the dynamic power is shared between them (final-design 12.2). A CPU slot is a
 fixed group of cores (torch threads). T4 (detector + text recognition, 14.1): yolov8n finds the vehicles,

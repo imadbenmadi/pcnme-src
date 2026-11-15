@@ -13,7 +13,7 @@ from pcnme.expert.knee import knee, w_star, weights
 def test_a_convex_front_by_hand() -> None:
     # (0, 1), (0.2, 0.2), (0.4, 0.1), (1, 0): already normalised (R = 1). Sums 1, 0.4, 0.5, 1: the knee is
     # (0.2, 0.2).
-    # Neighbours (0, 1) and (0.4, 0.1): s = (1 - 0.1) / (0.4 - 0) = 2.25, w̃ = 2.25 / 3.25; R1 = R2: w = w̃.
+    # Neighbours (0, 1) and (0.4, 0.1): σ = (1 - 0.1) / (0.4 - 0) = 2.25, w̃ = 2.25 / 3.25; Δf_1 = Δf_2: w = w̃.
     k = knee([(0.4, 0.1), (1.0, 0.0), (0.0, 1.0), (0.2, 0.2)])
     assert k is not None and k.point == (0.2, 0.2) and k.index == 1
     assert k.slope == pytest.approx(2.25) and k.w_tilde == pytest.approx(2.25 / 3.25)
@@ -21,7 +21,7 @@ def test_a_convex_front_by_hand() -> None:
 
 
 def test_the_weight_goes_back_through_the_ranges() -> None:
-    # The same shape with f1 x 10 (R1 = 10, R2 = 1): w̃ = 0.5 at the middle knee (s = 1), and
+    # The same shape with f1 x 10 (Δf_1 = 10, Δf_2 = 1): w̃ = 0.5 at the middle knee (σ = 1), and
     # w = (0.5 / 10) / (0.5 / 10 + 0.5 / 1) = 1 / 11: a unit of f1 is worth a tenth of a unit of f2.
     k = knee([(0.0, 1.0), (1.0, 0.3), (10.0, 0.0)])
     assert k is not None and k.point == (1.0, 0.3)
@@ -38,7 +38,7 @@ def test_shifting_the_front_changes_nothing() -> None:
 
 def test_a_knee_at_an_end_uses_its_one_neighbour() -> None:
     # (0, 0.2) has the smallest sum (0.2): s from it to (0.5, 0.1): (0.2 - 0.1) / 0.5 on normalised axes.
-    pts = [(0.0, 0.2), (0.5, 0.1), (1.0, 0.0)]  # R1 = 1, R2 = 0.2
+    pts = [(0.0, 0.2), (0.5, 0.1), (1.0, 0.0)]  # Δf_1 = 1, Δf_2 = 0.2
     k = knee(pts)
     assert k is not None and k.index == 0
     # normalised: (0, 1), (0.5, 0.5), (1, 0): sums 1, 1, 1: a tie, the smaller f̃1 wins
@@ -93,7 +93,7 @@ def test_on_any_front_w_is_in_0_1_and_the_knee_has_the_smallest_sum(front: list[
 
 
 def test_per_point_weights_go_back_through_the_ranges_too() -> None:
-    w = weights([(0.0, 1.0), (1.0, 0.3), (10.0, 0.0)])  # R1 = 10, R2 = 1
+    w = weights([(0.0, 1.0), (1.0, 0.3), (10.0, 0.0)])  # Δf_1 = 10, Δf_2 = 1
     assert w[(1.0, 0.3)] == pytest.approx(1 / 11)
 
 

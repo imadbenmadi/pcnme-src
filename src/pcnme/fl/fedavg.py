@@ -3,10 +3,10 @@
 1. The cloud starts a round every T_fl (fast mode: simulated time) and publishes fl/round = {k, the global
    version, the upload deadline}.
 2. Each zone with new experiences uploads its shared model's weights and the number of new experiences
-   (POST /fl/rounds/k) through its own backhaul and the shared WAN pipe, like any cloud transfer; a zone with
+   (POST /fl/rounds/g) through its own backhaul and the shared WAN pipe, like any cloud transfer; a zone with
    none sends nothing.
 3. At the deadline the cloud averages the weights it received, by share of new experiences, and announces
-   version k on fl/global; zones download it (GET /fl/models/k) and install it between two decisions.
+   version g on fl/global; zones download it (GET /fl/models/g) and install it between two decisions.
 4. A late or offline zone is left out of that round; the round never waits. fl/global is retained, so a
    returning zone gets the newest model (QUESTIONS Q50).
 
@@ -36,7 +36,7 @@ Weights = Mapping[str, "torch.Tensor"]
 
 @dataclass(frozen=True, slots=True)
 class RoundMsg:
-    """fl/round (5.2): round k, the global version now, the upload deadline (on the cloud's clock: for
+    """fl/round (5.2): round g, the global version now, the upload deadline (on the cloud's clock: for
     logs; a zone decides only with durations, 5.4)."""
 
     k: int
@@ -46,7 +46,7 @@ class RoundMsg:
 
 @dataclass(frozen=True, slots=True)
 class GlobalMsg:
-    """fl/global (5.2): version k is ready."""
+    """fl/global (5.2): version g is ready."""
 
     version: int
 
@@ -58,7 +58,7 @@ class FedState:
     k: int = 0
     version: int = 0
     weights: dict[str, torch.Tensor] | None = None
-    rounds: list[tuple[int, int, tuple[str, ...]]] = field(default_factory=list)  # (k, version, zones in it)
+    rounds: list[tuple[int, int, tuple[str, ...]]] = field(default_factory=list)  # (g, version, zones in it)
 
 
 def model_bits(weights: Weights) -> float:
@@ -100,7 +100,7 @@ class FedServer:
         self._clock.schedule(self._clock.now + self._cfg.t_fl_fast_mode, self._start)
 
     def submit(self, zone: str, k: int, weights: Weights, n_new: int) -> bool:
-        """POST /fl/rounds/k arrives: kept only for the open round, before its deadline (13.7.4)."""
+        """POST /fl/rounds/g arrives: kept only for the open round, before its deadline (13.7.4)."""
         if k != self._open or n_new <= 0:
             return False
         self._uploads[zone] = (weights, n_new)
@@ -160,7 +160,7 @@ class FedClient:
         self._path.send(model_bits(weights), d_bh, d_wan, arrived)  # through the shared WAN pipe (4.2)
 
     def on_global(self, msg: GlobalMsg) -> None:
-        """GET /fl/models/k: the request and the weights back (Q50: WAN + backhaul delays and the push at
+        """GET /fl/models/g: the request and the weights back (Q50: WAN + backhaul delays and the push at
         B_WAN, no queue: the WAN pipe models the uplink), then the install, between two decisions."""
         state = self._server.state
         if state.weights is None or msg.version <= self._learner.global_version:

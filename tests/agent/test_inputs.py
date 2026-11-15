@@ -171,7 +171,7 @@ def test_an_empty_f_gpu_here_by_hand(cfg: Config) -> None:
 def test_the_cloud_by_hand(cfg: Config) -> None:
     x = inputs(cfg, make_ctx(cfg, "T1"))
     present, wait, run, network, energy, age = option(x, "cloud")
-    t_in = T1_IN / cfg.derived.b_wan + 0.003 + 0.0625  # ŵ_WAN = 0 before any sample
+    t_in = T1_IN / cfg.derived.b_wan + 0.003 + 0.0625  # Ŵ_WAN = 0 before any sample
     t_ret = 0.0625 + 0.001 + 0.003 + 0.003
     e = (E_BH + E_WAN) * T1_IN + 1.1 * 150 * 0.004 + (E_WAN + E_BH + E_DOWN) * T1_OUT
     assert (present, wait) == (1.0, 0.0)
@@ -206,7 +206,8 @@ def test_the_energy_ratio_is_capped_at_e_bar(cfg: Config) -> None:
 
 
 def test_wait_counts_the_anchors_own_pending_sends(cfg: Config) -> None:
-    # R1: two T1s sent to z2 and not yet answered fill its two free GPU slots: the third waits, so Ŵ > 0.
+    # R1: two T1s sent to z2 and not yet answered fill its two free GPU slots: the third waits, so Ŵ^queue >
+    # 0.
     n = NeighbourView("z2", "F-GPU", slots(cfg, "F-GPU"), {"gpu": (Pending("hard", 0.008),) * 3}, age=0.01)
     x = inputs(cfg, make_ctx(cfg, "T1", neighbours=(n,)))
     # water level over r = (0, 0) with backlog 3 x 8 ms: 2 W = 24 ms -> W = 12 ms

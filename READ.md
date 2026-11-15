@@ -57,7 +57,7 @@ Everything runs in **fast mode**: a discrete-event simulator, deterministic per 
 
 | Step | Where | Design |
 | --- | --- | --- |
-| The car creates a task and its budget B_car | `Car._create`, `Car.budget` in [`src/pcnme/car/car.py`](src/pcnme/car/car.py) | 6A.1–2 |
+| The car creates a task and its budget T^bud_car | `Car._create`, `Car.budget` in [`src/pcnme/car/car.py`](src/pcnme/car/car.py) | 6A.1–2 |
 | The city picks the serving zone and uploads (or holds the frame in a gap) | `City._task`, `City._upload` in [`src/pcnme/experiments/city.py`](src/pcnme/experiments/city.py) | 9.7, 10 |
 | Upload over the shared radio; the task exists at t_rx | `Zone.upload` in [`src/pcnme/zone/zone.py`](src/pcnme/zone/zone.py) → `RadioUplink.send` in [`src/pcnme/net/radio.py`](src/pcnme/net/radio.py) | 6A.2–3 |
 | Intake: the deadline d_A, the anchor role | `Zone._intake` → `anchor_deadline` in [`src/pcnme/zone/intake.py`](src/pcnme/zone/intake.py) | 6A.3, 6C |
@@ -112,8 +112,8 @@ The live screen is [`src/pcnme/pipeline/screen.py`](src/pcnme/pipeline/screen.py
 `data/<map>/results/summary.csv` has one row per run: scenario, method, seed, then the metrics.
 - **Shares (0–1):** on_time, late, dropped, failed, uncovered.
 - **Latency (s):** latency_mean_s, latency_p99_s, latency_worst1_s.
-- **Energy:** energy_per_task_j and mean_e_hat (energy relative to running the task locally; lower is
-  better, capped at ē).
+- **Energy:** energy_per_task_j and mean_e_hat (the mean C^en: energy relative to running the task locally; lower is
+  better, capped at C^en_max).
 - **Behaviour:** refusal_rate, wasted_share, jain_load (1 = perfectly even zones), early_on_time (the first
   1,000 decisions).
 - **Provenance:** wall_s, commit, config_hash, run_dir.

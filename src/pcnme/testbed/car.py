@@ -3,8 +3,8 @@ fast-mode code (Car, mobility, zone choice with hysteresis), talking HTTP over r
 
 Per GPS period (10, C13): move, choose the zone; on a change, cut the open uploads to the old zone (DELETE
 /uploads, 9.7) and attach to the new one (POST /cars); then one POST /gps per zone with its cars' fixes
-(GpsBatch). A task uploads to the serving zone (POST /tasks with B_car and R_car, 15.3) or is held in a gap;
-a held or cut frame goes to the next zone with
+(GpsBatch). A task uploads to the serving zone (POST /tasks with T^bud_car and R_car, 15.3) or is held in a
+gap; a held or cut frame goes to the next zone with
 the same task id, until it is hopeless (9.7.3). Results arrive on POST /results and are confirmed in the
 reply (9.5). `send` is the network: tests pass a fake, main() passes HTTP.
 

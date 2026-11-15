@@ -1,5 +1,7 @@
 # PCNME on LuST (Luxembourg): results (14 Nov 2026)
 
+> Symbols in this file follow the old notation (up to final-design revision 128, before 15 Nov 2026); see [docs/NOTATION.md](NOTATION.md) for the new names.
+
 **Setup.** LuST (Codeca et al. 2015): a 1.2 km crop of central Luxembourg with SUMO traces replayed at three
 times of day (QUESTIONS Q58: 11:00 for S1, 15:00 for S2, S4, S6, the 08:00 peak for S3 and S5), 4 active fog
 zones, 200 cars, 60 s episodes, 6 scenarios (final-design 16.2). Every method was trained on LuST itself (w* =

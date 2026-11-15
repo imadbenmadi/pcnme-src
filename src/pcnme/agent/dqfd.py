@@ -10,8 +10,8 @@ expert's action. Training stops at dqfd.pretrain_updates, or early once the agre
 dqfd.patience measurements; the network kept is the one with the best agreement.
 
 Engineering choices: the held-out set is whole windows (no transition of a held-out window is trained on),
-a share dqfd.holdout_share of them, at least one, drawn from the agent stream; β is annealed over the update
-budget.
+a share dqfd.holdout_share of them, at least one, drawn from the agent stream; β_PER is annealed over the
+update budget.
 """
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
 """Who is a neighbour (final-design 7.5, 18 Layout; PLAN M3.2).
 
-1. Candidates: every zone whose coverage circle overlaps this one (centre distance < 2 R_z) or whose centre
-   is within d_nb; the cloud is never a neighbour position.
+1. Candidates: every zone whose coverage circle overlaps this one (centre distance < 2 ℓ_z) or whose centre
+   is within ℓ_nb; the cloud is never a neighbour position.
 2. Up to 4 positions, nearest first, fixed at start-up (equal distances: by zone id, an engineering choice).
    A zone that joins takes the lowest free position of each zone that counts it as a candidate; a zone with
    4 neighbours keeps them. Positions never change during a run.
@@ -37,7 +37,7 @@ class Site:
 
 
 def is_candidate(me: Site, other: Site, d_nb: float) -> bool:
-    """7.5.1: the circles overlap, or the centre is within d_nb."""
+    """7.5.1: the circles overlap, or the centre is within ℓ_nb."""
     if other.zone_id in (me.zone_id, CLOUD):
         return False
     d = me.distance(other)

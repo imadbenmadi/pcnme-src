@@ -27,9 +27,9 @@ def est(cfg: Config) -> PathEstimates:
 
 
 def test_t_in_here_is_zero_and_t_in_cloud_by_hand(cfg: Config, est: PathEstimates) -> None:
-    """4.3: T̂_in,cloud = own backhaul wait + ŵ_WAN + S / B_WAN + δ̄_bh + δ̄_WAN.
+    """4.3: T̂_in,cloud = own backhaul wait + Ŵ_WAN + S / B_WAN + δ̄_bh + δ̄_WAN.
 
-    A T1 frame (1.2 Mbit), an idle backhaul, ŵ_WAN = 0 (no sample yet): 1.2e6 / 514.85e6 = 2.331 ms, + mean
+    A T1 frame (1.2 Mbit), an idle backhaul, Ŵ_WAN = 0 (no sample yet): 1.2e6 / 514.85e6 = 2.331 ms, + mean
     backhaul delay 3 ms + mean WAN delay 62.5 ms = 67.83 ms.
     """
     assert est.t_in_here() == 0.0
@@ -52,7 +52,7 @@ def test_a_t1_cloud_round_trip_is_about_140_ms(cfg: Config, est: PathEstimates) 
 
 
 def test_the_wan_wait_estimate_is_part_of_t_in_cloud(cfg: Config) -> None:
-    # Once M3.3 has samples, ŵ_WAN adds to T̂_in,cloud; any WanWait source plugs in.
+    # Once M3.3 has samples, Ŵ_WAN adds to T̂_in,cloud; any WanWait source plugs in.
     class Fixed:
         def estimate(self) -> float:
             return 0.050
@@ -84,7 +84,7 @@ def test_a_boulder_exactly_on_its_limit_is_not_dropped(cfg: Config) -> None:
 
 
 def test_the_wan_wait_placeholder_is_zero_before_any_sample() -> None:
-    # 4.3: "before any sample, ŵ_WAN = 0". M3.3 replaces ZeroWanWait with the state plane's estimate.
+    # 4.3: "before any sample, Ŵ_WAN = 0". M3.3 replaces ZeroWanWait with the state plane's estimate.
     assert ZeroWanWait().estimate() == 0.0
 
 

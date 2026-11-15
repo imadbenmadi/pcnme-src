@@ -4,7 +4,7 @@ One test or more per row of the 8.6 table, on the executor's side:
 
 | Where         | Hard task                                | Soft task                               | Tests |
 | On arrival    | Refused "full" or "late"                 | Refused "full", or "late" past D+L_max  | M1.5  |
-| Head of queue | Skipped when t + Ê^low > d_k             | Skipped when t + Ê^low > d_k + L_max    | M1.6  |
+| Head of queue | Skipped when t + T^run,lo > d_k          | Skipped when t + T^run,lo > d_k + L_max | M1.6  |
 | While running | Aborted when t > d_k                     | Aborted when t > d_k + L_max            | here  |
 | Anchor cancel | Removed if queued, aborted if running    | Same                                    | here  |
 | No ack by end | Drop (anchor side, M2/M3)                | Drop (anchor side, M2/M3)               | -     |
@@ -25,7 +25,7 @@ T_KEEP = 10.0  # config scheduler.T_keep
 
 def test_a_hard_task_running_past_d_k_is_aborted_with_its_tail() -> None:
     # H: mean 100 ms (accepted, F = 100 <= 200 ms) but really runs 300 ms; longest step 50 ms. Aborted at
-    # d_k = 200 ms; the slot stays busy for min(remaining 100, d_abort 50) = 50 ms, so it frees at 250 ms.
+    # d_k = 200 ms; the slot stays busy for min(remaining 100, T_abort 50) = 50 ms, so it frees at 250 ms.
     # Energy = PUE 1 x 20 W x (200 + 50 ms) = 5 J, reported at once at 200 ms.
     n = tiny([row("H", "cpu", 0.100, run=0.300), row("next", "cpu", 0.010)])
     h = n.submit("H", "hard", 0.200)
@@ -44,7 +44,7 @@ def test_a_hard_task_running_past_d_k_is_aborted_with_its_tail() -> None:
 
 
 def test_the_tail_is_the_remaining_run_when_that_is_shorter_than_d_abort() -> None:
-    # Runs 210 ms, aborted at 200 ms: remaining 10 ms < d_abort 50 ms, so the slot frees at 210 ms.
+    # Runs 210 ms, aborted at 200 ms: remaining 10 ms < T_abort 50 ms, so the slot frees at 210 ms.
     n = tiny([row("H", "cpu", 0.100, run=0.210)])
     h = n.submit("H", "hard", 0.200)
     n.clock.run_until(5.0)

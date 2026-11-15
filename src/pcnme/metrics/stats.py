@@ -217,7 +217,7 @@ def run_metrics(d: Path, early_decisions: int) -> Run:
     wasted = sum(t["energy_wasted_j"] for t in tasks)
     m["wasted_share"] = wasted / dyn if dyn > 0 else math.nan
     obj = info.get("objective")
-    if obj and tasks:  # 13.2.4 / 12.3: ê = min(E / E_ref, ē), a drop counts ē
+    if obj and tasks:  # 13.2.4 / 12.3: C^en = min(E / E_ref, C^en_max), a drop counts C^en_max
         e_ref, e_bar = obj["e_ref"], obj["e_bar"]
         e_hats = [
             min(t["energy_j"] / e_ref[t["type"]], e_bar) if k in ("on_time", "late") else e_bar
@@ -293,7 +293,7 @@ class WindowPoint:
 def window_objectives(
     tasks: Iterable[Mapping[str, Any]], keys: set[tuple[str, str]], objective: Mapping[str, Any]
 ) -> tuple[float, float, int]:
-    """13.2.4 from the task rows: c^time and ê per window task (a drop: C_drop and ē), averaged."""
+    """13.2.4 from the task rows: C^time and C^en per window task (a drop: C_drop and C^en_max), averaged."""
     w3, c_drop, e_bar = objective["w3"], objective["c_drop"], objective["e_bar"]
     e_ref = objective["e_ref"]
     f1 = f2 = 0.0
