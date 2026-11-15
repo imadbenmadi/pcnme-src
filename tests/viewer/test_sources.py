@@ -54,3 +54,17 @@ def test_an_unknown_run_is_a_key_error(run_dir: Path) -> None:
     src = ParquetSource(SourceInfo("vfc", "replay", "VFC grid", map="vfc"), "vfc", [run_dir])
     with pytest.raises(KeyError):
         src.replay("S9-nothing-1-fast")
+
+
+def test_a_trace_map_run_is_drawn_on_its_real_roads_north_up_and_the_grid_is_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PLAN V2: a LuST run replays on the crop's streets, as its traffic preview does; the VFC grid keeps its
+    blocks."""
+    from pcnme.viewer.sources import traffic
+    from pcnme.viewer.sources.replay import _layout
+
+    monkeypatch.setattr(traffic, "roads", lambda name: [[[0.0, 0.0], [10.0, 5.0]]])
+    lust = _layout("lust", "S2")
+    assert lust["roads"] == [[[0.0, 0.0], [10.0, 5.0]]] and lust["north_up"] is True
+    assert "roads" not in _layout("vfc", "S2")

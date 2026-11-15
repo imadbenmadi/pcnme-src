@@ -153,7 +153,15 @@ def _layout(map_name: str, scenario: str) -> dict[str, Any]:
         if math.dist(lay.zone_positions_m[a], lay.zone_positions_m[b]) <= lay.d_nb_m
     ]
     cloud = cfg.hardware["cloud"]
+    extra: dict[str, Any] = {}
+    if (
+        cfg.map.kind == "trace"
+    ):  # a real city (LuST): its streets and north up, as in the traffic preview (V2)
+        from pcnme.viewer.sources.traffic import roads
+
+        extra = {"roads": roads(map_name), "north_up": True}
     return {
+        **extra,
         "area": list(lay.area_m),
         "block": cfg.cars.grid.block_m,
         "zones": zones,
