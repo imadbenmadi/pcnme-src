@@ -15,6 +15,7 @@ This is the one complete design of PCNME. It merges the PCNME Architecture doc, 
 | Date | Section | Change | Note |
 | --- | --- | --- | --- |
 | 28 Oct | 16.2 | ρ_fog uses every task of the whole mix, boulders included (not pebbles only), so S4–S6 keep S2's arrival rate | CHANGES C2 (QUESTIONS Q1) |
+| 16 Nov | 13.7 | Phase 2 (FedAvg + fine-tuning) is evaluated in fast mode only; on the testbed it is future work (since 15.5's trainer process holds the learning network, FedAvg would run there) | QUESTIONS Q64 |
 | 11 Nov | 15.5 | On the testbed a zone that learns online gets a second CPU: its trainer runs in its own process (replay, updates), the zone sends it the samples and installs the trainer's newest weights between two decisions. Fast mode, which has no compute time, learns in place as before | QUESTIONS Q62 |
 | 7 Nov | 9.6 | A car always knows whether its serving zone serves it: the attach is repeated until confirmed, and a zone names the cars it does not serve in its reply to their GPS, which then attach again (testbed transport detail) | QUESTIONS Q61 |
 | 6 Nov | 16.2, 18 | S6 (mixed fog) has loose deadlines, not tight: with tight ones every method was near a capacity ceiling (the hard tasks need 80 % of the 4 GPU slots with 14–20 ms of slack), so S6 measured which tasks a method sacrifices rather than placement on unequal nodes. The TOF-Broker is now exercised in S4 and S5 | QUESTIONS Q60 |
@@ -771,6 +772,8 @@ In fast mode every episode draws a random permutation of which neighbour sits in
 | FedAvg + local fine-tuning | A personal copy: the new global model fine-tuned for K steps on the zone's replay buffer, then trained online | The shared model, never the personal copy |
 
 In the third variant every transition trains both copies; the personal copy takes over only after its K steps, so decisions never wait. Fine-tuning helps because a quiet suburb and a busy downtown see different traffic, and one average fits neither perfectly.
+
+**Where it is evaluated (16 Nov, QUESTIONS Q64).** Phase 2 is evaluated in fast mode only. On the testbed each learning zone's network lives in its trainer process (15.5), so FedAvg's upload, install and fine-tuning would run there; that is future work.
 
 ## 14. Workloads and tasks
 
