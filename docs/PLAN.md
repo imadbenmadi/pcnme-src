@@ -156,9 +156,9 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
      `kill zone-3` + `kill zone-4`; `restart broker`.
   Decided: Q54 Greedy first, then the agent with CPU-only torch in the zone image; Q55 bind mount, MinIO removed;
   Q56 the in-order jitter bias (+8–24 %) is reported in the gap.
-- [~] **M9.4** (batch 10-11 Nov: every method, S1-S6, 5 seeds, 40 cars, data/vfc/testbed/gap.md; Greedy and
-  Random stand; the learning methods ran frozen on the testbed (bug fixed 11 Nov) and 9 S3 runs lost a zone (bug
-  fixed): rerun the 6 learning methods after QUESTIONS Q62; RUN_LOG 11 Nov) Same scenario and seed in fast mode and on the testbed, at M9.3's reduced scale, Greedy first (no trained model needed), then the agent: report the gap (16.3). Tool ready: `tools/testbed_gap.py` (fast-mode run with the testbed's fleet and seed, one Markdown table of the 16.3 metrics). Waits on M9.3's open item; the in-order jitter bias (Q56) is part of the gap.
+- [x] **M9.4** (done 15 Nov: every method, S1-S6, 5 seeds, 40 cars, every cell rerun after the 11 Nov fixes
+  (online trainer Q62, the long-run slowdown, the upload crash), all healthy; data/vfc/testbed/gap.md; RUN_LOG
+  10-15 Nov) Same scenario and seed in fast mode and on the testbed, at M9.3's reduced scale, Greedy first (no trained model needed), then the agent: report the gap (16.3). Tool ready: `tools/testbed_gap.py` (fast-mode run with the testbed's fleet and seed, one Markdown table of the 16.3 metrics). Waits on M9.3's open item; the in-order jitter bias (Q56) is part of the gap.
 
 ## T — Training and results (the runs behind the paper; the user starts the full runs)
 
@@ -169,7 +169,7 @@ Skeleton already in `docker/` (Dockerfile, compose with every container and netw
   stops until M9.3/M9.4. Smoke-tested on vfc and lust (`--smoke`). Commands: RUN_TRAINING.md.
 - [x] **T2** VFC: `train.py --maps vfc` then `evaluate.py --maps vfc` (done 5 Nov: 36 h training, 960 evaluation
   runs; docs/RESULTS_VFC.md, docs/RUN_LOG.md).
-- [ ] **T3** LuST: `train.py --maps lust` (generates the traces first, about 30-60 min) then evaluate.
+- [x] **T3** LuST (done 14 Nov): trained (w* 0.344) and evaluated, 960 runs; docs/RESULTS_LUST.md.
 - [-] **T3b** Dropped (Imed, 6 Nov): no transfer test of the VFC models on LuST. LuST is trained and
   evaluated on its own (T3).
 - [x] **T3c** (done 5 Nov: metrics/compare.py, evaluate.py --models-from; smoke-tested) evaluate.py additions (after the VFC run; nothing in src/ changes while it trains). Important, before
