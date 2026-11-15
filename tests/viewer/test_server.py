@@ -17,6 +17,8 @@ from pcnme.viewer.sources.base import Placeholder, Registry, RunInfo, SourceInfo
 
 class FakeReplay:
     info = SourceInfo("demo", "replay", "Demo", map="vfc")
+    written = 0.0  # when the run was last written (modified())
+    version = 1
 
     def runs(self) -> list[RunInfo]:
         return [RunInfo("S1-greedy-3000-fast", "S1", "greedy", 3000, "fast")]
@@ -24,7 +26,10 @@ class FakeReplay:
     def replay(self, run_id: str) -> dict[str, Any]:
         if run_id != "S1-greedy-3000-fast":
             raise KeyError(run_id)
-        return {"meta": {"run_id": run_id}}
+        return {"meta": {"run_id": run_id, "version": self.version}}
+
+    def modified(self, run_id: str) -> float:
+        return self.written
 
     def status(self) -> dict[str, Any]:
         return {"scenarios": ["S1"], "methods": ["greedy"], "seeds": [3000], "cells": {}, "notes": {}}

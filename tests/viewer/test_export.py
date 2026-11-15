@@ -39,3 +39,19 @@ def test_an_export_holds_the_page_the_replays_and_a_server_that_needs_no_repo(tm
         assert get(base + "/api/runs?source=later")[0] == 404  # a source in development has no runs
     finally:
         httpd.shutdown()
+
+
+def test_a_run_rerun_under_its_id_replaces_its_exported_replay(tmp_path: Path) -> None:
+    """15 Nov: the export kept every replay already in the folder, so the testbed runs rerun after the fixes
+    and S6's rerun (Q60) were exported with their old content."""
+    import time
+
+    out = tmp_path / "viewer"
+    reg = registry()
+    src = reg.get("demo")
+    export(out, {3000}, reg, log=False)
+    replay = out / "data" / "replay" / "demo" / "S1-greedy-3000-fast.json.gz"
+    assert json.loads(gzip.decompress(replay.read_bytes()))["meta"]["version"] == 1
+    src.version, src.written = 2, time.time() + 60  # type: ignore[attr-defined]  # the run is rerun
+    export(out, {3000}, reg, log=False)
+    assert json.loads(gzip.decompress(replay.read_bytes()))["meta"]["version"] == 2

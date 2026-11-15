@@ -130,6 +130,11 @@ class MapSource:
             return preview(self.map_name, time_of_day)
         return self._runs.replay(run_id)
 
+    def modified(self, run_id: str) -> float:
+        if run_id.startswith(PREFIX):
+            return (MapPaths(self.map_name).traces / f"{run_id[len(PREFIX) :]}.npz").stat().st_mtime
+        return self._runs.modified(run_id)
+
     def status(self) -> dict[str, Any]:
         return status(self.map_name, self.runs())
 
