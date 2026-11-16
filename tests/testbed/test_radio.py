@@ -18,7 +18,7 @@ def test_the_upload_brings_its_own_b_car_and_rate() -> None:
     s = one_zone(fixed_delay_config(), Fixed("here"))
     task = task_now(s, "T1")
     rate = 400e6
-    s.zone.upload(task, rate=rate, b_car=0.080)
+    s.zone.upload(task, rate=rate, t_bud_car=0.080)
     s.clock.run_until(1.0)
     (rec,) = s.closed
     push = task.input_bits / rate
@@ -97,7 +97,7 @@ def test_an_upload_and_its_reply_travel_as_registered_payloads() -> None:
     from pcnme.testbed.codec import decode, encode
 
     s = one_zone(fixed_delay_config(), Fixed("here"))
-    up = Upload(task_now(s, "T1"), b_car=0.09, rate=5e8)
+    up = Upload(task_now(s, "T1"), t_bud_car=0.09, rate=5e8)
     assert decode(encode(up)) == up
     rep = UploadReply(TaskId("c01", 0, 1), "z1")
     assert decode(encode(rep)) == rep
@@ -108,6 +108,6 @@ def test_an_upload_that_brings_b_car_and_rate_needs_no_registry_entry() -> None:
     s = one_zone(fixed_delay_config(), Fixed("here"))
     s.zone.detach("c01")
     task = task_now(s, "T1")
-    s.zone.upload(task, rate=4e8, b_car=0.08)
+    s.zone.upload(task, rate=4e8, t_bud_car=0.08)
     s.clock.run_until(1.0)
     assert [r.task.task_id for r in s.closed] == [task.task_id]

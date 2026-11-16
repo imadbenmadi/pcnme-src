@@ -112,7 +112,7 @@ The live screen is [`src/pcnme/pipeline/screen.py`](src/pcnme/pipeline/screen.py
 `data/<map>/results/summary.csv` has one row per run: scenario, method, seed, then the metrics.
 - **Shares (0–1):** on_time, late, dropped, failed, uncovered.
 - **Latency (s):** latency_mean_s, latency_p99_s, latency_worst1_s.
-- **Energy:** energy_per_task_j and mean_e_hat (the mean C^en: energy relative to running the task locally; lower is
+- **Energy:** energy_per_task_j and mean_c_en (the mean C^en: energy relative to running the task locally; lower is
   better, capped at C^en_max).
 - **Behaviour:** refusal_rate, wasted_share, jain_load (1 = perfectly even zones), early_on_time (the first
   1,000 decisions).

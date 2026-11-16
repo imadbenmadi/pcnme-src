@@ -25,7 +25,7 @@ Built in M3.10 (QUESTIONS Q28); the tables are `src/pcnme/metrics/runlog.py` (ME
 | `event` | car event (Q28) | `car_id`, `kind` (attach, handover, gap, upload_cut, car_drop, uncovered) | `zone_from`, `zone_to`, `task_id` (cut and drops only) |
 | `mobility` (not written yet: PLAN M7 "missing metrics") | prediction checked at the car's next attach | `zone` | `next_zone_hit` (0/1), `t_exit_err_s` |
 | `learning` | zone and 1 000 updates (PLAN M6.6) | `zone` (global in pretraining), `phase` (pretrain, online) | `update`, `td_loss`, `n_step_loss`, `margin_loss`, `total_loss`, `mean_q` (means over the block), `epsilon`, `expert_agreement` (held-out, pretraining), `demo_upsample_ratio` |
-| `episode` | online training episode (PLAN M6.6) | — | `episode`, `seed`, `on_time` (share, 16.3), `mean_e_hat`, `tasks`, `updates`, `mean_loss` |
+| `episode` | online training episode (PLAN M6.6) | — | `episode`, `seed`, `on_time` (share, 16.3), `mean_c_en`, `tasks`, `updates`, `mean_loss` |
 | `nsga` (not written yet: the fronts are in `data/<map>/nsga/*.json`, one row per window in `fronts.csv`) | window | `window` | `hv`, `front_size`, `knee_f1`, `knee_f2`, `w_knee` |
 
 ## Computed after the run (from Parquet, final-design 16.3)
@@ -38,12 +38,12 @@ Shares on time / late / dropped / failed; mean, p99 and worst-1 % latency; dynam
 Columns: `map`, `scenario`, `method`, `seed`, then every metric above (`on_time`, `late`, `dropped`,
 `failed`, `uncovered` as shares; `latency_mean_s`, `latency_p99_s`, `latency_worst1_s` in s;
 `energy_per_task_j`, `energy_dynamic_j`, `energy_total_j` in J; `refusal_rate`, `wasted_share`, `jain_load`,
-`early_on_time`, `mean_e_hat`), then `wall_s` (the run's wall time), `commit`, `config_hash` and `run_dir`
+`early_on_time`, `mean_c_en`), then `wall_s` (the run's wall time), `commit`, `config_hash` and `run_dir`
 (its Parquet folder under `results/runs/`). Rows of one file always share one commit and config hash.
 `report.md` / `report.csv` next to it give the mean ± 95 % interval over the seeds.
 
 ## episodes.csv (train.py)
 
 `data/<map>/train/<scenario>-<method>/episodes.csv`: one row per training episode: `episode`, `seed`,
-`on_time`, `mean_e_hat`, `tasks`, `updates`, `mean_loss`, `decisions_used`, `wall_s`. The pretraining's
+`on_time`, `mean_c_en`, `tasks`, `updates`, `mean_loss`, `decisions_used`, `wall_s`. The pretraining's
 held-out expert agreement is in that folder's `training.json` (`agreement`) and `train.log`.

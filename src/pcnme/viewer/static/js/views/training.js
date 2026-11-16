@@ -16,12 +16,12 @@ const dur = (s) => (s == null ? "–" : s < 90 ? `${s.toFixed(0)} s` : s < 5400 
 const CHARTS = [
   ["on_time", "On time per episode", pct, "share of the episode's tasks delivered by their deadline (16.3)"],
   ["mean_loss", "Mean loss", fix(3), "mean of the episode's update losses (DQfD: TD + n-step + margin)"],
-  ["mean_e_hat", "Mean ê", fix(3), "energy over its reference, min(E / E_ref, ē) (13.2.4); lower is better"],
+  ["mean_c_en", "Mean C^en", fix(3), "energy over its reference, min(E / E_ref, C^en_max) (13.2.4); lower is better"],
   ["updates", "Network updates (total)", int, "gradient steps so far"],
   ["tasks", "Tasks per episode", int, "tasks created in the episode"],
   ["episode_s", "Wall time per episode", dur, "how long the episode took (train.py's clock)"],
 ];
-const FIELDS = [["episode", int], ["seed", int], ["on_time", pct], ["mean_e_hat", fix(3)], ["mean_loss", fix(4)], ["tasks", int],
+const FIELDS = [["episode", int], ["seed", int], ["on_time", pct], ["mean_c_en", fix(3)], ["mean_loss", fix(4)], ["tasks", int],
   ["updates", int], ["decisions_used", int], ["episode_s", dur], ["wall_s", dur]];
 const STATE = { running: "training now", done: "finished", stopped: "stopped before the end" };
 
@@ -191,7 +191,7 @@ export class TrainingView {
     pop.innerHTML = `<div class="panel-head"><div><div class="eyebrow">Episode</div><h2>${i + 1} of ${n}</h2>
       <p>${esc(methodName(this.curve.method))} · ${esc(this.curve.scenario)}${rank ? ` · on-time rank ${rank} of ${n}` : ""}</p></div>
       <button class="icon-btn" data-close-pop aria-label="Close"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div>
-      <div class="panel-body"><dl class="kv">${FIELDS.map(([k, f]) => `<dt>${k.replace(/_/g, " ")}</dt><dd>${f(e[k][i])}${k === "on_time" ? delta(k, (x) => `${(100 * x).toFixed(1)} pp`) : k === "mean_loss" || k === "mean_e_hat" ? delta(k, fix(3)) : ""}</dd>`).join("")}</dl>
+      <div class="panel-body"><dl class="kv">${FIELDS.map(([k, f]) => `<dt>${k.replace(/_/g, " ")}</dt><dd>${f(e[k][i])}${k === "on_time" ? delta(k, (x) => `${(100 * x).toFixed(1)} pp`) : k === "mean_loss" || k === "mean_c_en" ? delta(k, fix(3)) : ""}</dd>`).join("")}</dl>
       <p class="note">Each episode is one simulated run on its own training seed; the network keeps learning across them.</p></div>`;
     pop.hidden = false;
     const host = $("training").getBoundingClientRect();

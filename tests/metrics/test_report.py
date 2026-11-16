@@ -18,7 +18,7 @@ from pcnme.metrics.report import report, run_dirs  # noqa: E402, RUF100
 from pcnme.metrics.stats import front_distance, window_objectives, window_points  # noqa: E402, RUF100
 from tests.metrics.test_stats import task, write_run  # noqa: E402, RUF100
 
-OBJECTIVE = {"w3": 2.0, "c_drop": 5.0, "e_bar": 3.0, "e_ref": {"T1": 2.0}}
+OBJECTIVE = {"w3": 2.0, "c_drop": 5.0, "c_en_max": 3.0, "e_ref": {"T1": 2.0}}
 
 
 def five_seeds(root: Path) -> list[Path]:

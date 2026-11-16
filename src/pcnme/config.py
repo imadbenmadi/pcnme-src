@@ -228,7 +228,7 @@ class Layout:
     zone_radius_m: float
     zone_positions_m: Mapping[str, tuple[float, float]]
     joining_zones: tuple[str, ...]
-    d_nb_m: float
+    l_nb_m: float
     handover_hysteresis_m: float
 
     @property
@@ -252,7 +252,7 @@ class Cars:
     grid: Grid
     calibration: Calibration
     coverage: Mapping[str, float]  # per mobility: the share of task creations with coverage (Q29, C)
-    hotspot_h: Mapping[str, float]  # per mobility: the share of cars on z1's roads (Q30, C)
+    h_hot: Mapping[str, float]  # per mobility: the share of cars on z1's roads (Q30, C)
 
 
 @dataclass(frozen=True, slots=True)
@@ -340,7 +340,7 @@ class TimeRow:
     mean: float
     p5: float
     p95: float
-    longest_step: float
+    t_abort: float
     p_dyn_w: float  # W: measured energy per run / mean (12.2); without a measurement, the slot's power (18)
     p5_measured: bool = False  # False: the placeholder factor filled p5 (QUESTIONS Q2, CHANGES C5)
     energy_measured: bool = False
@@ -413,7 +413,7 @@ class R3:
 class StatePlane:
     state_period: float
     stale_after: float
-    wan_ewma_lambda: float
+    wan_ewma_eta: float
     r3: R3
 
 
@@ -448,9 +448,9 @@ class Ablation:
 
 @dataclass(frozen=True, slots=True)
 class Scheduler:
-    reserve_hard_r: int
-    headroom_h: int
-    soft_promotion_a_max: float
+    n_res: int
+    n_head: int
+    t_age: float
     probe_timeout_fog: float
     probe_timeout_cloud: float
     t_keep: float
@@ -486,8 +486,8 @@ class Reward:
     """Reward constants (final-design 11.4). w, the time weight (the energy weight is 1 - w): the median knee
     weight w* (13.3) once M5 computes it; until then a stand-in from the config (QUESTIONS Q32)."""
 
-    b: float
-    p: float
+    r_ok: float
+    c_pen: float
     w3: float
     c_drop: float
     w: float
@@ -633,12 +633,12 @@ class Derived:
 
     mean_gpu_run: float  # s: the whole mix on the reference class's GPU slot (16.2)
     zone_capacity: float  # tasks/s: c_GPU / mean_gpu_run
-    e_strong: Mapping[str, float]  # s: mean run on the strongest fog class, fastest slot type (7.1)
+    t_run_strong: Mapping[str, float]  # s: mean run on the strongest fog class, fastest slot type (7.1)
     b_wan: float  # bit/s (18, Links)
     arrival_rate_per_zone: Mapping[str, float]  # tasks/s, the city mean, per scenario (18, Workload)
     ti_wan: Mapping[str, float]  # WAN traffic intensity per scenario (16.2)
     e_ref: Mapping[str, float]  # J per task type (12.3)
-    e_bar: float  # the cap on energy ratios (12.3)
+    c_en_max: float  # the cap on energy ratios (12.3)
 
 
 MAP_KINDS = ("grid", "trace")
@@ -691,8 +691,10 @@ class Config:
     sweep: Sweep
 
     def is_boulder(self, task: str, mode: DeadlineMode) -> bool:
-        """final-design 7.1: boulder iff E_strong >= alpha x D."""
-        return _is_boulder(self.derived.e_strong[task], self.tof.alpha, self.task_types[task].deadline[mode])
+        """final-design 7.1: boulder iff T_run_strong >= alpha x D."""
+        return _is_boulder(
+            self.derived.t_run_strong[task], self.tof.alpha, self.task_types[task].deadline[mode]
+        )
 
     def arrival_rate_per_car(self, scenario: str, n_cars: int) -> float:
         """lambda_car = rho_fog x c_GPU / (mean GPU run x cars per zone) (final-design 18, Workload)."""
@@ -702,8 +704,8 @@ class Config:
         return self.derived.arrival_rate_per_zone[scenario] / cars_per_zone
 
 
-def _is_boulder(e_strong: float, alpha: float, deadline: float) -> bool:
-    return e_strong >= alpha * deadline  # final-design 7.1 step 1
+def _is_boulder(t_run_strong: float, alpha: float, deadline: float) -> bool:
+    return t_run_strong >= alpha * deadline  # final-design 7.1 step 1
 
 
 # --- Loading ------------------------------------------------------------------------------------------------
@@ -728,8 +730,8 @@ def config_from_mapping(data: Mapping[str, object]) -> Config:
         types_node = root.node("task_types")
         type_specs, disabled = _task_type_specs(types_node)
         time_table = _time_table(root.node("time_table_placeholder"), type_specs, hardware)
-        e_strong = _e_strong(type_specs, time_table, tof.strongest_class)
-        task_types = _resolve_task_types(type_specs, e_strong, types_node.path)
+        t_run_strong = _t_run_strong(type_specs, time_table, tof.strongest_class)
+        task_types = _resolve_task_types(type_specs, t_run_strong, types_node.path)
         scenarios = _scenarios(root.node("scenarios"), layout, hardware)
         config = Config(
             layout=layout,
@@ -755,7 +757,7 @@ def config_from_mapping(data: Mapping[str, object]) -> Config:
             map=_active_map(root, maps),
             scenarios=scenarios,
             fedavg=_fedavg(root.node("fedavg")),
-            derived=_derive(layout, task_types, hardware, time_table, energy, tof, scenarios, e_strong),
+            derived=_derive(layout, task_types, hardware, time_table, energy, tof, scenarios, t_run_strong),
             ablation=_ablation(root.node("ablation")),
             sweep=_sweep(root.node("sweep")),
         )
@@ -785,7 +787,7 @@ def _layout(n: _Node) -> Layout:
             zone_radius_m=n.number("zone_radius_m", gt=0.0),
             zone_positions_m=_frozen(positions),
             joining_zones=joining,
-            d_nb_m=n.number("d_nb_m", ge=0.0),
+            l_nb_m=n.number("l_nb_m", ge=0.0),
             handover_hysteresis_m=n.number("handover_hysteresis_m", ge=0.0),
         )
 
@@ -796,10 +798,10 @@ def _calibration(n: _Node) -> Calibration:
 
 
 def _calibrated(n: _Node) -> dict[str, Mapping[str, float]]:
-    """cars.calibrated (tag C, Q29, Q30): per mobility, coverage and hotspot_h."""
+    """cars.calibrated (tag C, Q29, Q30): per mobility, coverage and h_hot."""
     out: dict[str, Mapping[str, float]] = {}
     with n:
-        for name in ("coverage", "hotspot_h"):
+        for name in ("coverage", "h_hot"):
             with n.node(name) as c:
                 out[name] = _frozen({m: c.number(m, ge=0.0, le=1.0) for m in ("low", "high")})
     return out
@@ -843,7 +845,7 @@ def _cars(n: _Node) -> Cars:
             grid=_grid(n.node("grid")),
             calibration=_calibration(n.node("calibration")),
             coverage=calibrated["coverage"],
-            hotspot_h=calibrated["hotspot_h"],
+            h_hot=calibrated["h_hot"],
         )
 
 
@@ -874,7 +876,7 @@ def _links(n: _Node) -> Links:
 
 @dataclass(frozen=True, slots=True)
 class _TaskSpec:
-    """A task type before its deadlines are resolved: a tight D may be `factor x E_strong` (18)."""
+    """A task type before its deadlines are resolved: a tight D may be `factor x T_run_strong` (18)."""
 
     name: str
     model: str
@@ -882,11 +884,11 @@ class _TaskSpec:
     share: float
     input_bits: float
     result_bits: float
-    deadline: Mapping[DeadlineMode, float | tuple[Literal["x_E_strong"], float]]
+    deadline: Mapping[DeadlineMode, float | tuple[Literal["x_T_run_strong"], float]]
     key: str
 
 
-_E_STRONG_RULE = re.compile(r"^(\d+(?:\.\d+)?)x_E_strong$")
+_T_RUN_STRONG_RULE = re.compile(r"^(\d+(?:\.\d+)?)x_T_run_strong$")
 
 
 def _task_type_specs(n: _Node) -> tuple[dict[str, _TaskSpec], tuple[str, ...]]:
@@ -911,15 +913,17 @@ def _task_type_specs(n: _Node) -> tuple[dict[str, _TaskSpec], tuple[str, ...]]:
 
 
 def _task_spec(t: _Node, name: str) -> _TaskSpec:
-    deadline: dict[DeadlineMode, float | tuple[Literal["x_E_strong"], float]] = {}
+    deadline: dict[DeadlineMode, float | tuple[Literal["x_T_run_strong"], float]] = {}
     with t.node("deadline") as d:
         for mode in DEADLINE_MODES:
             value = d.raw(mode)
             if isinstance(value, str):
-                match = _E_STRONG_RULE.match(value)
+                match = _T_RUN_STRONG_RULE.match(value)
                 if not match or float(match.group(1)) <= 0:
-                    raise ConfigError(d.key(mode), f"must be seconds or '<factor>x_E_strong', got {value!r}")
-                deadline[mode] = ("x_E_strong", float(match.group(1)))
+                    raise ConfigError(
+                        d.key(mode), f"must be seconds or '<factor>x_T_run_strong', got {value!r}"
+                    )
+                deadline[mode] = ("x_T_run_strong", float(match.group(1)))
             else:
                 deadline[mode] = _number(value, d.key(mode), gt=0.0)
     return _TaskSpec(
@@ -935,14 +939,14 @@ def _task_spec(t: _Node, name: str) -> _TaskSpec:
 
 
 def _resolve_task_types(
-    specs: Mapping[str, _TaskSpec], e_strong: Mapping[str, float], path: str
+    specs: Mapping[str, _TaskSpec], t_run_strong: Mapping[str, float], path: str
 ) -> Mapping[str, TaskType]:
     out: dict[str, TaskType] = {}
     for name, s in specs.items():
         deadline: dict[DeadlineMode, float] = {}
         for mode, rule in s.deadline.items():
-            # final-design 18 (Workload): T2's tight D = 1.1 x E_strong(T2)
-            deadline[mode] = rule[1] * e_strong[name] if isinstance(rule, tuple) else rule
+            # final-design 18 (Workload): T2's tight D = 1.1 x T_run_strong(T2)
+            deadline[mode] = rule[1] * t_run_strong[name] if isinstance(rule, tuple) else rule
         frozen = _frozen(deadline)
         out[name] = TaskType(
             name=name,
@@ -999,7 +1003,7 @@ def _time_table(n: _Node, specs: Mapping[str, _TaskSpec], hardware: Mapping[str,
         with n.node("factors") as f:
             p5_f = f.number("p5", gt=0.0, le=1.0)
             p95_f = f.number("p95", ge=1.0)
-            step_f = f.number("longest_step", gt=0.0, le=1.0)
+            step_f = f.number("t_abort", gt=0.0, le=1.0)
         rows: dict[tuple[str, str, SlotType], TimeRow] = {}
         for task in n.names():
             if task == "factors":
@@ -1027,15 +1031,13 @@ def _time_row(h: _Node, q: str, p5_f: float, p95_f: float, step_f: float, slot_w
     key = h.key(q)
     if not isinstance(value, dict):
         mean = _number(value, key, gt=0.0)
-        return TimeRow(
-            mean=mean, p5=p5_f * mean, p95=p95_f * mean, longest_step=step_f * mean, p_dyn_w=slot_w
-        )
+        return TimeRow(mean=mean, p5=p5_f * mean, p95=p95_f * mean, t_abort=step_f * mean, p_dyn_w=slot_w)
     with _Node(value, key) as r:
         mean = r.number("mean", gt=0.0)
         measured_p5 = r.has("p5")
         p5 = r.number("p5", gt=0.0) if measured_p5 else p5_f * mean
         p95 = r.number("p95", gt=0.0) if r.has("p95") else p95_f * mean
-        step = r.number("longest_step", gt=0.0) if r.has("longest_step") else step_f * mean
+        step = r.number("t_abort", gt=0.0) if r.has("t_abort") else step_f * mean
         energy = r.number("energy_j", gt=0.0) if r.has("energy_j") else None
     if not p5 <= mean <= p95:
         raise ConfigError(key, f"needs p5 <= mean <= p95, got {p5}, {mean}, {p95}")
@@ -1043,14 +1045,14 @@ def _time_row(h: _Node, q: str, p5_f: float, p95_f: float, step_f: float, slot_w
         mean=mean,
         p5=p5,
         p95=p95,
-        longest_step=step,
+        t_abort=step,
         p_dyn_w=slot_w if energy is None else energy / mean,
         p5_measured=measured_p5,
         energy_measured=energy is not None,
     )
 
 
-def _e_strong(specs: Mapping[str, _TaskSpec], table: TimeTable, strongest: str) -> Mapping[str, float]:
+def _t_run_strong(specs: Mapping[str, _TaskSpec], table: TimeTable, strongest: str) -> Mapping[str, float]:
     """final-design 7.1: mean run on the strongest fog class, on its fastest slot type."""
     out: dict[str, float] = {}
     for task in specs:
@@ -1062,7 +1064,7 @@ def _e_strong(specs: Mapping[str, _TaskSpec], table: TimeTable, strongest: str) 
 
 def _energy(n: _Node, hardware: Mapping[str, HardwareClass]) -> Energy:
     with n:
-        n.marker("e_bar", "computed")  # final-design 12.3: derived
+        n.marker("c_en_max", "computed")  # final-design 12.3: derived
         return Energy(
             pue_fog=n.number("pue_fog", ge=1.0),
             pue_cloud=n.number("pue_cloud", ge=1.0),
@@ -1080,7 +1082,7 @@ def _stateplane(n: _Node) -> StatePlane:
         return StatePlane(
             state_period=n.number("state_period", gt=0.0),
             stale_after=n.number("stale_after", gt=0.0),
-            wan_ewma_lambda=n.number("wan_ewma_lambda", gt=0.0, le=1.0),
+            wan_ewma_eta=n.number("wan_ewma_eta", gt=0.0, le=1.0),
             r3=_r3(n.node("r3")),
         )
 
@@ -1159,9 +1161,9 @@ def _scheduler(n: _Node) -> Scheduler:
         with n.node("retries") as retries:
             retries_hard, retries_soft = retries.integer("hard"), retries.integer("soft")
         return Scheduler(
-            reserve_hard_r=n.integer("reserve_hard_r"),
-            headroom_h=n.integer("headroom_h"),
-            soft_promotion_a_max=n.number("soft_promotion_A_max", gt=0.0),
+            n_res=n.integer("n_res"),
+            n_head=n.integer("n_head"),
+            t_age=n.number("T_age", gt=0.0),
             probe_timeout_fog=probe_fog,
             probe_timeout_cloud=probe_cloud,
             t_keep=n.number("T_keep", gt=0.0),
@@ -1204,8 +1206,8 @@ def _tof(n: _Node, hardware: Mapping[str, HardwareClass]) -> Tof:
 def _reward(n: _Node) -> Reward:
     with n:
         return Reward(
-            b=n.number("B", gt=0.0),
-            p=n.number("P", ge=0.0),
+            r_ok=n.number("r_ok", gt=0.0),
+            c_pen=n.number("C_pen", ge=0.0),
             w3=n.number("w3", ge=0.0),
             c_drop=n.number("C_drop", gt=0.0),
             w=n.number("w", gt=0.0, le=1.0),  # 11.4: w in (0, 1]; STAND-IN until M5 (QUESTIONS Q32)
@@ -1458,7 +1460,7 @@ def _derive(
     energy: Energy,
     tof: Tof,
     scenarios: Mapping[str, Scenario],
-    e_strong: Mapping[str, float],
+    t_run_strong: Mapping[str, float],
 ) -> Derived:
     ref = hardware[energy.reference_class]
     if ref.c_gpu == 0:
@@ -1476,7 +1478,7 @@ def _derive(
         return sum(
             t.share * t.input_bits
             for t in types.values()
-            if t.cls == "soft" or _is_boulder(e_strong[t.name], tof.alpha, t.deadline[mode])
+            if t.cls == "soft" or _is_boulder(t_run_strong[t.name], tof.alpha, t.deadline[mode])
         )
 
     # final-design 18 (Links): cloud-eligible bits/s at S2 / 0.9. The 0.9 is S2's rho_fog: one B_WAN gives
@@ -1491,12 +1493,12 @@ def _derive(
     return Derived(
         mean_gpu_run=mean_gpu,
         zone_capacity=capacity,
-        e_strong=e_strong,
+        t_run_strong=t_run_strong,
         b_wan=b_wan,
         arrival_rate_per_zone=_frozen(per_zone),
         ti_wan=_frozen(ti_wan),
         e_ref=_frozen(e_ref),
-        e_bar=_e_bar(types, table, hardware, energy, e_ref),
+        c_en_max=_c_en_max(types, table, hardware, energy, e_ref),
     )
 
 
@@ -1529,7 +1531,7 @@ def _e_ref(task: TaskType, table: TimeTable, ref: HardwareClass, energy: Energy)
     return energy.pue_fog * row.p_dyn_w * row.mean + _e_ret(task, ref, energy)
 
 
-def _e_bar(
+def _c_en_max(
     types: Mapping[str, TaskType],
     table: TimeTable,
     hardware: Mapping[str, HardwareClass],

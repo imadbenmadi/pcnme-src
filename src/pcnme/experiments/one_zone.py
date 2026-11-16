@@ -152,11 +152,11 @@ def summarise(run: Run) -> dict[str, dict[str, float]]:
         if r.confirm is not None:
             lat[r.task.task_type].append(r.confirm.latency)
         if r.option is not None:
-            ehat[r.task.task_type].append(em.e_hat(r.task.task_type, em.of_record(r).total))
+            ehat[r.task.task_type].append(em.c_en(r.task.task_type, em.of_record(r).total))
     for t, row in rows.items():
         row["on_time_rate"] = row["on_time"] / row["arrivals"]
         row["mean_latency_ms"] = 1e3 * sum(lat[t]) / len(lat[t]) if lat[t] else float("nan")
-        row["mean_e_hat"] = sum(ehat[t]) / len(ehat[t]) if ehat[t] else float("nan")
+        row["mean_c_en"] = sum(ehat[t]) / len(ehat[t]) if ehat[t] else float("nan")
     cfg = run.cfg
     n = len(run.records)
     mix_mean_gpu = cfg.derived.mean_gpu_run

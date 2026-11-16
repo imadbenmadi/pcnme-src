@@ -38,7 +38,7 @@ def _has_place(
     if never_fills:
         return True
     n = state.n_hard + state.n_soft + pending
-    return n < state.capacity - headroom if cls == "hard" else n < state.capacity - reserve - headroom
+    return n < state.n_max - headroom if cls == "hard" else n < state.n_max - reserve - headroom
 
 
 def option_view(
@@ -64,7 +64,7 @@ def option_view(
     }
     if not rows:
         return OptionView(option, "cannot_run")
-    reserve = cfg.scheduler.reserve_hard_r
+    reserve = cfg.scheduler.n_res
     usable = {
         q: r
         for q, r in rows.items()
@@ -95,7 +95,7 @@ def _neighbour(
         return OptionView(option, "stale")
     est = ctx.estimates
     t_in = est.t_in_neighbour(ctx.task.input_bits, ctx.backhaul_wait)
-    h = cfg.scheduler.headroom_h
+    h = cfg.scheduler.n_head
     return option_view(cfg, em, ctx, option, n.hw, n.slots, n.pending, h, t_in, est.t_ret_fog())
 
 
@@ -109,7 +109,7 @@ def views(cfg: Config, em: EnergyModel, ctx: DecisionContext) -> list[OptionView
         cloud = OptionView("cloud", "stale")
     else:
         cloud_t_in = est.t_in_cloud(ctx.task.input_bits, ctx.backhaul_wait)
-        h = cfg.scheduler.headroom_h
+        h = cfg.scheduler.n_head
         cloud = option_view(
             cfg, em, ctx, "cloud", "cloud", ctx.cloud, ctx.cloud_pending, h, cloud_t_in, est.t_ret_cloud()
         )

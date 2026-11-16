@@ -36,12 +36,12 @@ class Site:
         return math.dist((self.x, self.y), (other.x, other.y))
 
 
-def is_candidate(me: Site, other: Site, d_nb: float) -> bool:
+def is_candidate(me: Site, other: Site, l_nb: float) -> bool:
     """7.5.1: the circles overlap, or the centre is within ℓ_nb."""
     if other.zone_id in (me.zone_id, CLOUD):
         return False
     d = me.distance(other)
-    return d < me.radius + other.radius or d <= d_nb
+    return d < me.radius + other.radius or d <= l_nb
 
 
 @dataclass(slots=True)
@@ -49,17 +49,17 @@ class NeighbourTable:
     """One zone's 4 neighbour positions (7.5) and what it knows of each neighbour's status."""
 
     me: Site
-    d_nb: float
+    l_nb: float
     positions: list[str | None] = field(default_factory=lambda: [None] * POSITIONS)
     sites: dict[str, Site] = field(default_factory=dict)
     online: dict[str, bool] = field(default_factory=dict)
 
     @classmethod
-    def at_start(cls, me: Site, others: list[Site], d_nb: float) -> NeighbourTable:
+    def at_start(cls, me: Site, others: list[Site], l_nb: float) -> NeighbourTable:
         """7.5.2: the candidates among the zones active at start-up, nearest first, up to 4."""
-        table = cls(me, d_nb)
+        table = cls(me, l_nb)
         found = sorted(
-            (s for s in others if is_candidate(me, s, d_nb)), key=lambda s: (me.distance(s), s.zone_id)
+            (s for s in others if is_candidate(me, s, l_nb)), key=lambda s: (me.distance(s), s.zone_id)
         )
         for i, s in enumerate(found[:POSITIONS]):
             table.positions[i] = s.zone_id
@@ -82,7 +82,7 @@ class NeighbourTable:
             return
         self.sites[site.zone_id] = site
         self.online[site.zone_id] = online
-        if not online or site.zone_id in self.positions or not is_candidate(self.me, site, self.d_nb):
+        if not online or site.zone_id in self.positions or not is_candidate(self.me, site, self.l_nb):
             return
         free = [i for i, z in enumerate(self.positions) if z is None]
         if free:  # a zone with 4 neighbours keeps them

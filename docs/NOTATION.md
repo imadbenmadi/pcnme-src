@@ -82,7 +82,7 @@ rules), F-GPU and F-CPU (hardware classes) never appear inside an equation and k
 | λ (WAN estimate) | η | Smoothing factor of the moving average | none | 4.3, 18 |
 | S_r | S_res | Size of a result (S stays the input size) | bit | 12.2 |
 | R_z | ℓ_z | Radius of a zone's coverage circle | m | 10.2, 18 |
-| d_nb | ℓ_nb | Largest centre distance that makes two zones neighbours | m | 7.5, 18 |
+| l_nb | ℓ_nb | Largest centre distance that makes two zones neighbours | m | 7.5, 18 |
 | p, c (in 10.2) | x_car, x_z | Position of the car / centre of the zone | m | 10.2 |
 
 ### 2.3 Slots and queues
@@ -160,10 +160,12 @@ E_k, E^fwd, E^exec, E^ret, Ê_k (energy), E_ref, E_waste, e_bh, e_wan, e_down, P
 C_drop, r, f₁, f₂, f̃ · s, a, s′, γ, Q(s, a), 𝒜(s), y, ε, K, H · J_DQ, J_n, J_E, a_E, λ1–λ3, ε_d, ε_a ·
 v, 𝒰(a, b), u.
 
-## 5. Names that never change
+## 5. Names in the code
 
-Config keys, message fields, log and CSV columns and Python identifiers keep their names. The config hash
-(`src/pcnme/maps.py`) covers every config key, and `summary.csv` stores it for every finished run.
+Since 16 Nov 2026 the code follows this notation too: Python names, config keys, message fields and CSV
+columns were renamed as in section 6, and the existing result files under data/ were rewritten the same way
+(for example `mean_e_hat` → `mean_c_en`). The config hash (`src/pcnme/maps.py`) covers every config key, so
+it changed with the renamed keys; runs made before 16 Nov carry the old hash.
 
 ## 6. Symbol → code
 
@@ -173,16 +175,16 @@ its message field.)
 | Symbol | Python name | Config key | Message field |
 | --- | --- | --- | --- |
 | T̄^run_k,q | `RunRow.mean` (node/timetable.py); `OptionView.run` (zone/decision.py) | `time_table_placeholder.<type>.<class>.<slot>` (`mean`, or the number alone) | — |
-| T̄^run_strong | `Derived.e_strong` (config.py) | computed from the time table and `tof.strongest_class` | — |
+| T̄^run_strong | `Derived.t_run_strong` (config.py) | computed from the time table and `tof.strongest_class` | — |
 | T̄^run_cloud | `TimeTable.fastest(task, "cloud")`, its row's `mean` (config.py) | `time_table_placeholder.<type>.cloud` | — |
 | T^run,lo, T^run,hi | `RunRow.low`, `RunRow.high`; `TimeRow.p5`, `TimeRow.p95` | `p5`, `p95` of a row; `time_table_placeholder.factors.p5` / `.p95` | — |
 | T^run | `Report.busy` (node/executor.py) | — | — |
-| T^bud_car | `Car.budget()` (car/car.py); `Upload.b_car` (testbed/messages.py) | — | `b_car` (testbed upload); `B_car_ms` in 5.3 |
+| T^bud_car | `Car.budget()` (car/car.py); `Upload.t_bud_car` (testbed/messages.py) | — | `t_bud_car` (testbed upload); `T_bud_car_ms` in 5.3 |
 | T^bud_k | `TaskRequest.budget` (node/executor.py); `budget` in zone/zone.py | — | `budget` (TaskRequest); `budget_ms` in 5.3 |
 | T̂_radio | `upload` in `anchor_deadline()` (zone/intake.py) | — | — |
-| T^to_k | `t_up` of the attempt (zone/zone.py) | `timing.kappa_up` (κ_up) | — |
-| T_abort | `RunRow.longest_step` | `longest_step` of a row; `time_table_placeholder.factors.longest_step` | — |
-| T_age | `Scheduler.soft_promotion_a_max` (config.py) | `scheduler.soft_promotion_A_max` | — |
+| T^to_k | `t_to` of the attempt (zone/zone.py) | `timing.kappa_up` (κ_up) | — |
+| T_abort | `RunRow.t_abort` | `t_abort` of a row; `time_table_placeholder.factors.t_abort` | — |
+| T_age | `Scheduler.t_age` (config.py) | `scheduler.T_age` | — |
 | L_late | `_cap()` (zone/zone.py): `l_max` for soft, 0 for hard | — | — |
 | t_send | `t_send` (agent/reward.py, experiments/city.py) | — | — |
 | δ, δ_min, δ_max | `hops.delay()` (net/hops.py) | `radio.delay`, `radio.downlink_delay`, `links.backhaul_delay`, `links.wan_delay` (each `[min, max]`) | — |
@@ -191,24 +193,24 @@ its message field.)
 | Ŵ_WAN | `StateStore.wan.estimate`, `Snapshot.wan_wait` (zone/statestore.py) | — | `wan_wait` (Snapshot); `wan_wait_ms` in 5.2 |
 | Ŵ^pipe_k | `wait` in `PathEstimates.t_in_cloud()` / the `backhaul_wait` argument (zone/estimates.py) | — | — |
 | Ŵ^queue_k,q, Ŵ^queue_q | `wait_estimate()` (node/state.py), `Executor.wait_estimate()`, `Accepted.wait`, `OptionView.wait` | — | `wait` (Accepted); `wait_ms` in 5.3 |
-| η | `StateStore.wan_lambda`; `StatePlane.wan_ewma_lambda` (config.py) | `stateplane.wan_ewma_lambda` | — |
+| η | `StateStore.wan_eta`; `StatePlane.wan_ewma_eta` (config.py) | `stateplane.wan_ewma_eta` | — |
 | S_res | `TaskType.result_bits` (config.py) | `task_types.<type>.result_kb` | — |
 | ℓ_z | `Layout.zone_radius_m`; `Site.radius`, `ZoneStatus.radius` | `layout.zone_radius_m` | `radius` (zone status) |
-| ℓ_nb | `Layout.d_nb_m`; `NeighbourTable.d_nb` (zone/layout.py) | `layout.d_nb_m` | — |
+| ℓ_nb | `Layout.l_nb_m`; `NeighbourTable.l_nb` (zone/layout.py) | `layout.l_nb_m` | — |
 | x_car, x_z | `Gps.x`, `Gps.y`; `Site.x`, `Site.y` | `layout.zone_positions_m` (x_z) | `x`, `y` (GPS, zone status) |
 | 𝒬_k | `usable` (zone/masks.py) | — | — |
-| n^busy_q | `SlotState.u` (node/state.py) | — | `u` (SlotState) |
-| n^max_q | `SlotState.capacity` | `hardware.<class>.queue.<slot>` | `capacity` (SlotState); `Q` in 5.2 |
-| n_res | `Scheduler.reserve_hard_r` | `scheduler.reserve_hard_r` | — |
-| n_head | `Scheduler.headroom_h`; `headroom` (zone/masks.py) | `scheduler.headroom_h` | — |
-| Ω_q^hard, Ω_q^soft | `SlotState.b_hard`, `SlotState.b_soft` | — | `b_hard`, `b_soft` (SlotState); `B_hard_ms`, `B_soft_ms` in 5.2 |
-| T^rem_q,j | `SlotState.remaining` | — | `remaining` (SlotState); `r_ms` in 5.2 |
+| n^busy_q | `SlotState.n_busy` (node/state.py) | — | `n_busy` (SlotState and 5.2) |
+| n^max_q | `SlotState.n_max` | `hardware.<class>.queue.<slot>` | `n_max` (SlotState and 5.2) |
+| n_res | `Scheduler.n_res` | `scheduler.n_res` | — |
+| n_head | `Scheduler.n_head`; `headroom` (zone/masks.py) | `scheduler.n_head` | — |
+| Ω_q^hard, Ω_q^soft | `SlotState.omega_hard`, `SlotState.omega_soft` | — | `omega_hard`, `omega_soft` (SlotState); `omega_hard_ms`, `omega_soft_ms` in 5.2 |
+| T^rem_q,j | `SlotState.t_rem` | — | `t_rem` (SlotState); `t_rem_ms` in 5.2 |
 | n_up | `len(RadioUplink._active)` (net/radio.py) | — | — |
 | C^time | `c_time()` (agent/reward.py) | — | — |
-| C^en | `e_hat()` (agent/reward.py, energy.py); column `mean_e_hat` | — | — |
-| C^en_max | `Derived.e_bar` (config.py) | `energy.e_bar` (`computed`) | — |
-| r_ok | `Reward.b` (config.py) | `reward.B` | — |
-| C_pen | `Reward.p` | `reward.P` | — |
+| C^en | `c_en()` (agent/reward.py, energy.py); column `mean_c_en` | — | — |
+| C^en_max | `Derived.c_en_max` (config.py) | `energy.c_en_max` (`computed`) | — |
+| r_ok | `Reward.r_ok`, `RewardParams.r_ok` (config.py, agent/reward.py) | `reward.r_ok` | — |
+| C_pen | `Reward.c_pen` | `reward.C_pen` | — |
 | P̄_k,q | `RunRow.power` (node/timetable.py); `TimeRow.p_dyn_w` (config.py) | `energy_j` of a measured row ÷ its mean; `hardware.<class>.p_dyn_w.<slot>` otherwise | — |
 | w, 1 − w | `Reward.w` | `reward.w` | — |
 | σ | `Knee.slope` (expert/knee.py) | — | — |
@@ -220,5 +222,5 @@ its message field.)
 | m_E | `Dqfd.margin` | `dqfd.margin` | — |
 | α_TOF | `Tof.alpha` (config.py) | `tof.alpha`, `tof.alpha_sweep` | — |
 | α_PER, β_PER | `Replay.alpha` (agent/replay.py); `Per.alpha`, `Per.beta0` (config.py) | `dqfd.per.alpha`, `dqfd.per.beta0` (`dqfd.per.beta_final` = 1) | — |
-| h_hot | `Cars.hotspot_h` (config.py); `self.h` (experiments/city.py) | `cars.calibrated.hotspot_h` | — |
+| h_hot | `Cars.h_hot` (config.py); `self.h` (experiments/city.py) | `cars.calibrated.h_hot` | — |
 | step 1–step 4 | — (inside the measured run time) | — | — |

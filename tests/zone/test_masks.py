@@ -32,13 +32,13 @@ def empty(cfg: Config, hw: str) -> dict[str, SlotState]:
     return {
         q: SlotState(
             c=node.slots(q),
-            capacity=node.queue[q],
+            n_max=node.queue[q],
             n_hard=0,
             n_soft=0,
-            b_hard=0.0,
-            b_soft=0.0,
-            remaining=(0.0,) * node.slots(q),
-            u=0,
+            omega_hard=0.0,
+            omega_soft=0.0,
+            t_rem=(0.0,) * node.slots(q),
+            n_busy=0,
         )
         for q in node.slot_types
     }
@@ -124,8 +124,8 @@ def test_a_soft_task_is_judged_against_time_left_plus_l_max(cfg: Config) -> None
 
 def test_full_here_uses_no_headroom_and_the_hard_reserve(cfg: Config) -> None:
     here = empty(cfg, "F-GPU")
-    full_gpu = replace(here["gpu"], n_hard=32, u=2, remaining=(0.008, 0.008), b_hard=32 * 0.008)
-    full_cpu = replace(here["cpu"], n_hard=16, u=2, remaining=(0.09, 0.09), b_hard=16 * 0.09)
+    full_gpu = replace(here["gpu"], n_hard=32, n_busy=2, t_rem=(0.008, 0.008), omega_hard=32 * 0.008)
+    full_cpu = replace(here["cpu"], n_hard=16, n_busy=2, t_rem=(0.09, 0.09), omega_hard=16 * 0.09)
     assert (
         by_option(cfg, ctx(cfg, "T1", time_left=10.0, here={"gpu": full_gpu, "cpu": full_cpu}))["here"].masked
         == "full"
@@ -139,7 +139,7 @@ def test_full_here_uses_no_headroom_and_the_hard_reserve(cfg: Config) -> None:
 
 
 def test_the_cloud_never_fills(cfg: Config) -> None:
-    cloud = {q: replace(s, n_hard=s.capacity) for q, s in empty(cfg, "cloud").items()}
+    cloud = {q: replace(s, n_hard=s.n_max) for q, s in empty(cfg, "cloud").items()}
     assert by_option(cfg, ctx(cfg, "T4", cloud=cloud))["cloud"].masked is None
 
 
@@ -147,7 +147,7 @@ def test_q_star_compares_wait_plus_run_not_wait_alone(cfg: Config) -> None:
     # GPU busy 50 ms: 50 + 8 = 58 ms; the CPU is free but slow: 0 + 90 ms. q* = GPU (by wait alone it would be
     # the CPU).
     here = empty(cfg, "F-GPU")
-    gpu_busy = {"gpu": replace(here["gpu"], u=2, remaining=(0.05, 0.05)), "cpu": here["cpu"]}
+    gpu_busy = {"gpu": replace(here["gpu"], n_busy=2, t_rem=(0.05, 0.05)), "cpu": here["cpu"]}
     assert by_option(cfg, ctx(cfg, "T1", time_left=1.0, here=gpu_busy))["here"].slot == "gpu"
 
 
@@ -168,7 +168,7 @@ def test_the_headroom_h_for_options_other_than_here(cfg: Config) -> None:
 def test_q_star_moves_to_the_cpu_when_the_gpu_would_finish_later(cfg: Config) -> None:
     # GPU slots busy for 100 ms each: Ŵ^queue_gpu = 100 ms, F_gpu = 108 ms > F_cpu = 90 ms (free).
     here = empty(cfg, "F-GPU")
-    busy = {"gpu": replace(here["gpu"], u=2, remaining=(0.1, 0.1)), "cpu": here["cpu"]}
+    busy = {"gpu": replace(here["gpu"], n_busy=2, t_rem=(0.1, 0.1)), "cpu": here["cpu"]}
     assert by_option(cfg, ctx(cfg, "T1", time_left=1.0, here=busy))["here"].slot == "cpu"
 
 
@@ -180,8 +180,8 @@ def test_greedy_takes_the_earliest_finish(cfg: Config) -> None:
     assert Greedy(cfg).choose(ctx(cfg, "T4")) == "here"  # 35 ms here vs 149 ms in the cloud
     here = empty(cfg, "F-GPU")
     swamped = {
-        "gpu": replace(here["gpu"], u=2, remaining=(0.5, 0.5)),
-        "cpu": replace(here["cpu"], u=2, remaining=(0.5, 0.5)),
+        "gpu": replace(here["gpu"], n_busy=2, t_rem=(0.5, 0.5)),
+        "cpu": replace(here["cpu"], n_busy=2, t_rem=(0.5, 0.5)),
     }
     assert Greedy(cfg).choose(ctx(cfg, "T4", here=swamped)) == "cloud"  # here 0.5 + 0.025 + 0.01 > 0.149
 
@@ -299,7 +299,7 @@ def test_cannot_run_at_a_neighbour_without_a_gpu(cfg: Config) -> None:
 def test_q_star_at_a_neighbour_counts_the_anchors_pending_sends(cfg: Config) -> None:
     # Both GPU slots busy for 5 ms, one pending hard T1 of this anchor (8 ms): Ŵ^queue = water level of 8 ms
     # over (5, 5) = (8 + 10) / 2 = 9 ms (8.5, C4), so F_gpu = 9 + 8 = 17 ms < F_cpu = 90 ms: q* = GPU.
-    gpu = replace(empty(cfg, "F-GPU")["gpu"], u=2, remaining=(0.005, 0.005))
+    gpu = replace(empty(cfg, "F-GPU")["gpu"], n_busy=2, t_rem=(0.005, 0.005))
     slots = {"gpu": gpu, "cpu": empty(cfg, "F-GPU")["cpu"]}
     v = by_option(
         cfg, nctx(cfg, "T1", [nb(cfg, slots=slots, pending={"gpu": (Pending("hard", 0.008),)})], 1.0)
@@ -320,7 +320,7 @@ def test_the_energy_of_a_neighbour_option_pays_the_backhaul(cfg: Config) -> None
 def test_greedy_sends_to_a_quiet_neighbour_when_here_is_swamped(cfg: Config) -> None:
     # 7.3 C4: here both GPU and CPU are busy 0.5 s; the neighbour is empty: 22.2 ms < everything else.
     here = empty(cfg, "F-GPU")
-    swamped = {q: replace(here[q], u=2, remaining=(0.5, 0.5)) for q in ("gpu", "cpu")}
+    swamped = {q: replace(here[q], n_busy=2, t_rem=(0.5, 0.5)) for q in ("gpu", "cpu")}
     c = nctx(cfg, "T1", [NeighbourView(None), nb(cfg, "z3")], time_left=1.0)
     assert Greedy(cfg).choose(replace(c, here=swamped)) == "n2"
     assert Greedy(cfg).choose(c) == "here"  # equal finish? here 18 ms < 22.2 ms

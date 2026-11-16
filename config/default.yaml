@@ -13,7 +13,7 @@ layout:                          # R: the same zone layout on both maps
     z4: [900, 900]
     z5: [600, 600]
   joining_zones: [z5]            # final doc 18: z5 is off at the start and joins (topology experiment, 15.7)
-  d_nb_m: 900                   # R: makes diagonal zones neighbours; every zone gets <= 4
+  l_nb_m: 900                   # R: makes diagonal zones neighbours; every zone gets <= 4
   handover_hysteresis_m: 20      # R: switch only when the new access point is 20 m closer
 
 cars:
@@ -32,7 +32,7 @@ cars:
   calibration: {seconds: 120.0, seed: 2999}   # R: the positions-only map run (tools/calibrate_map.py); the last training seed
   calibrated:                    # C (Q29): tools/calibrate_map.py on the dev map, smallest fleet
     coverage: {low: 0.8626, high: 0.8489}      # share of task creations with coverage; lambda_car / coverage
-    hotspot_h: {low: 0.200, high: 0.175}       # C (Q30): share of cars on z1's roads, so z1 = 1.6 x the mean
+    h_hot: {low: 0.200, high: 0.175}       # C (Q30): share of cars on z1's roads, so z1 = 1.6 x the mean
 
 radio:                           # P: VFC (Friis free-space + Shannon)
   bandwidth: 40.0e6
@@ -56,7 +56,7 @@ task_types:                      # sizes M: BDD100K 720p re-encoded at quality 8
   T3: {model: yolov8n-seg, cls: hard, share: 0.152, input_kb: 76, result_kb: 3, deadline: {loose: 0.100, tight: 0.070}}
   T4: {model: yolov8n + easyocr-crnn, cls: soft, share: 0.102, input_kb: 76, result_kb: 3, deadline: {loose: 1.0, tight: 0.5}}
   T2: {model: yolov8l x60 frames, cls: soft, share: 0.004, input_kb: 4572, result_kb: 10,
-       deadline: {loose: 6.0, tight: 1.1x_E_strong}}   # loose R (Q52 a): a pebble (3.87 s < 0.8 x 6.0); tight C: 1.1 x the mean run on the strongest fog class -> a boulder
+       deadline: {loose: 6.0, tight: 1.1x_T_run_strong}}   # loose R (Q52 a): a pebble (3.87 s < 0.8 x 6.0); tight C: 1.1 x the mean run on the strongest fog class -> a boulder
   T5: {enabled: false}           # optional stress test (PointPillars)
   L_max: equal_to_D              # final doc
 # Slots (Imed's question, 6 Nov): c_gpu = 2 because the GTX 1070 runs 2 CUDA streams at once (calibrated
@@ -82,9 +82,9 @@ hardware:                        # run times and powers are M; placeholders belo
     p_idle_w: 57                 # P: Behbehani et al. (per server, reporting only)
 
 time_table_placeholder:          # run per task (s), per type / hardware class / slot type; a missing row = cannot run there
-  # A row is either a mean alone (placeholder) or {mean, p5, p95, longest_step, energy_j} as measured in the calibration run.
+  # A row is either a mean alone (placeholder) or {mean, p5, p95, t_abort, energy_j} as measured in the calibration run.
   # The factors fill only the values a row does not give: a measured p5, p95 or longest step always wins.
-  factors: {p5: 0.75, p95: 1.3, longest_step: 0.5}  # x the mean (final doc 18, Time table); p5 = the p5 of
+  factors: {p5: 0.75, p95: 1.3, t_abort: 0.5}  # x the mean (final doc 18, Time table); p5 = the p5 of
                                                      # the lognormal fitted to mean and p95 (CHANGES C5)
   # M (calibration 3 Nov 2026, tools/calibrate_yolo.py): GTX 1070 at PCIe x4, 2 GPU streams and 2 CPU slots (4 threads)
   # busy at once, one process per slot; run = JPEG decode + preprocess + inference + postprocess. F-CPU rows = the
@@ -93,19 +93,19 @@ time_table_placeholder:          # run per task (s), per type / hardware class /
   # Cloud CPU rows: Ultralytics' CPU ONNX inference (v8n 80.4, v8n-seg 96.1 ms) + the measured decode, pre- and
   # post-processing. T4 cloud: the YOLO part as above + the recogniser as measured here (GPU 79.3 ms, CPU slot
   # 312.9 ms; no published number for it, so no speed-up is assumed).
-  T1: {F-GPU: {gpu: {mean: 0.0226, p5: 0.0202, p95: 0.0257, longest_step: 0.0130, energy_j: 0.914},
-               cpu: {mean: 0.0695, p5: 0.0636, p95: 0.0785, longest_step: 0.0599}},
-       F-CPU: {cpu: {mean: 0.0695, p5: 0.0636, p95: 0.0785, longest_step: 0.0599}},
+  T1: {F-GPU: {gpu: {mean: 0.0226, p5: 0.0202, p95: 0.0257, t_abort: 0.0130, energy_j: 0.914},
+               cpu: {mean: 0.0695, p5: 0.0636, p95: 0.0785, t_abort: 0.0599}},
+       F-CPU: {cpu: {mean: 0.0695, p5: 0.0636, p95: 0.0785, t_abort: 0.0599}},
        cloud: {gpu: 0.0091, cpu: 0.0885}}
-  T3: {F-GPU: {gpu: {mean: 0.0265, p5: 0.0235, p95: 0.0299, longest_step: 0.0156, energy_j: 1.123},
-               cpu: {mean: 0.0933, p5: 0.0800, p95: 0.1118, longest_step: 0.0765}},
-       F-CPU: {cpu: {mean: 0.0933, p5: 0.0800, p95: 0.1118, longest_step: 0.0765}},
+  T3: {F-GPU: {gpu: {mean: 0.0265, p5: 0.0235, p95: 0.0299, t_abort: 0.0156, energy_j: 1.123},
+               cpu: {mean: 0.0933, p5: 0.0800, p95: 0.1118, t_abort: 0.0765}},
+       F-CPU: {cpu: {mean: 0.0933, p5: 0.0800, p95: 0.1118, t_abort: 0.0765}},
        cloud: {gpu: 0.0103, cpu: 0.1052}}
-  T4: {F-GPU: {gpu: {mean: 0.0978, p5: 0.0245, p95: 0.1427, longest_step: 0.0751, energy_j: 3.049},
-               cpu: {mean: 0.3823, p5: 0.1100, p95: 0.6725, longest_step: 0.3181}},
-       F-CPU: {cpu: {mean: 0.3823, p5: 0.1100, p95: 0.6725, longest_step: 0.3181}},
+  T4: {F-GPU: {gpu: {mean: 0.0978, p5: 0.0245, p95: 0.1427, t_abort: 0.0751, energy_j: 3.049},
+               cpu: {mean: 0.3823, p5: 0.1100, p95: 0.6725, t_abort: 0.3181}},
+       F-CPU: {cpu: {mean: 0.3823, p5: 0.1100, p95: 0.6725, t_abort: 0.3181}},
        cloud: {gpu: 0.0883, cpu: 0.4014}}
-  T2: {F-GPU: {gpu: {mean: 3.869, p5: 3.829, p95: 3.909, longest_step: 0.0655, energy_j: 225.5}}, cloud: {gpu: 0.661}}   # GPU only
+  T2: {F-GPU: {gpu: {mean: 3.869, p5: 3.829, p95: 3.909, t_abort: 0.0655, energy_j: 225.5}}, cloud: {gpu: 0.661}}   # GPU only
 
 energy:
   pue_fog: 1.5                   # R: between Behbehani's 1.0 (open edge) and the Uptime 2023 average
@@ -118,12 +118,12 @@ energy:
                                  # apply PUE 1.5 to network devices only (QUESTIONS Q3)
   car_tx_w: 0.158                # P: Behbehani (DSRC 22 dBm); reporting only
   reference_class: F-GPU
-  e_bar: computed                # C: max E_k / E_ref over types and options with p95 times
+  c_en_max: computed                # C: max E_k / E_ref over types and options with p95 times
 
 stateplane:
   state_period: 0.100
   stale_after: 0.300             # 3 x state period
-  wan_ewma_lambda: 0.2           # R
+  wan_ewma_eta: 0.2           # R
   r3:                            # 9.2 R3, event-driven state (an extension; the 16.4 state-period experiment)
     enabled: false               # final doc: off; the state period alone
     delta: 2                     # STAND-IN (QUESTIONS Q47): publish when a slot type's queue changed by >= delta tasks
@@ -131,9 +131,9 @@ stateplane:
     heartbeat: 0.100             # final doc 9.2: at least every 100 ms
 
 scheduler:
-  reserve_hard_r: 4              # R
-  headroom_h: 2                  # R: small next to n^max_q
-  soft_promotion_A_max: 0.200    # R: 2 x the loose hard deadline
+  n_res: 4              # R
+  n_head: 2                  # R: small next to n^max_q
+  T_age: 0.200    # R: 2 x the loose hard deadline
   probe_timeout: {fog: 0.050, cloud: 0.300}   # R: about 10 backhaul RTTs / the WAN RTT max + margin
   T_keep: 10.0                   # R: >= longest D + L_max = 6 s
   retries: {hard: 1, soft: 2}    # final doc
@@ -154,8 +154,8 @@ tof:
   strongest_class: F-GPU         # final doc 7.1 and 18: a deployment constant, so the rule needs no fog state
 
 reward:
-  B: 1.0
-  P: 2.0
+  r_ok: 1.0
+  C_pen: 2.0
   w3: 1.0
   C_drop: 5.0                    # 1 + (1 + w3) L_max/D + C_pen
   w: 0.414                       # C: w* = the median knee weight (13.3) over all first-results training windows

@@ -70,7 +70,7 @@ def test_the_calibrated_hotspot_puts_z1_at_16_times_the_mean(cfg: Config) -> Non
     from pcnme.experiments.calibrate import measure
 
     cal = cfg.cars.calibration
-    coverage, share = measure(cfg, "low", cfg.cars.hotspot_h["low"], cal.seconds, cal.seed, cfg.cars.count[0])
+    coverage, share = measure(cfg, "low", cfg.cars.h_hot["low"], cal.seconds, cal.seed, cfg.cars.count[0])
     assert share * 4 == pytest.approx(1.6, rel=0.02)
     assert coverage == pytest.approx(cfg.cars.coverage["low"], abs=1e-4)
 
@@ -330,9 +330,9 @@ def test_the_bisection_finds_the_hotspot_share_for_16_times_the_mean(cfg: Config
     from pcnme.experiments.calibrate import calibrate
 
     got = calibrate(cfg, "low", 30.0, cfg.cars.calibration.seed, 40, steps=8)
-    assert got["z1_over_mean"] == pytest.approx(1.6, rel=0.05) and 0 < got["hotspot_h"] < 0.5
+    assert got["z1_over_mean"] == pytest.approx(1.6, rel=0.05) and 0 < got["h_hot"] < 0.5
 
 
 def test_the_city_uses_the_calibrated_hotspot_share(cfg: Config) -> None:
     c = City(cfg, "S5", "greedy", 2000, n_cars=40)  # S5: high mobility
-    assert c.h == cfg.cars.hotspot_h["high"] and sum(a.hotspot for a in c.apps) == round(0.175 * 40)
+    assert c.h == cfg.cars.h_hot["high"] and sum(a.hotspot for a in c.apps) == round(0.175 * 40)

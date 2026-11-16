@@ -170,9 +170,9 @@ class Executor:
             streams,
             hw,
             table,
-            reserve_hard=config.scheduler.reserve_hard_r,
+            reserve_hard=config.scheduler.n_res,
             pue=config.energy.pue(hw),
-            a_max=config.scheduler.soft_promotion_a_max,
+            a_max=config.scheduler.t_age,
             promotion_estimate=promotion_estimate,
             t_keep=config.scheduler.t_keep,
             on_report=on_report,
@@ -208,13 +208,13 @@ class Executor:
         queue = self._queues[q]
         return SlotState(
             c=self._hw.slots(q),
-            capacity=self._hw.queue[q],
+            n_max=self._hw.queue[q],
             n_hard=sum(1 for t in queue if t.req.cls == "hard"),
             n_soft=sum(1 for t in queue if t.req.cls == "soft"),
-            b_hard=sum(t.mean for t in queue if t.req.cls == "hard"),
-            b_soft=sum(t.mean for t in queue if t.req.cls == "soft"),
-            remaining=self._slot_remaining(q, self._clock.now),
-            u=self.busy(q),
+            omega_hard=sum(t.mean for t in queue if t.req.cls == "hard"),
+            omega_soft=sum(t.mean for t in queue if t.req.cls == "soft"),
+            t_rem=self._slot_remaining(q, self._clock.now),
+            n_busy=self.busy(q),
         )
 
     def wait_estimate(self, q: SlotType, cls: TaskClass) -> float:
@@ -415,7 +415,7 @@ class Executor:
         now = self._clock.now
         if running.event is not None:
             self._clock.cancel(running.event)
-        running.tail_end = now + min(running.end - now, running.row.longest_step)
+        running.tail_end = now + min(running.end - now, running.row.t_abort)
         del self._live[running.task.req.key]
         self._report_run(q, running, outcome, running.tail_end)
         running.event = self._clock.schedule(running.tail_end, lambda: self._release(q, running))

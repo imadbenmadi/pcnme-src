@@ -31,7 +31,7 @@ def _rows() -> list[dict[str, str]]:
             for seed in (3000, 3001, 3002):
                 v = base + 0.01 * (seed - 3000)
                 out.append({"scenario": sc, "method": me, "seed": str(seed), "on_time": str(v),
-                            "latency_p99_s": str(1 - v), "mean_e_hat": str(v),
+                            "latency_p99_s": str(1 - v), "mean_c_en": str(v),
                             "energy_per_task_j": "1.0"})  # fmt: skip
     return out
 

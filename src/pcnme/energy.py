@@ -58,9 +58,9 @@ class EnergyModel:
     def e_ref(self, task_type: str) -> float:
         return self._cfg.derived.e_ref[task_type]
 
-    def e_hat(self, task_type: str, energy: float) -> float:
+    def c_en(self, task_type: str, energy: float) -> float:
         """C^en = min(E / E_ref, C^en_max) (12.3)."""
-        return min(energy / self.e_ref(task_type), self._cfg.derived.e_bar)
+        return min(energy / self.e_ref(task_type), self._cfg.derived.c_en_max)
 
     def estimate(
         self, task_type: str, destination: Destination, hw: str, slot: SlotType, run: float

@@ -15,7 +15,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from pcnme.agent.reward import RewardParams, c_time, delivered, dropped, e_hat, settle, wasted
+from pcnme.agent.reward import RewardParams, c_en, c_time, delivered, dropped, settle, wasted
 from pcnme.car.car import Confirm, Task
 from pcnme.config import Config, load_config
 from pcnme.energy import EnergyModel
@@ -47,9 +47,9 @@ def p(cfg: Config) -> RewardParams:
 
 
 def test_the_constants_come_from_the_config(p: RewardParams, cfg: Config) -> None:
-    assert (p.b, p.w3, p.c_drop) == (1.0, 1.0, 5.0)
+    assert (p.r_ok, p.w3, p.c_drop) == (1.0, 1.0, 5.0)
     assert RewardParams.from_config(cfg).w == cfg.reward.w
-    assert p.e_bar == cfg.derived.e_bar == pytest.approx(11.697, abs=1e-3)
+    assert p.c_en_max == cfg.derived.c_en_max == pytest.approx(11.697, abs=1e-3)
 
 
 def test_c_time_on_time_and_late() -> None:
@@ -66,9 +66,9 @@ def test_delivered_soft_and_late(p: RewardParams) -> None:
 
 
 def test_the_energy_ratio_is_capped_at_e_bar(p: RewardParams) -> None:
-    assert delivered(p, 0.05, 0.1, 50.0) == pytest.approx(1 - 0.25 - 0.5 * p.e_bar)
-    assert wasted(p, 0.0, 0.1, 50.0) == pytest.approx(-0.5 * p.e_bar)
-    assert e_hat(100.0, 2.0, p.e_bar) == p.e_bar and e_hat(1.0, 2.0, p.e_bar) == 0.5
+    assert delivered(p, 0.05, 0.1, 50.0) == pytest.approx(1 - 0.25 - 0.5 * p.c_en_max)
+    assert wasted(p, 0.0, 0.1, 50.0) == pytest.approx(-0.5 * p.c_en_max)
+    assert c_en(100.0, 2.0, p.c_en_max) == p.c_en_max and c_en(1.0, 2.0, p.c_en_max) == 0.5
 
 
 def test_wasted(p: RewardParams) -> None:
@@ -76,7 +76,7 @@ def test_wasted(p: RewardParams) -> None:
 
 
 def test_dropped(p: RewardParams) -> None:
-    assert dropped(p) == pytest.approx(1 - 0.5 * 5 - 0.5 * p.e_bar)  # about -7.35
+    assert dropped(p) == pytest.approx(1 - 0.5 * 5 - 0.5 * p.c_en_max)  # about -7.35
 
 
 # --- N18: every drop reward is lower than every delivery reward ---------------------------------------------
@@ -96,7 +96,7 @@ def test_every_drop_is_worse_than_every_delivery(
     # 11.4, N18: for any w in (0, 1] and any energy. A delivered hard task has L <= D, a soft one
     # L <= D + L_max.
     # (w starts at 1e-9: below that the gap, w (C_drop - C^time), is under float resolution next to C^en_max.)
-    p = RewardParams(cfg.reward.b, cfg.reward.w3, cfg.reward.c_drop, w, cfg.derived.e_bar)
+    p = RewardParams(cfg.reward.r_ok, cfg.reward.w3, cfg.reward.c_drop, w, cfg.derived.c_en_max)
     t = cfg.task_types[kind]
     d = t.deadline[mode]  # type: ignore[index]
     longest = d if t.cls == "hard" else d + t.l_max[mode]  # type: ignore[index]
@@ -271,9 +271,9 @@ def test_a_hard_result_after_d_is_a_drop_on_the_kept_attempt(cfg: Config, p: Rew
 def test_the_params_follow_the_config() -> None:
     from tests.zone.harness import fixed_delay_config
 
-    p = RewardParams.from_config(fixed_delay_config(reward__w=0.8, reward__C_drop=6.0, reward__B=2.0))
-    assert (p.w, p.c_drop, p.b) == (0.8, 6.0, 2.0)
-    assert dropped(p) == pytest.approx(2.0 - 0.8 * 6.0 - 0.2 * p.e_bar)
+    p = RewardParams.from_config(fixed_delay_config(reward__w=0.8, reward__C_drop=6.0, reward__r_ok=2.0))
+    assert (p.w, p.c_drop, p.r_ok) == (0.8, 6.0, 2.0)
+    assert dropped(p) == pytest.approx(2.0 - 0.8 * 6.0 - 0.2 * p.c_en_max)
 
 
 def test_the_anchor_counts_its_republishes() -> None:
