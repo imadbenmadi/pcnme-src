@@ -48,7 +48,7 @@ METRICS = (
     "wasted_share",
     "jain_load",
     "early_on_time",
-    "mean_e_hat",
+    "mean_c_en",
 )
 
 
@@ -218,14 +218,14 @@ def run_metrics(d: Path, early_decisions: int) -> Run:
     m["wasted_share"] = wasted / dyn if dyn > 0 else math.nan
     obj = info.get("objective")
     if obj and tasks:  # 13.2.4 / 12.3: C^en = min(E / E_ref, C^en_max), a drop counts C^en_max
-        e_ref, e_bar = obj["e_ref"], obj["e_bar"]
+        e_ref, c_en_max = obj["e_ref"], obj["c_en_max"]
         e_hats = [
-            min(t["energy_j"] / e_ref[t["type"]], e_bar) if k in ("on_time", "late") else e_bar
+            min(t["energy_j"] / e_ref[t["type"]], c_en_max) if k in ("on_time", "late") else c_en_max
             for t, k in zip(tasks, kinds, strict=True)
         ]
-        m["mean_e_hat"] = float(np.mean(e_hats))
+        m["mean_c_en"] = float(np.mean(e_hats))
     else:
-        m["mean_e_hat"] = math.nan
+        m["mean_c_en"] = math.nan
     attempts = read_table(d, "attempts")
     refused = sum(str(a["result"]).startswith("refused_") for a in attempts)
     m["refusal_rate"] = refused / len(attempts) if attempts else math.nan
@@ -294,7 +294,7 @@ def window_objectives(
     tasks: Iterable[Mapping[str, Any]], keys: set[tuple[str, str]], objective: Mapping[str, Any]
 ) -> tuple[float, float, int]:
     """13.2.4 from the task rows: C^time and C^en per window task (a drop: C_drop and C^en_max), averaged."""
-    w3, c_drop, e_bar = objective["w3"], objective["c_drop"], objective["e_bar"]
+    w3, c_drop, c_en_max = objective["w3"], objective["c_drop"], objective["c_en_max"]
     e_ref = objective["e_ref"]
     f1 = f2 = 0.0
     n = 0
@@ -305,10 +305,10 @@ def window_objectives(
         if t["outcome"] in ("on_time", "late"):
             lat, d = t["latency_s"], t["deadline_s"]
             f1 += lat / d + w3 * max(0.0, lat - d) / d
-            f2 += min(t["energy_j"] / e_ref[t["type"]], e_bar)
+            f2 += min(t["energy_j"] / e_ref[t["type"]], c_en_max)
         else:
             f1 += c_drop
-            f2 += e_bar
+            f2 += c_en_max
     return (f1 / n, f2 / n, n) if n else (math.nan, math.nan, 0)
 
 

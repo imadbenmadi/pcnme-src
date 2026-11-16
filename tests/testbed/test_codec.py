@@ -59,7 +59,7 @@ def test_nested_types_survive() -> None:
         and isinstance(s.version, SnapshotVersion)
         and isinstance(s.slots["gpu"], SlotState)
     )
-    assert isinstance(s.slots["gpu"].remaining, tuple)
+    assert isinstance(s.slots["gpu"].t_rem, tuple)
     k = decode(encode(KEY))
     assert isinstance(k, AttemptKey) and isinstance(k.task_id, TaskId)
 

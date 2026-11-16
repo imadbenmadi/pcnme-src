@@ -159,7 +159,7 @@ def zone_fields(zone: Any) -> dict[str, Any]:
     """A zone's live state: busy and queued per slot type, open records, served cars (zone.py names)."""
     out: dict[str, Any] = {"records": len(zone.records), "cars": len(zone._cars)}
     for slot, s in zone.executor.snapshot().items():
-        out[f"busy_{slot}"] = int(s.u)
+        out[f"busy_{slot}"] = int(s.n_busy)
         out[f"queued_{slot}"] = int(s.n_hard + s.n_soft)
     return out
 

@@ -48,7 +48,7 @@ def test_the_anchor_deadline_by_hand(cfg: Config) -> None:
     t_rx = 0.0005 + push + 0.0034
     d_a = anchor_deadline(
         t_rx=t_rx,
-        b_car=0.100,
+        t_bud_car=0.100,
         w_radio=0.0005,
         size_bits=1.2e6,
         rate=rate,
@@ -71,7 +71,7 @@ def test_with_the_mean_delay_the_anchor_deadline_is_the_cars_deadline(cfg: Confi
     (tr,) = got
     assert tr.wait > 0.001  # it shared the air with the T2
     d_a = anchor_deadline(
-        t_rx=tr.delivery, b_car=0.100, w_radio=tr.wait, size_bits=1.2e6, rate=rate, mean_radio_delay=0.003
+        t_rx=tr.delivery, t_bud_car=0.100, w_radio=tr.wait, size_bits=1.2e6, rate=rate, mean_radio_delay=0.003
     )
     assert d_a == pytest.approx(0.001 + 0.100, rel=1e-12)
 

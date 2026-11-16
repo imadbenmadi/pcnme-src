@@ -10,7 +10,7 @@ from pcnme.node.timetable import Deterministic, RunRow, RunTimeDistribution, Run
 from pcnme.sim.clock import EventClock
 from pcnme.sim.rng import RandomStreams
 
-A_MAX = 0.200  # config scheduler.soft_promotion_A_max
+T_AGE = 0.200  # config scheduler.T_age
 SPLIT = {"training": range(2000, 3000)}
 
 
@@ -31,7 +31,7 @@ def row(
         mean=mean,
         low=0.9 * mean if low is None else low,
         high=1.3 * mean,
-        longest_step=0.5 * mean,
+        t_abort=0.5 * mean,
         energy_per_run=20.0 * mean,
         distribution=distribution or Deterministic(mean if run is None else run),
     )
@@ -78,7 +78,7 @@ def tiny(rows: list[RunRow], c_gpu: int = 0, c_cpu: int = 1, promotion: str = "h
         RunTimeTable({(r.task, r.hw, r.slot): r for r in rows}),
         reserve_hard=4,
         pue=1.0,
-        a_max=A_MAX,
+        a_max=T_AGE,
         promotion_estimate=promotion,  # type: ignore[arg-type]
         t_keep=10.0,
         on_report=reports.append,

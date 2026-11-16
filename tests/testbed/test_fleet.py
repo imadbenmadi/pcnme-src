@@ -90,7 +90,7 @@ def test_a_car_attaches_sends_gps_and_uploads_with_its_budget_and_rate() -> None
     task = make_task(f, clock, "T1", 99)
     f.task(app, task)
     up = next(b for _, _, _, b in net.sent if isinstance(b, Upload) and b.task == task)
-    assert up.b_car == app.car.budget(task, clock.now) and up.rate > 0
+    assert up.t_bud_car == app.car.budget(task, clock.now) and up.rate > 0
     net.open.pop(task.task_id)(200, UploadReply(task.task_id, "z1"))
     assert task.task_id not in app.uploading
 

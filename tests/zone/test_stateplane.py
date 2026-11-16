@@ -15,7 +15,7 @@ EMPTY = {"gpu": SlotState(2, 32, 0, 0, 0.0, 0.0, (0.0, 0.0), 0)}
 
 
 def store(clock: EventClock) -> StateStore:
-    return StateStore("z1", clock, stale_after=0.3, pub_delay={"z2": 0.007, CLOUD: 0.0665}, wan_lambda=0.2)
+    return StateStore("z1", clock, stale_after=0.3, pub_delay={"z2": 0.007, CLOUD: 0.0665}, wan_eta=0.2)
 
 
 def snap(zone: str, epoch: int, counter: int, wan: float = 0.0, age: float | None = None) -> Snapshot:
@@ -201,7 +201,7 @@ def test_a_zone_learns_the_wan_wait_from_its_neighbours_state() -> None:
 def test_stale_means_strictly_older_than_stale_after() -> None:
     # Dyadic numbers, exact in binary: received at 1.0, δ̄_pub 0.0625; at 1.1875 the age is exactly 0.25.
     clock = EventClock()
-    s = StateStore("z1", clock, stale_after=0.25, pub_delay={"z2": 0.0625}, wan_lambda=0.2)
+    s = StateStore("z1", clock, stale_after=0.25, pub_delay={"z2": 0.0625}, wan_eta=0.2)
     clock.run_until(1.0)
     s.on_snapshot(snap("z2", 0, 1))
     clock.run_until(1.1875)

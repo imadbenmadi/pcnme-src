@@ -47,7 +47,9 @@ class RemoteCar:
         self._net = net  # the zone process's one network thread (testbed/netloop.py)
 
     def budget(self, task: Task, now: float) -> float:
-        raise RuntimeError("testbed: B_car comes with the upload (Upload.b_car), never from the zone's clock")
+        raise RuntimeError(
+            "testbed: T^bud_car comes with the upload (Upload.t_bud_car), never from the zone's clock"
+        )
 
     def receive(self, result: Result, now: float) -> Confirm | None:
         def done(status: int, content: bytes) -> None:

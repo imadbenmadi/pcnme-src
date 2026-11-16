@@ -57,7 +57,7 @@ def log_online(log: RunLog, agents: dict[str, OnlineAgent], episodes: Sequence[E
         for row in loss_rows(a.losses, every):
             log.add("learning", row["update"], zone=z, phase="online", **row, epsilon=a.eps)
     for k, e in enumerate(episodes):
-        log.add("episodes", float(k), episode=k, seed=e.seed, on_time=e.on_time, mean_e_hat=e.mean_e_hat,
+        log.add("episodes", float(k), episode=k, seed=e.seed, on_time=e.on_time, mean_c_en=e.mean_c_en,
                 tasks=e.tasks, updates=e.updates, mean_loss=e.mean_loss)  # fmt: skip
 
 

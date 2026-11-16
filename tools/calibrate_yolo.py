@@ -194,7 +194,7 @@ def main(frames_dir: Path, out: Path, only: list[str] | None = None) -> None:
         times, longest, t0, t1 = measure(w, n, gpu_runs, "cuda:0", GPU_STREAMS, jpegs)
         e_dyn = (ps.mean_w(t0, t1) - idle_w) * (t1 - t0) / len(times)
         row = summarize(times) | {
-            "longest_step": float(np.mean(longest)),
+            "t_abort": float(np.mean(longest)),
             "energy_j": e_dyn,
             "max": max(times),
         }
@@ -202,7 +202,7 @@ def main(frames_dir: Path, out: Path, only: list[str] | None = None) -> None:
         print(typ, "gpu", {k: round(v, 5) for k, v in row.items()}, flush=True)
         if cpu_runs:
             times, longest, _, _ = measure(w, n, cpu_runs, "cpu", CPU_SLOTS, jpegs)
-            row = summarize(times) | {"longest_step": float(np.mean(longest)), "max": max(times)}
+            row = summarize(times) | {"t_abort": float(np.mean(longest)), "max": max(times)}
             report["rows"][f"{typ}/F-GPU/cpu"] = row
             print(typ, "cpu", {k: round(v, 5) for k, v in row.items()}, flush=True)
     ps.close()

@@ -48,7 +48,7 @@ def test_the_curves_are_written_and_plotted(cfg: Config, tmp_path: Path) -> None
     assert agree == sorted(pre.curve.agreement) and agree[0][0] == 0  # the untrained network's included
     assert {r["zone"] for r in learning if r["phase"] == "online"} <= {"z1", "z2", "z3", "z4"}
     eps = pq.read_table(d / "episodes.parquet").to_pylist()
-    fields = ("seed", "on_time", "mean_e_hat", "tasks", "updates", "mean_loss")
+    fields = ("seed", "on_time", "mean_c_en", "tasks", "updates", "mean_loss")
     assert [tuple(e[f] for f in fields) for e in eps] == [
         tuple(getattr(e, f) for f in fields) for e in episodes
     ]

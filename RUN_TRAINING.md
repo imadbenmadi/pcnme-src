@@ -137,7 +137,7 @@ InfluxDB and Grafana stay up afterwards; stop them with
 `docker compose -f docker/compose.yaml --profile testbed down`.
 
 The viewer's source "Training" shows every training of the learning methods (data/<map>/train/): on time, loss,
-mean C^en (mean_e_hat) and updates per episode, the decision budget and train.log; one that is running (train.py) updates by itself
+mean C^en (mean_c_en) and updates per episode, the decision budget and train.log; one that is running (train.py) updates by itself
 every few seconds.
 
 ## Viewer

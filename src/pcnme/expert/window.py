@@ -243,7 +243,7 @@ def window_tasks(cfg: Config, run: Run) -> list[WindowTask]:
 
 def objectives(cfg: Config, records: Sequence[TaskRecord]) -> Objectives:
     """13.2.4: f1 = mean C^time, f2 = mean C^en over the window tasks (a drop: C_drop and C^en_max)."""
-    r, e_bar = cfg.reward, cfg.derived.e_bar
+    r, c_en_max = cfg.reward, cfg.derived.c_en_max
     f1 = f2 = 0.0
     drops = 0
     for rec in records:
@@ -252,11 +252,11 @@ def objectives(cfg: Config, records: Sequence[TaskRecord]) -> Objectives:
             assert rec.confirm is not None
             f1 += c_time(rec.confirm.latency, task.deadline, r.w3)
             energy = sum(a.energy for a in rec.rewards.values())  # every attempt (12.5)
-            f2 += min(energy / cfg.derived.e_ref[task.task_type], e_bar)
+            f2 += min(energy / cfg.derived.e_ref[task.task_type], c_en_max)
         else:
             drops += 1
             f1 += r.c_drop
-            f2 += e_bar
+            f2 += c_en_max
     n = len(records)
     return Objectives(f1 / n, f2 / n, n, drops) if n else Objectives(0.0, 0.0, 0, 0)
 

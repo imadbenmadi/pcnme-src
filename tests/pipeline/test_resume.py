@@ -82,12 +82,12 @@ def test_a_resume_keeps_the_decisions_used_of_the_checkpointed_episodes(tmp_path
     from pcnme.pipeline.train import _rewrite_episodes
 
     (tmp_path / "episodes.csv").write_text(
-        "episode,seed,on_time,mean_e_hat,tasks,updates,mean_loss,decisions_used,wall_s\n"
+        "episode,seed,on_time,mean_c_en,tasks,updates,mean_loss,decisions_used,wall_s\n"
         "1,2000,0.9,1.1,298,74,0.1,298,54.3\n2,2001,0.8,1.2,287,82,0.4,400,56.9\n3,2002,0.7,1.3,280,90,0.5,500,60.0\n",
         encoding="utf-8",
     )
-    ep = SimpleNamespace(seed=2000, on_time=0.9, mean_e_hat=1.1, tasks=298, updates=74, mean_loss=0.1)
-    ep2 = SimpleNamespace(seed=2001, on_time=0.8, mean_e_hat=1.2, tasks=287, updates=82, mean_loss=0.4)
+    ep = SimpleNamespace(seed=2000, on_time=0.9, mean_c_en=1.1, tasks=298, updates=74, mean_loss=0.1)
+    ep2 = SimpleNamespace(seed=2001, on_time=0.8, mean_c_en=1.2, tasks=287, updates=82, mean_loss=0.4)
     _rewrite_episodes(tmp_path, SimpleNamespace(out=SimpleNamespace(episodes=[ep, ep2])))
     rows = (tmp_path / "episodes.csv").read_text(encoding="utf-8").splitlines()
     assert len(rows) == 3  # header + the 2 checkpointed episodes; episode 3 is redone after the resume

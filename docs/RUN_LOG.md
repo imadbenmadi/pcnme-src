@@ -425,3 +425,15 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 ## 16 Nov: stop_all.py
 
 - `stop_all.py` (src/pcnme/pipeline/stop.py): stops the containers (compose down over every profile), the project networks, view/run_live/run_testbed/train/evaluate, and frees ports 8765, 3000, 8086, 1883, 18083, 8000; `--images`, `--volumes`, `--dry-run`. Docker's own processes are never killed; no file is deleted. In WSL without Docker Desktop's WSL integration it uses `docker.exe`. Checked: 7 tests (a real entry point is found and stopped), dry runs on Windows and in WSL (Ubuntu 24.04), the compose down config valid. Not run for real here: it would stop the running Grafana, InfluxDB and viewer.
+
+## 16 Nov: the notation reaches the code
+
+- Python names, config keys, message fields and CSV columns renamed after docs/NOTATION.md (section 6 lists
+  them): for example mean_e_hat → mean_c_en, e_hat → c_en, e_bar → c_en_max, b_car → t_bud_car, reward B, P →
+  r_ok, C_pen, headroom_h → n_head, reserve_hard_r → n_res, soft_promotion_A_max → T_age, hotspot_h → h_hot,
+  longest_step → t_abort, SlotState u, capacity, remaining, b_hard, b_soft → n_busy, n_max, t_rem, omega_hard,
+  omega_soft. The existing result files under data/ (CSV, JSON, Markdown, YAML; Parquet columns had none of
+  these names) were rewritten the same way, and files named after mean_e_hat renamed. No run was made.
+- config_hash changes with the renamed keys: runs before 16 Nov carry the old hash, so a rerun of train.py or
+  evaluate.py treats them as made with another config. The exported viewer (../pcnme-history-viewer) still has
+  the old names until it is exported again.

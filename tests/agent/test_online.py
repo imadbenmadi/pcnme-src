@@ -169,7 +169,7 @@ def test_episode_stats_by_hand(cfg: Config) -> None:
     from pcnme.agent.online import episode_stats
     from tests.expert.test_window import rec
 
-    e_ref, e_bar = cfg.derived.e_ref, cfg.derived.e_bar
+    e_ref, c_en_max = cfg.derived.e_ref, cfg.derived.c_en_max
     rs = [
         rec(cfg, "T1", "on_time", 0.05, 1.5 * e_ref["T1"]),
         rec(cfg, "T4", "late", 1.5, 2.0 * e_ref["T4"]),
@@ -177,5 +177,5 @@ def test_episode_stats_by_hand(cfg: Config) -> None:
     ]
     on_time, mean_e = episode_stats(cfg, rs)
     assert on_time == pytest.approx(1 / 3)  # late is delivered, not on time (16.3)
-    assert mean_e == pytest.approx((1.5 + 2.0 + e_bar) / 3)
+    assert mean_e == pytest.approx((1.5 + 2.0 + c_en_max) / 3)
     assert episode_stats(cfg, []) == (0.0, 0.0)
