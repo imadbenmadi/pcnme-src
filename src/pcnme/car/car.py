@@ -4,7 +4,7 @@
 A car creates tasks at its arrival rate λ_car (18; Poisson, QUESTIONS Q12), from the run's fleet size, each
 of a type drawn by the count mix, with the scenario's deadlines and the config's sizes. Its clock starts at
 creation (6A.1); the upload starts after the encode time (timing.encode, 14.3, Q14) and carries
-B_car = D - time since creation (6A.2), so the encode time is counted once. It keeps the first result per
+T^bud_car = D - time since creation (6A.2), so the encode time is counted once. It keeps the first result per
 task id until D + L_max and confirms every copy, naming the copy it kept (9.5).
 """
 
@@ -116,8 +116,8 @@ class Car:
         self.clock.schedule(task.created + self._encode, lambda: self._on_task(task))  # upload (14.3, Q14)
 
     def budget(self, task: Task, now: float) -> float:
-        """B_car = D - time since creation, sent with the upload (6A.2). The upload starts after the encode
-        time, so `now - created` already holds it (Q14)."""
+        """T^bud_car = D - time since creation, sent with the upload (6A.2). The upload starts after the
+        encode time, so `now - created` already holds it (Q14)."""
         return task.deadline - (now - task.created)
 
     def receive(self, result: Result, now: float) -> Confirm | None:

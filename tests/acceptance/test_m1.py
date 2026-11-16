@@ -7,7 +7,7 @@
 - One unit test per scheduler rule of 8.4 (tests/node/test_scheduler.py) and per row of the 8.6 table
   (tests/node/test_drops.py, with the arrival rows in test_executor.py): listed in RULE_TESTS below and
   checked to exist.
-- Ŵ: 0 with a free slot, the formula otherwise, c_q = 1 exact in the mean (tests/node/test_state.py).
+- Ŵ^queue: 0 with a free slot, the formula otherwise, c_q = 1 exact in the mean (tests/node/test_state.py).
 - Determinism: the same seed gives the same event-log hash; a different seed a different one.
 """
 
@@ -176,7 +176,7 @@ def test_the_event_log_hash_is_pinned(cfg: Config) -> None:
     assert event_log_hash(cfg, 2000) == GOLDEN_HASH
 
 
-# 29 Oct, Windows; re-pinned for Q10 ("high" is the promotion default), C4 (water-filling Ŵ), C5
+# 29 Oct, Windows; re-pinned for Q10 ("high" is the promotion default), C4 (water-filling Ŵ^queue), C5
 # (lognormal run times) and whole-nanosecond draws (sim/quantize.py: the earlier pin differed on Linux, where
 # exp / log1p differ in the last bit).
 GOLDEN_HASH = "df5bc798d565373ed2febf801aee885eb7ed37112724757f7674b1bc50ba91f3"

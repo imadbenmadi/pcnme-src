@@ -2,8 +2,8 @@
 
 A car's rate is the Shannon rate at its distance with free-space path loss (the VFC model, noise in correct
 units, C1): R = B log2(1 + P G_t G_r (lambda / (4 pi d))^2 / (N0 B)), lambda = c / f. One uplink per zone,
-shared by all its cars: the cars uploading at once share its airtime equally, so while n uploads are in
-progress each advances at its own R_car / n (fluid processor sharing, CHANGES C6).
+shared by all its cars: the cars uploading at once share its airtime equally, so while n_up uploads are in
+progress each advances at its own R_car / n_up (fluid processor sharing, CHANGES C6).
 """
 
 from __future__ import annotations
@@ -49,18 +49,18 @@ class RadioTransfer:
 
     @property
     def duration(self) -> float:
-        """The upload time U_up = W_radio + S / R_car + d."""
+        """The upload time U_up = W_radio + S / R_car + δ."""
         return self.delivery - self.start
 
 
 class RadioUplink:
     """One zone's uplink with equal airtime among the uploads in progress (4.2, CHANGES C6).
 
-    Virtual time V advances at 1 / n while n uploads are in progress; an upload that starts at virtual time
-    V_s ends when V reaches V_s + S / R_car, its push time alone. Uploads end in the order of these finish
-    tags (ties by order of arrival). The zone runs its uplink, so each upload's W_radio is known exactly when
-    it arrives (6A.3). The air is busy exactly when a one-car-at-a-time pipe would be: only the order of
-    the ends changes.
+    Virtual time V advances at 1 / n_up while n_up uploads are in progress; an upload that starts at virtual
+    time V_s ends when V reaches V_s + S / R_car, its push time alone. Uploads end in the order of these
+    finish tags (ties by order of arrival). The zone runs its uplink, so each upload's W_radio is known
+    exactly when it arrives (6A.3). The air is busy exactly when a one-car-at-a-time pipe would be: only the
+    order of the ends changes.
     """
 
     def __init__(self, clock: EventClock) -> None:

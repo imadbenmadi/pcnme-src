@@ -3,10 +3,10 @@
 Two parts: the agent's own transitions (a ring of rl.replay_agent = 100 000, the oldest overwritten) and the
 expert transitions, kept for good in a part that is never overwritten. Prioritized replay over both (Schaul
 et al.): priority p = |δ| + ε, with the bonus ε_d on expert and ε_a on own transitions; a transition is drawn
-with probability P(i) = p_i^α / Σ p^α, and its loss weighted by w_i = (N P(i))^(-β) / max_batch w, β annealed
-from β0 to 1. Engineering choices: a new transition (and every expert one at load) gets the largest priority
-so far (1 at the start), so it is drawn at least once soon; the batch is drawn stratified (one draw per equal
-slice of the total); the weights are normalised by the batch's largest.
+with probability P(i) = p_i^α_PER / Σ p^α_PER, and its loss weighted by w_i = (N P(i))^(-β_PER) / max_batch w,
+β_PER annealed from its configured start to 1. Engineering choices: a new transition (and every expert one at
+load) gets the largest priority so far (1 at the start), so it is drawn at least once soon; the batch is drawn
+stratified (one draw per equal slice of the total); the weights are normalised by the batch's largest.
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ class Replay:
         self.max_p = 1.0
         self.rng = rng
         self.expert_scale = 1.0  # 16.4 fading: the expert part's priorities x this (1 = the design)
-        self._expert_p = np.full(len(self.expert), self.max_p**self.alpha)  # unscaled p^α
+        self._expert_p = np.full(len(self.expert), self.max_p**self.alpha)  # unscaled p^α_PER
         if len(self.expert):
             self.tree.set_many(0, self._expert_p)
 
@@ -125,7 +125,7 @@ class Replay:
         return Drawn(tuple(slots), tuple(self.at(i) for i in slots), tuple(float(x) for x in w))
 
     def update(self, slots: Sequence[int], td_errors: Sequence[float]) -> None:
-        """p = |δ| + ε (ε_d for expert, ε_a for own transitions), stored as p^α."""
+        """p = |δ| + ε (ε_d for expert, ε_a for own transitions), stored as p^α_PER."""
         for i, d in zip(slots, td_errors, strict=True):
             p = abs(float(d)) + (self.eps_demo if self.is_expert(i) else self.eps_agent)
             self.max_p = max(self.max_p, p)
@@ -152,7 +152,7 @@ class Replay:
 
 
 def beta_at(cfg: Config, update: int, updates: int) -> float:
-    """β annealed linearly from β0 to β_final over `updates` gradient updates (18)."""
+    """β_PER annealed linearly from its configured start to β_final over `updates` gradient updates (18)."""
     per = cfg.dqfd.per
     f = min(1.0, update / updates) if updates > 0 else 1.0
     return per.beta0 + f * (per.beta_final - per.beta0)

@@ -1,7 +1,8 @@
 """The water-filling wait estimate (CHANGES C4; final-design 8.5).
 
-Ŵ is the W with sum_i max(0, W - r_i) = B: the backlog B, poured onto the c_q slots in the order they free
-up, fills them all to W. r_i = each slot's remaining time (0 when free); still 0 while a slot is free.
+Ŵ^queue_q is the level with sum_j max(0, Ŵ^queue_q - T^rem_q,j) = Ω: the backlog Ω, poured onto the c_q slots
+in the order they free up, fills them all to that level. T^rem_q,j = each slot's remaining time (0 when free);
+still 0 while a slot is free.
 """
 
 from __future__ import annotations
@@ -74,8 +75,8 @@ def test_still_zero_while_a_slot_is_free_and_pending_sends_count() -> None:
 
 
 def test_a_pending_send_cannot_be_spread_over_two_free_slots() -> None:
-    # Both slots free, one pending send: the newcomer takes the other free slot, so Ŵ = 0. Water-filling alone
-    # would pour the 8 ms over both slots and give 4 ms: the free-slot rule (8.5) comes first.
+    # Both slots free, one pending send: the newcomer takes the other free slot, so Ŵ^queue = 0. Water-filling
+    # alone would pour the 8 ms over both slots and give 4 ms: the free-slot rule (8.5) comes first.
     assert wait_estimate(state((0.0, 0.0)), "hard", [Pending(cls="hard", mean=0.008)]) == 0.0
 
 
@@ -125,8 +126,8 @@ def test_with_a_t2_on_one_gpu_slot_the_new_estimate_matches_the_real_wait(
     make_node: Callable[..., Node],
 ) -> None:
     # The web review's case (CHANGES C4): the config's F-GPU node at S2 load (74 tasks/s, the whole mix),
-    # fixed run times. For every hard task accepted on the GPU while a T2 runs there: the new Ŵ (from the
-    # accept reply) against the real wait, and the old pooled (R + B_hard) / c on the same snapshot.
+    # fixed run times. For every hard task accepted on the GPU while a T2 runs there: the new Ŵ^queue (from
+    # the accept reply) against the real wait, and the old pooled (R + Ω^hard) / c on the same snapshot.
     node = make_node()
     cfg = node.cfg
     rng = np.random.default_rng(2002)
@@ -134,7 +135,7 @@ def test_with_a_t2_on_one_gpu_slot_the_new_estimate_matches_the_real_wait(
     shares = np.array([t.share for t in types])
     rate = cfg.derived.arrival_rate_per_zone["S2"]
     t = 0.0
-    samples: list[tuple[object, float, float, float]] = []  # (key, arrival, new Ŵ, old Ŵ)
+    samples: list[tuple[object, float, float, float]] = []  # (key, arrival, new Ŵ^queue, old Ŵ^queue)
     while t < 30.0:
         t += float(rng.exponential(1 / rate))
         node.run(t)

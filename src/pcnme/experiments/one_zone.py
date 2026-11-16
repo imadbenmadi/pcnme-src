@@ -133,7 +133,7 @@ def check_invariants(run: Run) -> list[str]:
 
 def summarise(run: Run) -> dict[str, dict[str, float]]:
     """Per task type: arrivals, here / cloud / dropped, refusals by reason, on-time rate, mean latency of
-    delivered results, mean ê. Plus the measured ρ_fog and TI_WAN of the zone."""
+    delivered results, mean C^en. Plus the measured ρ_fog and TI_WAN of the zone."""
     em = EnergyModel(run.cfg)
     rows: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
     lat: dict[str, list[float]] = defaultdict(list)

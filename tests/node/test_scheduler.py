@@ -35,8 +35,8 @@ def test_a_hard_head_is_skipped_when_it_can_no_longer_finish() -> None:
 
 def test_a_hard_head_that_can_still_just_finish_is_not_skipped() -> None:
     # Binary-exact times: "long" (mean 250 ms) really runs 312.5 ms; H (mean 125 ms, low 62.5 ms, d_k = 375
-    # ms) is accepted with F = 250 + 125 = 375 ms. At 312.5 ms, t + Ê^low = 375 ms = d_k, not later: it runs.
-    # The skip rule uses Ê^low, not the mean (t + Ê = 437.5 ms would be later).
+    # ms) is accepted with F = 250 + 125 = 375 ms. At 312.5 ms, t + T^run,lo = 375 ms = d_k, not later: it
+    # runs. The skip rule uses T^run,lo, not the mean (t + T̄^run = 437.5 ms would be later).
     # (It then runs past d_k and is aborted at 375 ms: 8.6, M1.7. Not skipping it is what this test checks.)
     n = tiny([row("long", "cpu", 0.25, run=0.3125), row("H", "cpu", 0.125, low=0.0625)])
     n.submit("long", "hard", 10.0)
@@ -76,7 +76,7 @@ def test_skipping_continues_until_a_head_can_run() -> None:
 @pytest.mark.parametrize("promotion", ["mean", "high"])
 def test_a_soft_task_that_waited_a_max_runs_before_hard_tasks_that_can_spare_it(promotion: str) -> None:
     # One slot busy until 250 ms. S (soft) waits from 0; H (hard, mean 10 ms, deadline 10 s) arrives at 240
-    # ms. At 250 ms S has waited >= A_max = 200 ms, and H still meets 10 s with S on the slot (high 13 ms): S
+    # ms. At 250 ms S has waited >= T_age = 200 ms, and H still meets 10 s with S on the slot (high 13 ms): S
     # first.
     n = tiny([row("long", "cpu", 0.250), row("S", "cpu", 0.010), row("H", "cpu", 0.010)], promotion=promotion)
     n.submit("long", "hard", 10.0)
@@ -93,7 +93,7 @@ def test_no_promotion_before_a_max(promotion: str) -> None:
     n.submit("long", "hard", 10.0)
     s = n.submit("S", "soft", 10.0, l_max=10.0)
     h = n.submit("H", "hard", 10.0)
-    n.clock.run_until(5.0)  # slot frees at 150 ms < A_max: hard first
+    n.clock.run_until(5.0)  # slot frees at 150 ms < T_age: hard first
     assert n.started()[1:] == [h.key, s.key]
 
 
@@ -112,7 +112,7 @@ def test_no_promotion_when_a_queued_hard_task_would_miss(promotion: str) -> None
 
 @pytest.mark.parametrize("promotion", ["mean", "high"])
 def test_the_promotion_check_list_schedules_the_hard_queue_on_all_slots(promotion: str) -> None:
-    # Two slots. At 250 ms slot 1 frees and slot 2 runs until 260 ms. S waited A_max. H1 and H2 (10 ms each,
+    # Two slots. At 250 ms slot 1 frees and slot 2 runs until 260 ms. S waited T_age. H1 and H2 (10 ms each,
     # deadline 300 ms) are list-scheduled on the 2 slots with S on slot 1 for 13 ms: H1 on slot 2 from 260 ms
     # (ends 270 or 273), H2 after it (ends 280 or 286) <= 300 ms: S is promoted.
     n = tiny(
@@ -143,7 +143,7 @@ def test_promotion_uses_the_high_estimate_by_default() -> None:
 
 
 def test_with_high_the_running_tasks_count_their_high_remaining_time() -> None:
-    # Two slots. At 250 ms slot 1 frees (S waited A_max); slot 2 runs b (mean 260 ms, high 338 ms). H (10 ms,
+    # Two slots. At 250 ms slot 1 frees (S waited T_age); slot 2 runs b (mean 260 ms, high 338 ms). H (10 ms,
     # high 13 ms) must end by 273.5 ms. High: S holds slot 1 until 263 ms and b holds slot 2 until 338 ms, so
     # H ends at 263 + 13 = 276 ms > 273.5: no promotion. Counting b by its mean (free at 260 ms) would let H
     # end at 273 ms and wrongly promote S.

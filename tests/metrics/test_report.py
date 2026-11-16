@@ -12,10 +12,11 @@ import pytest
 
 pytest.importorskip("pyarrow")
 
-from pcnme.experiments.cli import main
-from pcnme.metrics.report import report, run_dirs
-from pcnme.metrics.stats import front_distance, window_objectives, window_points
-from tests.metrics.test_stats import task, write_run
+# E402: imports after importorskip; the pre-commit ruff (v0.6.9) flags them, the venv's newer ruff does not.
+from pcnme.experiments.cli import main  # noqa: E402, RUF100
+from pcnme.metrics.report import report, run_dirs  # noqa: E402, RUF100
+from pcnme.metrics.stats import front_distance, window_objectives, window_points  # noqa: E402, RUF100
+from tests.metrics.test_stats import task, write_run  # noqa: E402, RUF100
 
 OBJECTIVE = {"w3": 2.0, "c_drop": 5.0, "e_bar": 3.0, "e_ref": {"T1": 2.0}}
 
@@ -68,9 +69,9 @@ def wtask(anchor: str, tid: str, outcome: str, latency: float | None, energy: fl
 
 def test_window_objectives_by_hand() -> None:
     rows = [
-        wtask("z1", "a", "on_time", 0.05, 1.0),  # c 0.5, ê 0.5
-        wtask("z1", "b", "late", 0.15, 8.0),  # c 1.5 + 2 x 0.5 = 2.5, ê min(4, 3) = 3
-        wtask("z2", "c", "drop_late", None, 0.0),  # c 5, ê 3
+        wtask("z1", "a", "on_time", 0.05, 1.0),  # C^time 0.5, C^en 0.5
+        wtask("z1", "b", "late", 0.15, 8.0),  # C^time 1.5 + 2 x 0.5 = 2.5, C^en min(4, 3) = 3
+        wtask("z2", "c", "drop_late", None, 0.0),  # C^time 5, C^en 3
         wtask("z2", "a", "on_time", 0.05, 1.0),  # another anchor's task a: not in the window
     ]
     keys = {("z1", "a"), ("z1", "b"), ("z2", "c"), ("z3", "x")}

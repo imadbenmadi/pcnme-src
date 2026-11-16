@@ -37,7 +37,7 @@ def test_the_newest_version_wins_whatever_the_arrival_order() -> None:
 
 
 def test_age_and_staleness_on_the_anchors_own_clock() -> None:
-    # 5.4: age = now - local receive time + δ̂_pub; 7.2: stale beyond 300 ms; nothing received = stale.
+    # 5.4: age = now - local receive time + δ̄_pub; 7.2: stale beyond 300 ms; nothing received = stale.
     clock = EventClock()
     s = store(clock)
     assert s.age("z2") is None and s.is_stale("z2")
@@ -63,7 +63,7 @@ def test_pending_sends_count_per_executor_and_slot_type_until_cleared() -> None:
 
 
 def test_the_wan_wait_is_a_moving_average_with_lambda_02() -> None:
-    # 4.3, 18: ŵ <- 0.8 ŵ + 0.2 sample; 0 before any sample.
+    # 4.3, 18: Ŵ_WAN <- 0.8 Ŵ_WAN + 0.2 sample; 0 before any sample.
     s = store(EventClock())
     assert s.estimate() == 0.0
     s.wan_sample(0.1)
@@ -126,11 +126,11 @@ def test_a_cloud_send_is_pending_until_its_reply_and_the_reply_carries_a_snapsho
 
 def test_the_wan_sample_is_the_wan_wait_by_hand() -> None:
     """4.3, every delay at its mean, the car 10 m away (931 Mbps). Alone on the WAN the sample is exactly 0,
-    so ŵ stays 0. Then a T2 clip, and a T4 that starts uploading 1 ms after the T2's last bit. The T2 holds
-    the zone's own 1 Gbps backhaul for 72 ms, so the T4 waits there 72 - 1 - 1.29 = 69.71 ms (known exactly)
-    and reaches the WAN 72 ms after the T2; the T2's WAN push takes 72e6 / B_WAN = 139.85 ms, so the T4 waits
-    67.85 ms on the WAN. The sample takes the backhaul wait off and is exactly that W_WAN. The T2's own sample
-    is 0 (it found the WAN empty), so ŵ = 0.2 x 67.85 ms."""
+    so Ŵ_WAN stays 0. Then a T2 clip, and a T4 that starts uploading 1 ms after the T2's last bit. The T2
+    holds the zone's own 1 Gbps backhaul for 72 ms, so the T4 waits there 72 - 1 - 1.29 = 69.71 ms (known
+    exactly) and reaches the WAN 72 ms after the T2; the T2's WAN push takes 72e6 / B_WAN = 139.85 ms, so the
+    T4 waits 67.85 ms on the WAN. The sample takes the backhaul wait off and is exactly that W_WAN. The T2's
+    own sample is 0 (it found the WAN empty), so Ŵ_WAN = 0.2 x 67.85 ms."""
     s = one_zone(fixed_delay_config(), Fixed("cloud"), distance=10.0)
     s.clock.run_until(0.1)
     s.zone.upload(task_now(s, "T4", seq=1))
@@ -199,7 +199,7 @@ def test_a_zone_learns_the_wan_wait_from_its_neighbours_state() -> None:
 
 
 def test_stale_means_strictly_older_than_stale_after() -> None:
-    # Dyadic numbers, exact in binary: received at 1.0, δ̂_pub 0.0625; at 1.1875 the age is exactly 0.25.
+    # Dyadic numbers, exact in binary: received at 1.0, δ̄_pub 0.0625; at 1.1875 the age is exactly 0.25.
     clock = EventClock()
     s = StateStore("z1", clock, stale_after=0.25, pub_delay={"z2": 0.0625}, wan_lambda=0.2)
     clock.run_until(1.0)

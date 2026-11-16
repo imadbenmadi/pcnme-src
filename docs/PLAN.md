@@ -1,5 +1,7 @@
 # PCNME build plan
 
+> Symbols in this file follow the old notation (up to final-design revision 128, before 15 Nov 2026); see [docs/NOTATION.md](NOTATION.md) for the new names.
+
 Build in this order. Each milestone ends with its acceptance tests passing and Imed's review. Do not start a milestone before the previous one is approved. Section numbers refer to `docs/final-design.md`.
 
 Status legend: `[ ]` not started, `[~]` in progress, `[x]` done and approved.

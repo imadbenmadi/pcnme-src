@@ -22,7 +22,8 @@ def row(
     low: float | None = None,
     distribution: RunTimeDistribution | None = None,
 ) -> RunRow:
-    """A row on the test node "N": mean Ê, p5 = 0.9 Ê unless given, p95 = 1.3 Ê; runs take `run` (or Ê)."""
+    """A row on the test node "N": mean T̄^run, p5 = 0.9 T̄^run unless given, p95 = 1.3 T̄^run; runs take `run`
+    (or T̄^run)."""
     return RunRow(
         task=task,
         hw="N",

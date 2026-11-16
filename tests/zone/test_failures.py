@@ -20,7 +20,7 @@ def two(placement: object, **overrides: object) -> City:
 
 
 def test_a_lost_reply_times_out_and_the_first_result_still_wins() -> None:
-    """9.1, 9.3, C7. The accept reply from z2 is lost. The own send ends at t_rx + 4.2 ms; T_up = 2 x
+    """9.1, 9.3, C7. The accept reply from z2 is lost. The own send ends at t_rx + 4.2 ms; T^to = 2 x
     (4.2 + 3) = 14.4 ms from then: at t_rx + 18.6 the send counts as not placed: the pending send ends, z2
     gets a cancel (it already finished: ignored), and the anchor re-decides (here). z2's result (done at
     t_rx + 4.2 + 8 = 12.2 ms) reaches z1 at 19.2 ms: the first result wins and the here attempt is cancelled.
@@ -69,8 +69,9 @@ def test_an_executor_that_dies_triggers_a_retry_at_once() -> None:
 
 def test_a_silently_lost_result_is_found_by_the_watchdog_and_the_probe() -> None:
     """9.3. z2 runs a T4 and its result message is lost. Watchdog from the accept (t_rx + 7.2 ms): t_wd =
-    t_acc - 3 + Ŵ 0 + Ê^high 32.5 + δ̂_pub 7 + m_wd 20 = t_rx + 63.7 ms. The probe (3 ms there and back)
-    says done; wait δ̂_pub + m_wd = 27 ms; still no result: lost (Q23) -> retry here at t_rx + 96.7 ms."""
+    t_acc - 3 + Ŵ^queue 0 + T^run,hi 32.5 + δ̄_pub 7 + m_wd 20 = t_rx + 63.7 ms. The probe (3 ms there and
+    back) says done; wait δ̄_pub + m_wd = 27 ms; still no result: lost (Q23) -> retry here at t_rx + 96.7
+    ms."""
     placement = Seq("n1", "here")
     c = two(placement)
     c.bus.faults.drop = lambda topic, key, sub: topic == "car/c01/result" and key[4] == 1
@@ -224,7 +225,7 @@ def test_a_task_whose_whole_budget_went_on_the_upload_is_dropped_without_a_crash
         t.input_bits,
         t.result_bits,
         c.clock.now - 1.0,
-    )  # type: ignore[index]  # made 1 s ago: B_car = -0.9 s
+    )  # type: ignore[index]  # made 1 s ago: T^bud_car = -0.9 s
     c.car._tasks[old.task_id] = old
     c.zones["z1"].upload(old)
     c.clock.run_until(1.0)
@@ -235,8 +236,8 @@ def test_a_task_whose_whole_budget_went_on_the_upload_is_dropped_without_a_crash
 
 def test_an_upload_still_being_sent_is_not_a_failure() -> None:
     # CHANGES C7. The WAN already holds 216 Mbit (3 T2 clips, 419.6 ms of push) when a T4 goes to the cloud,
-    # so its input takes about 420 + 67.8 ms. The old T_up from the send start, 2 x (67.8 + 65.5) = 266.7 ms,
-    # would have fired mid-send and re-sent it into the same queue; now T_up starts when the send is done,
+    # so its input takes about 420 + 67.8 ms. The old T^to from the send start, 2 x (67.8 + 65.5) = 266.7 ms,
+    # would have fired mid-send and re-sent it into the same queue; now T^to starts when the send is done,
     # the accept comes 65.5 ms later, and there is no re-send.
     c = two(Fixed("cloud"))
     wan = c.zones["z1"]._cloud_path._wan
@@ -249,7 +250,7 @@ def test_an_upload_still_being_sent_is_not_a_failure() -> None:
 
 
 def test_a_lost_cloud_reply_times_out_after_the_send_not_at_the_cap(monkeypatch: pytest.MonkeyPatch) -> None:
-    # C7: the T4's send to the cloud ends at t_rx + 67.8 ms; T_up = 2 x (67.8 + 65.5) = 266.7 ms after that,
+    # C7: the T4's send to the cloud ends at t_rx + 67.8 ms; T^to = 2 x (67.8 + 65.5) = 266.7 ms after that,
     # well before the cap (d_A + L_max = 2 s): the re-decision (here) runs then. The cloud runs nothing
     # (it refuses) and the refusal is lost, so neither a reply nor a result comes.
     from pcnme.node.executor import Refused

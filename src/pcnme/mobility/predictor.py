@@ -2,8 +2,8 @@
 
 Level 2 (motion math + road grid), where PCNME starts:
 1. Exit time: when the car, going straight on from p with velocity v, crosses its zone's coverage circle
-   (centre c, radius R_z): T_exit = (-b + sqrt(b^2 + |v|^2 (R_z^2 - |p - c|^2))) / |v|^2, b = (p - c) . v;
-   infinity when stopped (C8). Inside the circle every heading leaves it.
+   (centre x_z, radius ℓ_z): T_exit = (-b + sqrt(b^2 + |v|^2 (ℓ_z^2 - |x_car - x_z|^2))) / |v|^2, b = (x_car -
+   x_z) . v; infinity when stopped (C8). Inside the circle every heading leaves it.
 2. Next zone: going straight, the zone whose circle the path enters next after leaving this one; if it
    enters none (a gap or the map edge), the nearest other centre to the exit point (Q27). At an
    intersection only the 2-3 roads on offer are possible: their next zones are the candidates, straight on

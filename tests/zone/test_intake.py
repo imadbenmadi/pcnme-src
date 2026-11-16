@@ -35,10 +35,10 @@ def task(cfg: Config, seq: int = 1, kind: str = "T1", created: float = 0.0) -> T
 
 
 def test_the_anchor_deadline_by_hand(cfg: Config) -> None:
-    """6A.3: d_A = t_rx + B_car - Û_up, Û_up = W_radio + S / R_car + δ̂_radio.
+    """6A.3: d_A = t_rx + T^bud_car - T̂_radio, T̂_radio = W_radio + S / R_car + δ̄_radio.
 
     A T1 frame (1.2 Mbit) from a car 300 m away (R_car = 539.1 Mbps): push = 1.2e6 / 539.1e6 = 2.226 ms. It
-    waited W_radio = 0.5 ms behind another upload; δ̂_radio = mean of U(1, 5) ms = 3 ms; B_car = 100 ms
+    waited W_radio = 0.5 ms behind another upload; δ̄_radio = mean of U(1, 5) ms = 3 ms; T^bud_car = 100 ms
     (sent at creation). The whole upload arrived at t_rx = 0.5 + 2.226 + 3.4 (its real delay) = 6.126 ms.
     d_A = 6.126 + 100 - (0.5 + 2.226 + 3) = 100.4 ms: 0.4 ms later than the car's own deadline, because the
     real radio delay (3.4 ms) was 0.4 ms longer than its mean.

@@ -33,7 +33,7 @@ def test_both_pipes_busy_by_hand(bw: tuple[float, float]) -> None:
 
     # t = 0: zone A's backhaul is busy with a 2 Mbit transfer to a neighbour (push 2 ms).
     zone_a.send(now=0.0, size_bits=2e6, delay=0.0)
-    # t = 0: zone B sends a T2 clip to the cloud: no backhaul wait, d_bh 1 ms -> enters the WAN at 1 ms.
+    # t = 0: zone B sends a T2 clip to the cloud: no backhaul wait, δ_bh 1 ms -> enters the WAN at 1 ms.
     path_b.send(T2_BITS, d_bh=0.001, d_wan=0.050, on_delivered=done.append)
     # t = 0.5 ms: zone A sends a T4 frame to the cloud.
     clock.run_until(0.0005)
@@ -54,7 +54,7 @@ def test_both_pipes_busy_by_hand(bw: tuple[float, float]) -> None:
     assert frame.wan_entry == pytest.approx(entry, rel=1e-12)
     assert frame.w_wan == pytest.approx(w_wan, rel=1e-12)
     assert frame.push_wan == pytest.approx(push, rel=1e-12)
-    # final-design 4.1: T = W_bh + d_bh + W_WAN + S / B_WAN + d_WAN
+    # final-design 4.1: T = W_bh + δ_bh + W_WAN + S / B_WAN + δ_WAN
     assert frame.duration == pytest.approx(w_bh + 0.003 + w_wan + push + 0.060, rel=1e-12)
     assert frame.delivery == pytest.approx(0.0005 + frame.duration, rel=1e-12)
     assert w_wan == pytest.approx(0.13585, abs=1e-5)  # the clip holds the narrow WAN for about 136 ms

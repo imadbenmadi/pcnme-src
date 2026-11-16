@@ -1,8 +1,8 @@
 """A cloud transfer: the zone's own backhaul pipe, then the WAN pipe shared by all zones (final-design 4.1).
 
-    T = W_bh + d_bh + W_WAN + S / B_WAN + d_WAN
+    T = W_bh + δ_bh + W_WAN + S / B_WAN + δ_WAN
 
-Packets flow through both pipes at once, so the transfer reaches the WAN pipe d_bh after it starts on the
+Packets flow through both pipes at once, so the transfer reaches the WAN pipe δ_bh after it starts on the
 backhaul pipe, and the WAN pipe, the narrowest, sets the push time: S / B_bh is not part of T. The zone's own
 backhaul pipe is still busy for S / B_bh, as every pipe is for what it pushes (4.1).
 
@@ -27,15 +27,15 @@ class SeriesTransfer:
     start: float  # handed to the zone's backhaul pipe
     w_bh: float  # W_bh: wait in the zone's own backhaul pipe (known exactly, 4.3)
     d_bh: float
-    wan_entry: float  # start + W_bh + d_bh
+    wan_entry: float  # start + W_bh + δ_bh
     w_wan: float  # W_WAN: wait in the shared WAN pipe
     push_wan: float  # S / B_WAN
     d_wan: float
-    delivery: float  # wan_entry + W_WAN + S / B_WAN + d_WAN
+    delivery: float  # wan_entry + W_WAN + S / B_WAN + δ_WAN
 
     @property
     def duration(self) -> float:
-        """T = W_bh + d_bh + W_WAN + S / B_WAN + d_WAN (4.1)."""
+        """T = W_bh + δ_bh + W_WAN + S / B_WAN + δ_WAN (4.1)."""
         return self.delivery - self.start
 
 
@@ -71,7 +71,7 @@ class CloudPath:
         # The zone's own pipe: its wait, and busy for its own push S / B_bh. The backhaul delay is applied
         # before the WAN, not by this pipe, so it is 0 here.
         bh = self._backhaul.send(now=start, size_bits=size_bits, delay=0.0)
-        entry = start + bh.wait + d_bh  # reaches the WAN pipe d_bh after starting on the backhaul (4.1)
+        entry = start + bh.wait + d_bh  # reaches the WAN pipe δ_bh after starting on the backhaul (4.1)
 
         def enter_wan() -> None:
             wan = self._wan.send(now=entry, size_bits=size_bits, delay=d_wan)

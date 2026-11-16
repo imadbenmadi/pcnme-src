@@ -130,7 +130,7 @@ def test_full_here_uses_no_headroom_and_the_hard_reserve(cfg: Config) -> None:
         by_option(cfg, ctx(cfg, "T1", time_left=10.0, here={"gpu": full_gpu, "cpu": full_cpu}))["here"].masked
         == "full"
     )
-    # h = 0 for the anchor's own queue: 31 queued still leaves a place for a hard task.
+    # n_head = 0 for the anchor's own queue: 31 queued still leaves a place for a hard task.
     one_left = {"gpu": replace(full_gpu, n_hard=31), "cpu": full_cpu}
     assert by_option(cfg, ctx(cfg, "T1", time_left=10.0, here=one_left))["here"].slot == "gpu"
     # A soft task needs n < Q - r = 28 on the GPU and < 12 on the CPU.
@@ -152,8 +152,8 @@ def test_q_star_compares_wait_plus_run_not_wait_alone(cfg: Config) -> None:
 
 
 def test_the_headroom_h_for_options_other_than_here(cfg: Config) -> None:
-    # 7.2 (R2): a neighbour is masked "full" at n >= Q - h (hard), n >= Q - r - h (soft); h = 2, r = 4, Q =
-    # 32.
+    # 7.2 (R2): a neighbour is masked "full" at n >= n^max - n_head (hard), n >= n^max - n_res - n_head
+    # (soft); n_head = 2, n_res = 4, n^max = 32.
     from pcnme.zone.masks import _has_place
 
     s = replace(empty(cfg, "F-GPU")["gpu"], n_hard=29)
@@ -161,11 +161,12 @@ def test_the_headroom_h_for_options_other_than_here(cfg: Config) -> None:
     assert not _has_place(replace(s, n_hard=30), "hard", headroom=2, reserve=4, never_fills=False)
     assert _has_place(replace(s, n_hard=25), "soft", headroom=2, reserve=4, never_fills=False)  # 25 < 26
     assert not _has_place(replace(s, n_hard=26), "soft", headroom=2, reserve=4, never_fills=False)
-    assert _has_place(replace(s, n_hard=31), "hard", headroom=0, reserve=4, never_fills=False)  # here: h = 0
+    # here: n_head = 0
+    assert _has_place(replace(s, n_hard=31), "hard", headroom=0, reserve=4, never_fills=False)
 
 
 def test_q_star_moves_to_the_cpu_when_the_gpu_would_finish_later(cfg: Config) -> None:
-    # GPU slots busy for 100 ms each: Ŵ_gpu = 100 ms, F_gpu = 108 ms > F_cpu = 90 ms (free).
+    # GPU slots busy for 100 ms each: Ŵ^queue_gpu = 100 ms, F_gpu = 108 ms > F_cpu = 90 ms (free).
     here = empty(cfg, "F-GPU")
     busy = {"gpu": replace(here["gpu"], u=2, remaining=(0.1, 0.1)), "cpu": here["cpu"]}
     assert by_option(cfg, ctx(cfg, "T1", time_left=1.0, here=busy))["here"].slot == "cpu"
@@ -274,8 +275,8 @@ def test_t_in_to_a_neighbour_by_hand(cfg: Config) -> None:
 
 
 def test_full_at_a_neighbour_uses_the_headroom_and_counts_pending_sends(cfg: Config) -> None:
-    # 7.2 R2: hard full at n >= Q - h = 30, soft at n >= Q - r - h = 26 (GPU, Q = 32). The anchor's pending
-    # sends count (R1). The CPU queue is full too, so only the GPU decides.
+    # 7.2 R2: hard full at n >= n^max - n_head = 30, soft at n >= n^max - n_res - n_head = 26 (GPU, n^max =
+    # 32). The anchor's pending sends count (R1). The CPU queue is full too, so only the GPU decides.
     gpu, cpu = empty(cfg, "F-GPU")["gpu"], empty(cfg, "F-GPU")["cpu"]
     full_cpu = replace(cpu, n_hard=16)
     one = Pending("hard", 0.008)
@@ -296,8 +297,8 @@ def test_cannot_run_at_a_neighbour_without_a_gpu(cfg: Config) -> None:
 
 
 def test_q_star_at_a_neighbour_counts_the_anchors_pending_sends(cfg: Config) -> None:
-    # Both GPU slots busy for 5 ms, one pending hard T1 of this anchor (8 ms): Ŵ = water level of 8 ms over
-    # (5, 5) = (8 + 10) / 2 = 9 ms (8.5, C4), so F_gpu = 9 + 8 = 17 ms < F_cpu = 90 ms: q* = GPU.
+    # Both GPU slots busy for 5 ms, one pending hard T1 of this anchor (8 ms): Ŵ^queue = water level of 8 ms
+    # over (5, 5) = (8 + 10) / 2 = 9 ms (8.5, C4), so F_gpu = 9 + 8 = 17 ms < F_cpu = 90 ms: q* = GPU.
     gpu = replace(empty(cfg, "F-GPU")["gpu"], u=2, remaining=(0.005, 0.005))
     slots = {"gpu": gpu, "cpu": empty(cfg, "F-GPU")["cpu"]}
     v = by_option(
