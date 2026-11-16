@@ -68,7 +68,7 @@ def test_a_boulder_and_an_all_masked_task_make_no_decision() -> None:
 def test_the_inputs_come_from_the_state_store_not_the_neighbours_live_queue() -> None:
     # 11.1: only the zone's own memory. At 0.19 s z1 holds z2's snapshot of 0.1 s (empty). Load z2's GPU
     # directly with 6 T1s: until z2's next state message (sent at 0.2 s, at z1 7 ms later) arrives, z1's
-    # input for z2 still shows the empty snapshot. At 0.2 s two run (6 ms left) and two wait: Ŵ = 14 ms.
+    # input for z2 still shows the empty snapshot. At 0.2 s two run (6 ms left) and two wait: Ŵ^queue = 14 ms.
     c = two(Seq("n1"))
     z1, z2 = c.zones["z1"], c.zones["z2"]  # type: ignore[attr-defined]
     c.clock.run_until(0.19)  # type: ignore[attr-defined]

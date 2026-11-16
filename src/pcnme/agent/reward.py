@@ -1,15 +1,17 @@
 """Rewards, one per attempt (final-design 11.4, 12.5, 13.2; PLAN M4.2). THIS TOUCHES THE AGENT.
 
-Every reward is B minus the per-task cost NSGA-II minimises (13.2): w1 c^time + w2 ê, with w1 = w, w2 = 1 - w,
-ê = min(E / E_ref, ē) and c^time = L/D + w3 max(0, L - D)/D.
+Every reward is r_ok minus the per-task cost NSGA-II minimises (13.2): w C^time + (1 - w) C^en,
+C^en = min(E / E_ref, C^en_max) and C^time = L/D + w3 max(0, L - D)/D.
 
-    Delivered first, on time                    B - w1 L/D - w2 ê
-    Delivered first, soft and late              B - w1 (L/D + w3 (L - D)/D) - w2 ê
-    Refused, lost, cancelled, or came second    -(w1 T_waste/D + w2 min(E_waste/E_ref, ē))
-    Last attempt of a dropped task              B - w1 C_drop - w2 ē        (C_drop = 5 from the config)
+    Delivered first, on time                    r_ok - w L/D - (1 - w) C^en
+    Delivered first, soft and late              r_ok - w (L/D + w3 (L - D)/D) - (1 - w) C^en
+    Refused, lost, cancelled, or came second    -(w T_waste/D + (1 - w) min(E_waste/E_ref, C^en_max))
+    Last attempt of a dropped task              r_ok - w C_drop - (1 - w) C^en_max
+                                                (C_drop = 5 from the config)
 
-A drop is charged the worst energy ē, not what it spent (the spent energy is logged). So any drop is worse
-than any delivery for every w > 0 (N18): a delivery's c^time is at most 1 + w3 L_max/D < C_drop, its ê <= ē.
+A drop is charged the worst energy C^en_max, not what it spent (the spent energy is logged). So any drop is
+worse than any delivery for every w > 0 (N18): a delivery's C^time is at most 1 + w3 L_max/D < C_drop, its
+C^en <= C^en_max.
 """
 
 from __future__ import annotations
@@ -29,7 +31,7 @@ class RewardParams:
     b: float
     w3: float
     c_drop: float
-    w: float  # w1; w2 = 1 - w (QUESTIONS Q32 stand-in until M5)
+    w: float  # the time weight; the energy weight is 1 - w (QUESTIONS Q32 stand-in until M5)
     e_bar: float
 
     @classmethod
@@ -39,12 +41,12 @@ class RewardParams:
 
 
 def c_time(latency: float, deadline: float, w3: float) -> float:
-    """13.2: c^time = L/D + w3 max(0, L - D)/D of a delivered task."""
+    """13.2: C^time = L/D + w3 max(0, L - D)/D of a delivered task."""
     return latency / deadline + w3 * max(0.0, latency - deadline) / deadline
 
 
 def e_hat(energy: float, e_ref: float, e_bar: float) -> float:
-    """12.3: ê = min(E / E_ref, ē)."""
+    """12.3: C^en = min(E / E_ref, C^en_max)."""
     return min(energy / e_ref, e_bar)
 
 

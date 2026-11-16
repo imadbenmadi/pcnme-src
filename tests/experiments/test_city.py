@@ -65,7 +65,8 @@ def test_the_current_access_point_is_kept_unless_another_is_20_m_closer() -> Non
 
 
 def test_the_calibrated_hotspot_puts_z1_at_16_times_the_mean(cfg: Config) -> None:
-    # Q30: at the configured h, a positions-only run gives z1 40 % of the covered samples (1.6 x the mean).
+    # Q30: at the configured h_hot, a positions-only run gives z1 40 % of the covered samples (1.6 x the
+    # mean).
     from pcnme.experiments.calibrate import measure
 
     cal = cfg.cars.calibration
@@ -325,7 +326,7 @@ def test_the_city_gives_its_cars_the_calibrated_coverage(cfg: Config) -> None:
 
 
 def test_the_bisection_finds_the_hotspot_share_for_16_times_the_mean(cfg: Config) -> None:
-    # Q30 on a small, short run (40 cars, 30 s): the found h gives z1 within 5 % of 1.6 x the mean.
+    # Q30 on a small, short run (40 cars, 30 s): the found h_hot gives z1 within 5 % of 1.6 x the mean.
     from pcnme.experiments.calibrate import calibrate
 
     got = calibrate(cfg, "low", 30.0, cfg.cars.calibration.seed, 40, steps=8)

@@ -1,16 +1,18 @@
 """The masks and q* (final-design 7.2; PLAN M2.8, extended by M3.3 and M3.4).
 
 For each of the 6 options (here, the 4 neighbour positions, the cloud) the anchor finds the usable slot
-types U_k (c_q > 0, a time-table row, a place for the task's class as it knows it, pending sends included)
-and assumes the executor picks the earliest finish, q* = argmin over U_k of (Ŵ_q for the task's class + Ê_q).
-An option is masked when:
+types 𝒬_k (c_q > 0, a time-table row, a place for the task's class as it knows it, pending sends included)
+and assumes the executor picks the earliest finish, q* = argmin over 𝒬_k of (Ŵ^queue_q for the task's class +
+T̄^run_q). An option is masked when:
     empty         no zone in that neighbour position
     offline       its last will said offline
     stale         its newest snapshot is older than 3 x the state period (or there is none)
     cannot run    no slot type there can run the task
-    full          no usable slot type has room as the anchor knows it (pending sends included): n_q >= Q_q - h
-                  (hard), >= Q_q - r - h (soft); h = 0 for the anchor's own exact queue; the cloud never fills
-    cannot meet   hard: T̂_in + Ŵ + Ê + T̂_ret on q* > time left; soft: the same against time left + L_max
+    full          no usable slot type has room as the anchor knows it (pending sends included):
+                  n_q >= n^max_q - n_head (hard), >= n^max_q - n_res - n_head (soft); n_head = 0 for the
+                  anchor's own exact queue; the cloud never fills
+    cannot meet   hard: T̂_in + Ŵ^queue + T̄^run + T̂_ret on q* > time left; soft: the same against
+                  time left + L_max
 The anchor's own pending sends (R1) add their mean run to the backlog of their class on their q* (8.5).
 T̂_in to a neighbour = the anchor's own backhaul wait (exact) + S / B_bh + δ̄_bh (4.3); T̂_ret = the mean
 delays of the fog result path (Q16). A neighbour's hardware class comes from the deployment configuration

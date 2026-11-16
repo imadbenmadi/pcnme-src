@@ -1,8 +1,8 @@
 """The TOF-Broker, the fixed first filter at the zone entry (final-design 7.1).
 
-1. Boulder iff Ê_strong >= α · D (the mean run on the strongest fog class's fastest slot type).
+1. Boulder iff T̄^run_strong >= α_TOF · D (the mean run on the strongest fog class's fastest slot type).
 2. A boulder goes to the cloud, never to a fog queue.
-3. A boulder is dropped at intake when the cloud fails "cannot meet the deadline": T̂_in,cloud + Ê_cloud +
+3. A boulder is dropped at intake when the cloud fails "cannot meet the deadline": T̂_in,cloud + T̄^run_cloud +
    T̂_ret,cloud > time left (hard), > time left + L_max (soft); the cloud never queues. No agent decision is
    made, so no transition is stored. A pebble goes to the agent (the placement method).
 """
@@ -24,8 +24,8 @@ class TofBroker:
 
     def is_boulder(self, task_type: str, mode: DeadlineMode) -> bool:
         if not self._cfg.ablation.tof:
-            return False  # 16.4: no TOF-Broker (α = ∞)
-        return self._cfg.is_boulder(task_type, mode)  # 7.1 step 1 (Ê_strong >= α D)
+            return False  # 16.4: no TOF-Broker (α_TOF = ∞)
+        return self._cfg.is_boulder(task_type, mode)  # 7.1 step 1 (T̄^run_strong >= α_TOF D)
 
     def classify(
         self,

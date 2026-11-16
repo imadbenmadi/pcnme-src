@@ -16,7 +16,7 @@ def test_a_t1_run_here_by_hand() -> None:
     """One T1 (hard, D = 100 ms) from a car 300 m away, empty system, run here.
 
     upload: push 1.2e6 / R(300 m) = 2.226 ms + radio delay 3 ms -> t_rx = 5.226 ms
-    d_A = t_rx + B_car - (W_radio + push + mean radio delay) = 5.226 + 100 - (0 + 2.226 + 3) = 100 ms
+    d_A = t_rx + T^bud_car - (W_radio + push + mean radio delay) = 5.226 + 100 - (0 + 2.226 + 3) = 100 ms
     budget here = d_A - T̂_ret,fog - now = 100 - 10 - 5.226 = 84.774 ms (6C.9: d_k = d_A - T̂_ret = 90 ms)
     run on the F-GPU GPU slot: 8 ms, 5.226 -> 13.226 ms
     return: executor -> broker 3 + broker 1 + broker -> zone 3 + radio down 3 = 10 ms -> at the car 23.226 ms
@@ -44,7 +44,7 @@ def test_a_t4_run_in_the_cloud_by_hand() -> None:
     T̂_in,cloud = 0 + 0 + 1.2e6 / 514.85e6 (2.331 ms) + 3 + 62.5 = 67.831 ms
     T̂_ret,cloud = 62.5 + 1 + 3 + 3 = 69.5 ms
     budget = d_A - now - T̂_in - T̂_ret = 1000 - 5.226 - 67.831 - 69.5 = 857.443 ms
-    transfer: backhaul wait 0, d_bh 3 -> enters the WAN at 8.226 ms, push 2.331 ms, d_WAN 62.5 -> 73.057 ms
+    transfer: backhaul wait 0, δ_bh 3 -> enters the WAN at 8.226 ms, push 2.331 ms, δ_WAN 62.5 -> 73.057 ms
     (= now + T̂_in exactly, since the delays are at their means), so d_k = 73.057 + 857.443 = 930.5 ms
     run on a cloud GPU slot: 12 ms -> 85.057 ms; return 62.5 + 1 + 3 + 3 = 69.5 ms -> at the car 154.557 ms
     L = 154.557 ms <= D: on time
@@ -69,8 +69,8 @@ def test_a_t4_run_in_the_cloud_by_hand() -> None:
 def test_a_t1_uploaded_behind_a_t2_shares_the_radio_and_keeps_its_deadline() -> None:
     """CHANGES C6 end to end, by hand (fixed delays, 300 m). A T2 starts uploading at 0, a T1 at 10 ms: the T1
     pushes at half rate for 2 x 2.226 ms, so t_rx = 10 + 4.452 + 3 = 17.452 ms (one car at a time it would
-    wait for the T2's 133.6 ms push and miss its deadline). d_A = t_rx + B_car - (W_radio + S / R + 3 ms) =
-    10 ms + D exactly, and it runs here on time: L = 4.452 + 3 + 8 + 10 = 25.452 ms."""
+    wait for the T2's 133.6 ms push and miss its deadline). d_A = t_rx + T^bud_car - (W_radio + S / R + 3 ms)
+    = 10 ms + D exactly, and it runs here on time: L = 4.452 + 3 + 8 + 10 = 25.452 ms."""
     cfg = fixed_delay_config()
     s = one_zone(cfg, Fixed("here"))
     s.zone.upload(task_now(s, "T2", seq=1))
@@ -89,7 +89,7 @@ def test_a_t1_uploaded_behind_a_t2_shares_the_radio_and_keeps_its_deadline() -> 
 def test_a_hard_t1_sent_to_the_cloud_is_refused_late_and_dropped() -> None:
     # Its cloud budget is 100 - 5.226 - 67.831 - 69.5 = -42.6 ms: at the cloud d_k = 73.057 - 42.557 = 30.5 ms
     # is already past, so the executor refuses it "late". That reply would land 73.057 + 65.5 = 138.6 ms after
-    # the send. CHANGES C7: the own send ends at +67.8 ms and T_up = 2 x (67.8 + 65.5) ms would end past the
+    # the send. CHANGES C7: the own send ends at +67.8 ms and T^to = 2 x (67.8 + 65.5) ms would end past the
     # deadline cap (d_A), so at d_A the attempt is dropped with no re-send.
     s = one_zone(fixed_delay_config(), Fixed("cloud"))
     s.zone.upload(task_now(s, "T1"))
@@ -133,7 +133,7 @@ def test_skips_and_aborts_reach_the_anchor_as_status_messages() -> None:
     An F-CPU zone (2 CPU slots) where every run takes 15 x its mean, so a T4 runs 3 s instead of 200 ms. Two
     T4 take both slots; each passes d_k + L_max = 0.99 + 1.0 = 1.99 s while running, so it is aborted then and
     its slot stays busy for its longest step (100 ms), free at about 2.09 s. A third T4 waits in the queue; at
-    2.09 s, 2.09 + Ê^low (150 ms) > 1.99 s, so it is skipped.
+    2.09 s, 2.09 + T^run,lo (150 ms) > 1.99 s, so it is skipped.
     """
     from pcnme.node.timetable import Deterministic
 

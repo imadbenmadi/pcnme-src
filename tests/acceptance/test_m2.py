@@ -4,7 +4,7 @@
   L = 23.226 ms; a T4 in the cloud, L = 154.557 ms; a hard T1 to the cloud refused late), listed in
   REFERENCED below and checked to exist.
 - The TOF rule (7.1): tests/zone/test_tof.py and the two boulder tests in test_delivery.py.
-- E_ref and ê equal calc_defaults (12.3, 12.4): tests/test_energy.py.
+- E_ref and C^en equal calc_defaults (12.3, 12.4): tests/test_energy.py.
 - Cloud-only at TI_WAN 1.5 grows without limit; at 0.5 it stays bounded: below, by hand.
 - An end-to-end run of one zone (Greedy, S1 and S2) keeps the invariants (every task closes exactly once,
   L >= the sum of its parts, no hard task on time after D, energy >= 0), hits the target rho_fog and is

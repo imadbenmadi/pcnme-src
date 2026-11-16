@@ -2,7 +2,7 @@
 queue empty? Read-only: the logged S6 tasks (greedy's 20 evaluation seeds; the tasks are the same for every
 method) and the config's time table and delays. Nothing is changed.
 
-For each task and each option (here, every active neighbour within d_nb, the cloud), the queue-free latency is
+For each task and each option (here, every active neighbour within ℓ_nb, the cloud), the queue-free latency is
     logged upload + forward + run + result back
 with the run time from the time table (the faster slot type of the executor's class) and the network as in
 final-design 4: backhaul delay + 76 KB at 1 Gbit/s, WAN delay + 76 KB at B_WAN, radio downlink delay. Two

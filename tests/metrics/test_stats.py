@@ -197,7 +197,8 @@ def test_summary_over_seeds_by_hand(tmp_path: Path) -> None:
 
 
 def test_mean_e_hat_counts_a_drop_as_e_bar(tmp_path: Path) -> None:
-    """13.2.4 / 12.3: ê = min(E / E_ref, ē) per delivered task, ē for a drop; nan without the constants."""
+    """13.2.4 / 12.3: C^en = min(E / E_ref, C^en_max) per delivered task, C^en_max for a drop; nan without the
+    constants."""
     rows = [
         task("a", "on_time", 0.05, energy=1.0),
         task("b", "late", 0.2, energy=10.0),

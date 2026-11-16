@@ -36,7 +36,7 @@ class HttpCalls:
         input_bytes: Mapping[str, int] | None = None,
     ) -> None:
         """`input_bytes`: each task type's input size; a POST /tasks carries it (5.3), so the shaped links
-        carry the real transfer (4.2, C7's end of send, the ŵ_WAN sample of 4.3)."""
+        carry the real transfer (4.2, C7's end of send, the Ŵ_WAN sample of 4.3)."""
         self._clock = clock
         self._urls = dict(urls)
         self._net = net  # one network thread for the process (testbed/netloop.py)

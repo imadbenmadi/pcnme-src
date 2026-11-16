@@ -1,4 +1,5 @@
-"""The prioritized replay buffer (PLAN M6.3; final-design 13.5, 18): α 0.4, β0 0.6 -> 1, ε_d 1, ε_a 0.001."""
+"""The prioritized replay buffer (PLAN M6.3; final-design 13.5, 18): α_PER 0.4, β_PER 0.6 -> 1, ε_d 1, ε_a
+0.001."""
 
 from __future__ import annotations
 
@@ -77,13 +78,13 @@ def test_new_transitions_get_the_largest_priority_so_far(cfg: Config) -> None:
 
 
 def test_the_importance_weights_by_hand(cfg: Config) -> None:
-    # P = (0.75, 0.25) after p^α; N = 2; w = (N P)^-β / max: β = 1: (1/1.5, 1/0.5) / 2 = (1/3, 1).
+    # P = (0.75, 0.25) after p^α_PER; N = 2; w = (N P)^-β_PER / max: β_PER = 1: (1/1.5, 1/0.5) / 2 = (1/3, 1).
     r = Replay(small(cfg, 2), np.random.default_rng(4))
     r.tree.set(r.add(sample(0)), 3.0)
     r.tree.set(r.add(sample(1)), 1.0)
     d = r.draw(2, 1.0)  # stratified: one draw in [0, 2), one in [2, 4): slots 0 and 1
     assert d.index == (0, 1) and d.weights == pytest.approx((1 / 3, 1.0))
-    assert r.draw(2, 0.0).weights == (1.0, 1.0)  # β = 0: no correction
+    assert r.draw(2, 0.0).weights == (1.0, 1.0)  # β_PER = 0: no correction
 
 
 def test_the_upsample_ratio(cfg: Config) -> None:
@@ -140,12 +141,12 @@ def test_a_scaled_expert_part_is_drawn_less(cfg: Config) -> None:
     assert r.tree.total == pytest.approx(4.0)
     r.scale_expert(0.5)
     assert r.tree.total == pytest.approx(3.0) and r.tree.get(0) == pytest.approx(0.5)
-    r.update([0], [0.0])  # p = 0 + ε_d = 1: stored as 1^α x 0.5
+    r.update([0], [0.0])  # p = 0 + ε_d = 1: stored as 1^α_PER x 0.5
     assert r.tree.get(0) == pytest.approx(0.5) and r.expert_scale == 0.5
     r.scale_expert(0.0)
     drawn = r.draw(200, 1.0)
     assert not any(r.is_expert(i) for i in drawn.index)
-    r.update([1], [8.0])  # p = 9 while scaled to 0: the unscaled 9^α is kept for later
+    r.update([1], [8.0])  # p = 9 while scaled to 0: the unscaled 9^α_PER is kept for later
     r.scale_expert(1.0)
     assert r.tree.get(0) == pytest.approx(1.0) and r.tree.get(1) == pytest.approx(9.0**r.alpha)
     with pytest.raises(ValueError):

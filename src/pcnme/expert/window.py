@@ -18,9 +18,9 @@ the greedy choice (as at replay, 13.4.3); a re-decision or a retry inside a plan
 (QUESTIONS Q37 stand-in). The run stops once every window task has settled (close + G, 11.3.3): the objectives
 depend on nothing later.
 
-Objectives (13.2.4), both minimised, averaged over the window's N tasks: f1 = mean c^time (L/D + w3 max(0,
-L - D)/D if delivered, C_drop if dropped); f2 = mean ê (min(E/E_ref, ē) with E over all its attempts, 12.5;
-ē if dropped).
+Objectives (13.2.4), both minimised, averaged over the window's N_task tasks: f1 = mean C^time (L/D + w3
+max(0, L - D)/D if delivered, C_drop if dropped); f2 = mean C^en (min(E/E_ref, C^en_max) with E over all its
+attempts, 12.5; C^en_max if dropped).
 """
 
 from __future__ import annotations
@@ -84,8 +84,8 @@ class WindowTask:
 
 @dataclass(frozen=True, slots=True)
 class Objectives:
-    f1: float  # mean c^time
-    f2: float  # mean ê
+    f1: float  # mean C^time
+    f2: float  # mean C^en
     n: int  # window tasks
     drops: int
 
@@ -242,7 +242,7 @@ def window_tasks(cfg: Config, run: Run) -> list[WindowTask]:
 
 
 def objectives(cfg: Config, records: Sequence[TaskRecord]) -> Objectives:
-    """13.2.4: f1 = mean c^time, f2 = mean ê over the window tasks (a drop: C_drop and ē)."""
+    """13.2.4: f1 = mean C^time, f2 = mean C^en over the window tasks (a drop: C_drop and C^en_max)."""
     r, e_bar = cfg.reward, cfg.derived.e_bar
     f1 = f2 = 0.0
     drops = 0

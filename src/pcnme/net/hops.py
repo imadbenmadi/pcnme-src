@@ -2,7 +2,7 @@
 Q17).
 
 A delay is drawn by task, not by event order: u keyed by (task_id, attempt, hop) on the hop's stream, then
-d = low + u (high - low) on the hop's uniform interval from the config (4.2, 18). Radio hops use the radio
+δ = low + u (high - low) on the hop's uniform interval from the config (4.2, 18). Radio hops use the radio
 stream (Q5); backhaul and WAN hops the link_delays stream. MQTT messages draw their delays in the bus
 (bus/bus.py), keyed the same way. The upload comes before any attempt, so it uses
 attempt 0 (Q17).

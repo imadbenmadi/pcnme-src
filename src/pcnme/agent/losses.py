@@ -4,8 +4,8 @@
 
 J_DQ: the 1-step double-DQN loss, y = r + γ^(Δt/τ) Q_target(s', argmax_{a' valid in s'} Q(s', a')). J_n: the
 same with the n-step target. J_E: the large-margin loss on expert transitions only, max_{a valid} [Q(s, a) +
-l(a_E, a)] - Q(s, a_E), l = margin for a != a_E, 0 for a_E. L2: the sum of the squared weights (weight decay).
-Rows without s' (Q36) or without an n-step target add nothing to J_DQ or J_n.
+l(a_E, a)] - Q(s, a_E), l(a_E, a) = m_E for a != a_E, 0 for a_E. L2: the sum of the squared weights (weight
+decay). Rows without s' (Q36) or without an n-step target add nothing to J_DQ or J_n.
 
 Engineering choices: each term is the mean over the rows it applies to (0 when none); the prioritized-replay
 importance weights multiply every per-row term (J_DQ, J_n and J_E); L2 covers every parameter; the TD error

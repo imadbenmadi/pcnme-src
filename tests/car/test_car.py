@@ -120,8 +120,8 @@ def test_arrival_gaps_are_whole_nanoseconds(cfg: Config) -> None:
 
 
 def test_the_upload_starts_after_the_encode_time_and_counts_it_once(mechanism_config_path: Path) -> None:
-    # 14.3, QUESTIONS Q14: L holds the encode time. The upload starts at creation + encode, and B_car = D -
-    # time since creation then already holds it: with encode 4 ms, B_car = D - 4 ms (not D - 8 ms).
+    # 14.3, QUESTIONS Q14: L holds the encode time. The upload starts at creation + encode, and T^bud_car = D
+    # - time since creation then already holds it: with encode 4 ms, T^bud_car = D - 4 ms (not D - 8 ms).
     data = load_yaml(mechanism_config_path)
     data["timing"]["encode"] = 0.004
     cfg4 = config_from_mapping(data)
@@ -189,7 +189,7 @@ def test_results_for_unknown_or_expired_tasks_are_ignored(cfg: Config) -> None:
 
 
 def test_the_placement_standin_is_uniform_over_the_zone_disk(cfg: Config) -> None:
-    # QUESTIONS Q13 stand-in: P(distance <= r) = (r / R_z)^2 for a uniform disk.
+    # QUESTIONS Q13 stand-in: P(distance <= r) = (r / ℓ_z)^2 for a uniform disk.
     streams = RandomStreams.from_config(cfg, 2000, "training")
     centre, radius = (300.0, 300.0), cfg.layout.zone_radius_m
     points = [standin_uniform_disk(streams, f"c{i}", centre, radius) for i in range(4000)]

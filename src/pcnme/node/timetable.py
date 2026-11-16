@@ -1,7 +1,8 @@
 """The time table a node runs from, and run-time draws (final-design 14.4, 12.2, 18; CHANGES C3).
 
-One row per (task type, hardware class, slot type): the mean run Ê, Ê^low = p5 and Ê^high = p95, the longest
-step (d_abort, 8.6) and the mean dynamic energy per run. A missing row means the task cannot run there.
+One row per (task type, hardware class, slot type): the mean run T̄^run, T^run,lo = p5 and T^run,hi = p95, the
+longest step (T_abort, 8.6) and the mean dynamic energy per run. A missing row means the task cannot run
+there.
 
 A run time is drawn by task, not by event order (C3): u in (0, 1) from the keyed run_times stream by
 (task_id, attempt), mapped through the inverse CDF of the row the task actually runs on, so a task keeps its
@@ -23,7 +24,7 @@ from pcnme.config import SLOT_TYPES, Config, ConfigError, SlotType, TimeRow
 from pcnme.sim.quantize import to_ns
 from pcnme.sim.rng import KeyPart, RandomStreams
 
-# The table's quantile columns (14.4): Ê^low and Ê^high are its p5 and p95.
+# The table's quantile columns (14.4): T^run,lo and T^run,hi are its p5 and p95.
 _TABLE_QUANTILES = (0.05, 0.95)
 
 
@@ -115,17 +116,17 @@ class RunRow:
     task: str
     hw: str
     slot: SlotType
-    mean: float  # Ê
-    low: float  # Ê^low = p5 (14.4)
-    high: float  # Ê^high = p95
-    longest_step: float  # d_abort (8.6)
+    mean: float  # T̄^run
+    low: float  # T^run,lo = p5 (14.4)
+    high: float  # T^run,hi = p95
+    longest_step: float  # T_abort (8.6)
     energy_per_run: float  # mean dynamic energy per run (14.4)
     distribution: RunTimeDistribution
     p5_measured: bool = False  # the row's p5 came from the calibration run, not the 0.75 factor
 
     @property
     def power(self) -> float:
-        """p = dynamic energy per run / run time (12.2)."""
+        """P̄ = dynamic energy per run / run time (12.2)."""
         return self.energy_per_run / self.mean
 
 

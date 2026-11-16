@@ -55,7 +55,8 @@ def test_the_inputs_carry_the_plans_w(demo: Demonstration) -> None:
 
 
 def test_the_rewards_use_the_plans_w(cfg: Config, window: Window, genome: list[int]) -> None:
-    # Q40: a delivered attempt's reward is B - w L/D - (1 - w) ê: the same transition under two w differs.
+    # Q40: a delivered attempt's reward is r_ok - w L/D - (1 - w) C^en: the same transition under two w
+    # differs.
     a = {
         (t.transition.task_id, t.transition.attempt): t.transition.r
         for t in replay(cfg, window, genome, 0.2).transitions

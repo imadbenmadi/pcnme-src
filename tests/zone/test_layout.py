@@ -39,7 +39,7 @@ def test_the_config_layout_matches_section_18(cfg: Config) -> None:
 
 
 def test_candidates_overlap_or_lie_within_d_nb(cfg: Config) -> None:
-    # Adjacent centres 600 m < 2 x 350: overlap. Diagonal 849 m: no overlap, but within d_nb = 900 m (18).
+    # Adjacent centres 600 m < 2 x 350: overlap. Diagonal 849 m: no overlap, but within ℓ_nb = 900 m (18).
     s = sites(cfg)
     assert is_candidate(s["z1"], s["z2"], 900) and is_candidate(s["z1"], s["z4"], 900)
     assert not is_candidate(s["z1"], s["z4"], 800)  # 849 > 800 and 849 > 700
@@ -155,7 +155,7 @@ def test_zones_learn_joins_and_last_wills_from_status_messages() -> None:
 
 
 def test_within_d_nb_includes_d_nb_itself() -> None:
-    # Radii small enough not to overlap: exactly at d_nb is "within" (7.5.1).
+    # Radii small enough not to overlap: exactly at ℓ_nb is "within" (7.5.1).
     a, b = Site("a", 0, 0, 10), Site("b", 900, 0, 10)
     assert is_candidate(a, b, 900) and not is_candidate(a, b, 899.999)
 

@@ -1,5 +1,5 @@
 """Training curves from a run's learning.parquet and episodes.parquet (PLAN M6.6): loss, held-out expert
-agreement, on-time share and mean ê per episode, as one PNG next to the files.
+agreement, on-time share and mean C^en per episode, as one PNG next to the files.
 
     python tools/plot_curves.py results/<run_id>
 """

@@ -483,8 +483,8 @@ class Tof:
 
 @dataclass(frozen=True, slots=True)
 class Reward:
-    """Reward constants (final-design 11.4). w = w1, the time weight (w2 = 1 - w): the median knee weight
-    w* (13.3) once M5 computes it; until then a stand-in from the config (QUESTIONS Q32)."""
+    """Reward constants (final-design 11.4). w, the time weight (the energy weight is 1 - w): the median knee
+    weight w* (13.3) once M5 computes it; until then a stand-in from the config (QUESTIONS Q32)."""
 
     b: float
     p: float
@@ -1521,9 +1521,9 @@ def _e_ret(task: TaskType, executor: HardwareClass, energy: Energy) -> float:
 
 
 def _e_ref(task: TaskType, table: TimeTable, ref: HardwareClass, energy: Energy) -> float:
-    """final-design 12.3: PUE_fog x p x T on the reference class's fastest slot type + E_ret here.
+    """final-design 12.3: PUE_fog x P̄ x T on the reference class's fastest slot type + E_ret here.
 
-    p = dynamic energy per run / run time (the row's p_dyn_w; the slot's power for a placeholder row, 18).
+    P̄ = dynamic energy per run / run time (the row's p_dyn_w; the slot's power for a placeholder row, 18).
     """
     _, row = table.fastest(task.name, ref.name)
     return energy.pue_fog * row.p_dyn_w * row.mean + _e_ret(task, ref, energy)

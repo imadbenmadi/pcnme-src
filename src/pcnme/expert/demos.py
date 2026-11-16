@@ -54,7 +54,7 @@ def is_expert(t: Transition, applied: Collection[object]) -> bool:
 
 
 def with_w(cfg: Config, w: float) -> Config:
-    """The config with the plan's weight: input 48 and the rewards' w1 (13.4.1, Q40)."""
+    """The config with the plan's weight: input 48 and the rewards' w (13.4.1, Q40)."""
     if not 0.0 < w <= 1.0:
         raise ValueError(f"w must be in (0, 1], got {w}")
     return replace(cfg, reward=replace(cfg.reward, w=w))

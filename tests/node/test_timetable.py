@@ -38,7 +38,7 @@ def test_a_row_holds_mean_quantiles_longest_step_and_energy(cfg: Config) -> None
     # Placeholders of 18: mean 8 ms; p5 0.75x (C5), p95 1.3x, longest step 0.5x; 25 W per F-GPU GPU slot.
     assert (row.mean, row.low, row.high, row.longest_step) == pytest.approx((0.008, 0.006, 0.0104, 0.004))
     assert row.energy_per_run == pytest.approx(25 * 0.008)  # J of dynamic energy per run
-    assert row.power == pytest.approx(25.0)  # p = energy per run / run time (12.2)
+    assert row.power == pytest.approx(25.0)  # P̄ = energy per run / run time (12.2)
 
 
 def test_rows_follow_the_hardware_class_and_slot_type(cfg: Config) -> None:
