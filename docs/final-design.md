@@ -16,6 +16,7 @@ This is the one complete design of PCNME. It merges the PCNME Architecture doc, 
 | --- | --- | --- | --- |
 | 28 Oct | 16.2 | ρ_fog uses every task of the whole mix, boulders included (not pebbles only), so S4–S6 keep S2's arrival rate | CHANGES C2 (QUESTIONS Q1) |
 | 16 Nov | 13.7 | Phase 2 (FedAvg + fine-tuning) is evaluated in fast mode only; on the testbed it is future work (since 15.5's trainer process holds the learning network, FedAvg would run there) | QUESTIONS Q64 |
+| 16 Nov | all | The notation reaches the code: Python names, config keys, message fields and CSV columns renamed as in docs/NOTATION.md section 6 (for example mean_e_hat → mean_c_en, e_bar → c_en_max, reward B, P → r_ok, C_pen); the existing result files were rewritten the same way; config_hash changes with the keys | docs/NOTATION.md |
 | 15 Nov | all | Notation: one base letter per kind of quantity, one unit (docs/NOTATION.md); names only, no rule, formula, number or behaviour changes | docs/NOTATION.md |
 | 11 Nov | 15.5 | On the testbed a zone that learns online gets a second CPU: its trainer runs in its own process (replay, updates), the zone sends it the samples and installs the trainer's newest weights between two decisions. Fast mode, which has no compute time, learns in place as before | QUESTIONS Q62 |
 | 7 Nov | 9.6 | A car always knows whether its serving zone serves it: the attach is repeated until confirmed, and a zone names the cars it does not serve in its reply to their GPS, which then attach again (testbed transport detail) | QUESTIONS Q61 |
@@ -183,7 +184,7 @@ Two rules apply to every message:
 | car/{id}/gps | 0, retained with an MQTT 5 message expiry | Serving zone, every 100 ms → the car's anchors | car_id, x, y, speed, heading, zone_id, car_time (the car's clock; only differences between its own samples are used) |
 | car/{id}/result | 1 | Executor, once → serving zone + anchor | kind = result: task_id, anchor_id, attempt, car_id, executor_id, slot_type, run_ms, energy_J, output (about 3 KB). kind = status: task_id, anchor_id, attempt, executor_id, skipped or aborted, energy_J spent |
 | car/{id}/ack | 1 | Serving zone → anchor | task_id, anchor_id and attempt of the copy the car kept, car_id, zone_id, latency_ms measured by the car |
-| zone/{id}/state | 0, retained, every 100 ms | Each zone and the cloud → neighbours | zone_id, version (epoch, counter); per slot type with c_q > 0: c, Q, n_hard, n_soft, u (busy slots), B_hard_ms, B_soft_ms, r_ms (the remaining time of each of the c slots, 0 if free); wan_wait_ms and its sample age; load |
+| zone/{id}/state | 0, retained, every 100 ms | Each zone and the cloud → neighbours | zone_id, version (epoch, counter); per slot type with c_q > 0: c, n_max, n_hard, n_soft, n_busy (busy slots), omega_hard_ms, omega_soft_ms, t_rem_ms (the remaining time of each of the c slots, 0 if free); wan_wait_ms and its sample age; load |
 | zone/{id}/status | 1, retained, last will = offline | Each zone and the cloud → all zones | zone_id, status, x, y, radius |
 | fl/round, fl/global | 1 | Cloud → all zones (phase 2) | round g, global version, upload deadline / version g ready |
 
@@ -191,7 +192,7 @@ Two rules apply to every message:
 
 | Call | From → to | Body / reply |
 | --- | --- | --- |
-| POST /tasks | Car → its serving zone | task_id, car_id, class, type, input_size, B_car_ms, R_car (radio rate, testbed) + the input. Reply: task_id, anchor_id (a repeated upload of a task_id this zone already holds gets the same reply, 9.7) |
+| POST /tasks | Car → its serving zone | task_id, car_id, class, type, input_size, T_bud_car_ms, R_car (radio rate, testbed) + the input. Reply: task_id, anchor_id (a repeated upload of a task_id this zone already holds gets the same reply, 9.7) |
 | POST /tasks | Anchor → neighbour or cloud | task_id, attempt, car_id, anchor_id, class, type, input_size, budget_ms (T^bud_k) + the input. 200: slot_type, wait_ms, version, state snapshot. 503: reason (full or late), queue info, version |
 | DELETE /tasks/{id}?attempt=n&anchor=A | Anchor → executor | Reply: removed, aborted, done or not found, plus energy_J spent |
 | GET /tasks/{id}?attempt=n&anchor=A | Anchor → executor | Reply: queued (wait_ms), running (remaining_ms), done, skipped, aborted or not found |

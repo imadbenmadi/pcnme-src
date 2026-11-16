@@ -72,7 +72,7 @@ def test_the_upload_timer_starts_when_the_body_is_written() -> None:
     assert info.timer is cap_timer  # nothing modelled the send's end: only the deadline cap applies (C7)
     p["sent"]()
     assert info.timer is not cap_timer
-    assert info.timer.time == pytest.approx(c.clock.now + info.t_up)
+    assert info.timer.time == pytest.approx(c.clock.now + info.t_to)
 
 
 def test_a_result_on_a_real_network_reaches_the_car_without_mixing_clocks() -> None:

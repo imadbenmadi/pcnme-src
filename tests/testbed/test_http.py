@@ -117,8 +117,8 @@ class FakeZone(FakeTarget):
         self.rx: dict[object, Any] = {}
         self.uploads: list[tuple[object, float, float]] = []
 
-    def upload(self, task: Any, rate: float, b_car: float, on_rx: Any) -> None:
-        self.uploads.append((task.task_id, rate, b_car))
+    def upload(self, task: Any, rate: float, t_bud_car: float, on_rx: Any) -> None:
+        self.uploads.append((task.task_id, rate, t_bud_car))
         self.rx[task.task_id] = on_rx
 
     def cut_upload(self, task_id: object) -> bool:
@@ -131,7 +131,7 @@ def _upload(seq: int) -> Any:
     from pcnme.testbed.messages import Upload
 
     task = Task(TaskId("c1", 0, seq), "c1", "T1", "hard", 0.1, 0.1, 1.2e6, 2.4e4, 0.0)
-    return Upload(task, b_car=0.09, rate=5e8)
+    return Upload(task, t_bud_car=0.09, rate=5e8)
 
 
 def test_a_car_upload_is_answered_at_t_rx_and_a_cut_one_is_refused() -> None:

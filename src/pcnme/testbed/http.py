@@ -146,7 +146,7 @@ def make_app(clock: RealClock, target: Target, timeout: float = 5.0) -> Any:
             if not fut.done():  # its request may have timed out (a slow loop): the loop must go on
                 fut.set_result(UploadReply(tid, zone.zone_id))
 
-        clock.call_soon(lambda: zone.upload(obj.task, rate=obj.rate, b_car=obj.b_car, on_rx=rx))
+        clock.call_soon(lambda: zone.upload(obj.task, rate=obj.rate, t_bud_car=obj.t_bud_car, on_rx=rx))
         try:
             reply = await asyncio.wait_for(asyncio.wrap_future(fut), timeout)
         except Cut:

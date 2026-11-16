@@ -167,7 +167,7 @@ def zone_app(clock: RealClock, zone: Zone, closed: list[TaskRecord], net: NetLoo
 
         def counts() -> dict[str, object]:
             bus = zone._bus
-            slots = {q: (s.n_hard, s.n_soft, s.u) for q, s in zone.executor.snapshot().items()}
+            slots = {q: (s.n_hard, s.n_soft, s.n_busy) for q, s in zone.executor.snapshot().items()}
             ages = {z: zone.store.age(z) for z in (*zone.peers, "cloud")}
             return {
                 "records": len(zone.records),

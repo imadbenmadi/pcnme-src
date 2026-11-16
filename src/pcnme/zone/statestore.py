@@ -59,7 +59,7 @@ class StateStore:
     clock: EventClock
     stale_after: float
     pub_delay: Mapping[str, float]  # δ̄_pub per zone id (Q20)
-    wan_lambda: float
+    wan_eta: float
     held: dict[str, _Held] = field(default_factory=dict)
     pending: dict[str, dict[PendingKey, tuple[SlotType, Pending]]] = field(default_factory=dict)
     wan: _Wan = field(default_factory=_Wan)
@@ -106,7 +106,7 @@ class StateStore:
     def wan_sample(self, sample: float) -> None:
         """One measurement after a cloud upload: the moving average, η from the config."""
         w = self.wan
-        w.estimate = (1 - self.wan_lambda) * w.estimate + self.wan_lambda * sample
+        w.estimate = (1 - self.wan_eta) * w.estimate + self.wan_eta * sample
         w.last_sample = self.clock.now
 
     def own_wan_age(self) -> float | None:

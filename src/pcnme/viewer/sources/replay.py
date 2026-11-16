@@ -155,7 +155,7 @@ def _layout(map_name: str, scenario: str) -> dict[str, Any]:
         [a, b]
         for i, a in enumerate(ids)
         for b in ids[i + 1 :]
-        if math.dist(lay.zone_positions_m[a], lay.zone_positions_m[b]) <= lay.d_nb_m
+        if math.dist(lay.zone_positions_m[a], lay.zone_positions_m[b]) <= lay.l_nb_m
     ]
     cloud = cfg.hardware["cloud"]
     extra: dict[str, Any] = {}

@@ -79,7 +79,7 @@ def test_every_decision_of_greedy_s2_60_s_is_in_range(cfg: Config, seed: int) ->
 def test_tight_deadlines_and_cpu_zones_stay_in_range(cfg: Config, scenario: str) -> None:
     # S4: tight D (T2 a boulder); S6: F-CPU zones (T2 cannot run there: "cannot run").
     assert ranges_of_a_run(cfg, scenario, 2000, 20.0) > 0
-    assert math.isfinite(cfg.derived.e_bar)
+    assert math.isfinite(cfg.derived.c_en_max)
 
 
 def _tool():  # type: ignore[no-untyped-def]

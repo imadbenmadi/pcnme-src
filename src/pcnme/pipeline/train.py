@@ -395,7 +395,7 @@ def _train_job(map_name: str, scenario: str, method: str, w_star: float, plan: P
         row = _episode_row(len(session.out.episodes), ep, b.used, time.monotonic() - started)
         _append_csv(d / "episodes.csv", row)
         note(
-            f"episode {row['episode']}: on time {ep.on_time:.3f}, mean e_hat {ep.mean_e_hat:.3f}, "
+            f"episode {row['episode']}: on time {ep.on_time:.3f}, mean c_en {ep.mean_c_en:.3f}, "
             f"loss {ep.mean_loss:.4g}, decisions {b.used}/{b.total}"
         )
         report(
@@ -406,7 +406,7 @@ def _train_job(map_name: str, scenario: str, method: str, w_star: float, plan: P
             numbers={
                 "episode": row["episode"],
                 "on time": round(ep.on_time, 4),
-                "mean ê": round(ep.mean_e_hat, 3),
+                "mean C^en": round(ep.mean_c_en, 3),
                 "loss": float(f"{ep.mean_loss:.4g}"),
             },
         )
@@ -506,7 +506,7 @@ def _episode_row(n: int, ep: Any, used: int, wall: float) -> dict[str, Any]:
         "episode": n,
         "seed": ep.seed,
         "on_time": ep.on_time,
-        "mean_e_hat": ep.mean_e_hat,
+        "mean_c_en": ep.mean_c_en,
         "tasks": ep.tasks,
         "updates": ep.updates,
         "mean_loss": ep.mean_loss,
@@ -536,7 +536,7 @@ def _rewrite_episodes(d: Path, session: Any) -> None:
 
 
 class _Blank:
-    seed = on_time = mean_e_hat = tasks = updates = mean_loss = 0
+    seed = on_time = mean_c_en = tasks = updates = mean_loss = 0
 
 
 def stage_learning(screen: Any, plan: Plan, w_star: float) -> None:

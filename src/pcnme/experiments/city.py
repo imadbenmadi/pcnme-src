@@ -284,7 +284,7 @@ class City:
         hot_nodes = self.grid.within(lay.zone_positions_m["z1"], lay.zone_radius_m)
         rate_fleet = n_cars if n_cars is not None else cfg.cars.count[0]  # the fleet λ_car is set for (18)
         fleet = max(1, round(rate_fleet * cfg.sweep.cars))  # 16.4: more or fewer cars at the same λ_car (Q48)
-        self.h = cfg.cars.hotspot_h[self.scenario.mobility]  # Q30: calibrated so z1 = 1.6 x the mean
+        self.h = cfg.cars.h_hot[self.scenario.mobility]  # Q30: calibrated so z1 = 1.6 x the mean
         n_hot = round(self.h * fleet)
         speeds = cfg.cars.speed_low_mps if self.scenario.mobility == "low" else cfg.cars.speed_high_mps
         est = PathEstimates(cfg, StateStore("car", clock, 1.0, {}, 0.0))
@@ -459,10 +459,10 @@ class City:
                     now,
                     zone=z,
                     slot_type=q,
-                    rho=s.u / s.c,
+                    rho=s.n_busy / s.c,
                     queue_hard=s.n_hard,
                     queue_soft=s.n_soft,
-                    busy=s.u,
+                    busy=s.n_busy,
                     refusals=refused,
                     wan_wait_est_s=zone.store.estimate(),
                 )

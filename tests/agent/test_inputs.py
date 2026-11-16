@@ -53,13 +53,13 @@ def slots(cfg: Config, hw: str, **over: dict[str, object]) -> dict[str, SlotStat
     for q in node.slot_types:
         base: dict[str, object] = dict(
             c=node.slots(q),
-            capacity=node.queue[q],
+            n_max=node.queue[q],
             n_hard=0,
             n_soft=0,
-            b_hard=0.0,
-            b_soft=0.0,
-            remaining=(0.0,) * node.slots(q),
-            u=0,
+            omega_hard=0.0,
+            omega_soft=0.0,
+            t_rem=(0.0,) * node.slots(q),
+            n_busy=0,
         )
         base.update(over.get(q, {}))
         out[q] = SlotState(**base)  # type: ignore[arg-type]
@@ -165,7 +165,7 @@ def test_an_empty_f_gpu_here_by_hand(cfg: Config) -> None:
     assert (present, wait, age) == (1.0, 0.0, 0.0)
     assert run == pytest.approx(0.08)  # q* = GPU: 8 ms ÷ 100 ms
     assert network == pytest.approx(T_RET_FOG / 0.1)  # here: only the return
-    assert energy == pytest.approx(1.0 / cfg.derived.e_bar)  # Ê_here = E_ref exactly (12.3)
+    assert energy == pytest.approx(1.0 / cfg.derived.c_en_max)  # Ê_here = E_ref exactly (12.3)
 
 
 def test_the_cloud_by_hand(cfg: Config) -> None:
@@ -177,14 +177,14 @@ def test_the_cloud_by_hand(cfg: Config) -> None:
     assert (present, wait) == (1.0, 0.0)
     assert run == pytest.approx(0.04)
     assert network == pytest.approx((t_in + t_ret) / 0.1)
-    assert energy == pytest.approx(e / E_REF_T1 / cfg.derived.e_bar)
+    assert energy == pytest.approx(e / E_REF_T1 / cfg.derived.c_en_max)
     assert age == pytest.approx(0.05 / 0.3)  # ÷ 3 x the state period
 
 
 def test_time_inputs_are_capped_at_2(cfg: Config) -> None:
     # Every slot busy for 0.5 s more with 1 s of hard backlog: water level 2 (W - 0.5) = 1, W = 1 s = 10 D on
     # both slot types; q* = GPU (1.008 s < 1.09 s).
-    jam = dict(u=2, remaining=(0.5, 0.5), n_hard=4, b_hard=1.0)
+    jam = dict(n_busy=2, t_rem=(0.5, 0.5), n_hard=4, omega_hard=1.0)
     busy = {"gpu": jam, "cpu": jam}
     x = inputs(cfg, make_ctx(cfg, "T1", time_left=5.0, here=slots(cfg, "F-GPU", **busy)))
     assert x["here_wait"] == 2.0
@@ -199,9 +199,9 @@ def test_the_energy_ratio_is_capped_at_e_bar(cfg: Config) -> None:
     x = inputs(cfg, make_ctx(cfg, "T2"))
     e = (E_BH + E_WAN) * 72e6 + 1.1 * 150 * 0.2 + (E_WAN + E_BH + E_DOWN) * 80_000
     e_ref = 1.5 * 25 * 0.72 + (2 * E_BH + E_DOWN) * 80_000
-    assert x["cloud_energy"] == pytest.approx(e / e_ref / cfg.derived.e_bar)
+    assert x["cloud_energy"] == pytest.approx(e / e_ref / cfg.derived.c_en_max)
     assert 0.0 < x["cloud_energy"] < 1.0
-    big = replace(cfg, derived=replace(cfg.derived, e_bar=1.1))  # a cap below the ratio: clipped to 1
+    big = replace(cfg, derived=replace(cfg.derived, c_en_max=1.1))  # a cap below the ratio: clipped to 1
     assert inputs(big, make_ctx(big, "T2"))["cloud_energy"] == 1.0
 
 
@@ -231,7 +231,7 @@ def test_a_stale_neighbour_with_a_snapshot_gets_its_numbers_and_present_0(cfg: C
     assert (present, wait) == (0.0, 0.0)
     assert run == pytest.approx(0.08)
     assert network == pytest.approx((T_IN_NB_T1 + T_RET_FOG) / 0.1)
-    assert energy == pytest.approx(e / E_REF_T1 / cfg.derived.e_bar)
+    assert energy == pytest.approx(e / E_REF_T1 / cfg.derived.c_en_max)
     assert age == pytest.approx(1.5)  # 450 ms ÷ 300 ms
 
 
@@ -264,8 +264,8 @@ def test_a_full_here_gets_the_numbers_of_its_best_slot_type_ignoring_room(cfg: C
     # Both GPU slots have 10 ms left: soft level 2 (W - 0.01) = 28 x 8 ms -> W = 0.122 s; CPU slots 50 ms left
     # with 1.08 s of backlog: W = 0.59 s. q* ignoring room: GPU (0.122 + 0.025 < 0.59 + 0.2).
     full = {
-        "gpu": dict(u=2, remaining=(0.01, 0.01), n_hard=28, b_hard=28 * 0.008),
-        "cpu": dict(u=2, remaining=(0.05, 0.05), n_hard=12, b_hard=12 * 0.09),
+        "gpu": dict(n_busy=2, t_rem=(0.01, 0.01), n_hard=28, omega_hard=28 * 0.008),
+        "cpu": dict(n_busy=2, t_rem=(0.05, 0.05), n_hard=12, omega_hard=12 * 0.09),
     }
     c = make_ctx(cfg, "T4", here=slots(cfg, "F-GPU", **full))
     assert c.views[0].masked == "full"
@@ -273,7 +273,7 @@ def test_a_full_here_gets_the_numbers_of_its_best_slot_type_ignoring_room(cfg: C
     assert present == 1.0  # full is not "absent"
     assert wait == pytest.approx(0.122)  # D = 1 s
     assert run == pytest.approx(0.025)
-    assert energy == pytest.approx(1.0 / cfg.derived.e_bar)  # GPU here = E_ref(T4)
+    assert energy == pytest.approx(1.0 / cfg.derived.c_en_max)  # GPU here = E_ref(T4)
     assert network == pytest.approx(T_RET_FOG)
 
 
@@ -386,7 +386,7 @@ def test_every_input_is_in_its_range(
 ) -> None:
     def state(s: dict[str, float]) -> dict[str, object]:
         u = int(s["u"])
-        return dict(u=u, remaining=(s["r"],) * u + (0.0,) * (2 - u), n_hard=s["n_hard"], b_hard=s["b"])
+        return dict(n_busy=u, t_rem=(s["r"],) * u + (0.0,) * (2 - u), n_hard=s["n_hard"], omega_hard=s["b"])
 
     here = slots(cfg, "F-GPU", gpu=state(gpu), cpu=state(cpu))
     t = cfg.task_types[kind]

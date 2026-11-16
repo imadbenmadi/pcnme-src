@@ -23,7 +23,7 @@ NUMERIC = (
     "episode",
     "seed",
     "on_time",
-    "mean_e_hat",
+    "mean_c_en",
     "tasks",
     "updates",
     "mean_loss",

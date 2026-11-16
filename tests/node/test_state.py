@@ -30,11 +30,11 @@ def test_the_snapshot_holds_the_8_5_fields_per_slot_type(make_node: Callable[...
     snap = node.executor.snapshot()
     assert set(snap) == {"gpu", "cpu"}
     gpu = snap["gpu"]
-    assert (gpu.c, gpu.capacity, gpu.n_hard, gpu.n_soft, gpu.u) == (2, 32, 2, 1, 2)
-    assert gpu.b_hard == pytest.approx(0.016) and gpu.b_soft == pytest.approx(0.025)
+    assert (gpu.c, gpu.n_max, gpu.n_hard, gpu.n_soft, gpu.n_busy) == (2, 32, 2, 1, 2)
+    assert gpu.omega_hard == pytest.approx(0.016) and gpu.omega_soft == pytest.approx(0.025)
     assert gpu.r == pytest.approx(2 * (0.008 - 0.002))  # remaining part of the two running means
     assert snap["cpu"] == SlotState(
-        c=2, capacity=16, n_hard=0, n_soft=0, b_hard=0.0, b_soft=0.0, remaining=(0.0, 0.0), u=0
+        c=2, n_max=16, n_hard=0, n_soft=0, omega_hard=0.0, omega_soft=0.0, t_rem=(0.0, 0.0), n_busy=0
     )
 
 
@@ -45,13 +45,13 @@ def test_a_node_without_a_gpu_publishes_only_its_cpu(make_node: Callable[..., No
 # --- W2, W3: the estimate (equal remaining times: the C4 estimate equals the pooled 8.5 formula) ------------
 
 BUSY = SlotState(
-    c=2, capacity=32, n_hard=1, n_soft=1, b_hard=0.008, b_soft=0.025, remaining=(0.006, 0.006), u=2
+    c=2, n_max=32, n_hard=1, n_soft=1, omega_hard=0.008, omega_soft=0.025, t_rem=(0.006, 0.006), n_busy=2
 )
 
 
 def test_the_wait_is_zero_while_a_slot_is_free() -> None:
     free = SlotState(
-        c=2, capacity=32, n_hard=0, n_soft=0, b_hard=0.0, b_soft=0.0, remaining=(0.0, 0.006), u=1
+        c=2, n_max=32, n_hard=0, n_soft=0, omega_hard=0.0, omega_soft=0.0, t_rem=(0.0, 0.006), n_busy=1
     )
     assert wait_estimate(free, "hard") == 0.0
     assert wait_estimate(free, "soft") == 0.0
@@ -67,7 +67,7 @@ def test_pending_sends_take_the_free_slot_and_join_the_backlog_of_their_class() 
     # One slot free (u = 1 of 2), but the anchor has one pending hard send (8 ms) to this q: u + pending = c,
     # so the estimate is the formula with that send in Ω^hard (R1, 9.2).
     one_free = SlotState(
-        c=2, capacity=32, n_hard=0, n_soft=0, b_hard=0.0, b_soft=0.0, remaining=(0.0, 0.006), u=1
+        c=2, n_max=32, n_hard=0, n_soft=0, omega_hard=0.0, omega_soft=0.0, t_rem=(0.0, 0.006), n_busy=1
     )
     pending = [Pending(cls="hard", mean=0.008)]
     assert wait_estimate(one_free, "hard", pending) == pytest.approx((0.006 + 0.008) / 2)

@@ -454,7 +454,7 @@ def map_section(map_name: str) -> list[str]:
         *findings(map_name, rep, pt, extra),
         "",
     ]
-    figs = ", ".join(f"`{rel(base / f'across-{k}.png')}`" for k in ("on_time", "latency_p99_s", "mean_e_hat"))
+    figs = ", ".join(f"`{rel(base / f'across-{k}.png')}`" for k in ("on_time", "latency_p99_s", "mean_c_en"))
     out += [f"Figures across scenarios: {figs}; per scenario: `{rel(base)}/<S>.png`, `<S>-load.png`.", ""]
     return out
 

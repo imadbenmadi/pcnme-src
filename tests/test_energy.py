@@ -44,8 +44,8 @@ def test_return_energy_per_delivery(em: EnergyModel) -> None:
 
 
 def test_e_hat_is_capped_at_e_bar(em: EnergyModel, cfg: Config) -> None:
-    assert em.e_hat("T1", 0.3001109) == pytest.approx(1.0, abs=1e-6)  # E = E_ref
-    assert em.e_hat("T1", 1e6) == pytest.approx(cfg.derived.e_bar)  # 12.3: capped at C^en_max
+    assert em.c_en("T1", 0.3001109) == pytest.approx(1.0, abs=1e-6)  # E = E_ref
+    assert em.c_en("T1", 1e6) == pytest.approx(cfg.derived.c_en_max)  # 12.3: capped at C^en_max
 
 
 # --- E_ref and C^en per type equal tools/calc_defaults.py (M2 acceptance)
@@ -97,7 +97,7 @@ def test_a_task_delivered_here_at_its_mean_run_costs_exactly_e_ref(em: EnergyMod
         pytest.approx(1.5 * 25 * 0.008),
         pytest.approx(em.ret("fog", 24000)),
     )
-    assert em.e_hat("T1", e.total) == pytest.approx(1.0, rel=1e-12)
+    assert em.c_en("T1", e.total) == pytest.approx(1.0, rel=1e-12)
 
 
 def test_a_cloud_delivery_by_hand(em: EnergyModel) -> None:
@@ -112,8 +112,8 @@ def test_a_cloud_delivery_by_hand(em: EnergyModel) -> None:
     assert e.forwarding == pytest.approx((E_BH + E_WAN) * 1.2e6)
     assert e.execution == pytest.approx(1.1 * 150 * 0.012)
     assert e.ret == pytest.approx((E_WAN + E_BH + E_DOWN) * 24000)
-    assert em.e_hat("T4", e.total) == pytest.approx(e.total / em.e_ref("T4"))
-    assert em.e_hat("T4", e.total) == pytest.approx(2.11, abs=0.01)
+    assert em.c_en("T4", e.total) == pytest.approx(e.total / em.e_ref("T4"))
+    assert em.c_en("T4", e.total) == pytest.approx(2.11, abs=0.01)
 
 
 def test_a_refused_attempt_costs_its_forwarding_only(em: EnergyModel) -> None:
