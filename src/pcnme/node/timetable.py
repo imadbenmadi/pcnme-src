@@ -119,7 +119,7 @@ class RunRow:
     mean: float  # T̄^run
     low: float  # T^run,lo = p5 (14.4)
     high: float  # T^run,hi = p95
-    longest_step: float  # T_abort (8.6)
+    t_abort: float  # T_abort (8.6)
     energy_per_run: float  # mean dynamic energy per run (14.4)
     distribution: RunTimeDistribution
     p5_measured: bool = False  # the row's p5 came from the calibration run, not the 0.75 factor
@@ -164,7 +164,7 @@ class RunTimeTable:
                 mean=r.mean,
                 low=r.p5,
                 high=r.p95,
-                longest_step=r.longest_step,
+                t_abort=r.t_abort,
                 energy_per_run=r.p_dyn_w * r.mean,  # the measured energy per run, or slot power x mean
                 distribution=distribution(r),
                 p5_measured=r.p5_measured,

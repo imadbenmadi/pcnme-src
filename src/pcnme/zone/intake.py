@@ -17,11 +17,11 @@ from pcnme.ids import TaskId
 
 
 def anchor_deadline(
-    t_rx: float, b_car: float, w_radio: float, size_bits: float, rate: float, mean_radio_delay: float
+    t_rx: float, t_bud_car: float, w_radio: float, size_bits: float, rate: float, mean_radio_delay: float
 ) -> float:
     """d_A (6A.3)."""
     upload = w_radio + size_bits / rate + mean_radio_delay
-    return t_rx + b_car - upload
+    return t_rx + t_bud_car - upload
 
 
 @dataclass(slots=True)

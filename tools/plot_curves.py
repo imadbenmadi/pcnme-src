@@ -40,12 +40,12 @@ def main(argv: Sequence[str] | None = None) -> None:
     if episodes.exists():
         es = pq.read_table(episodes).to_pylist()
         ax[1, 0].plot([e["episode"] for e in es], [e["on_time"] for e in es], marker="o")
-        ax[1, 1].plot([e["episode"] for e in es], [e["mean_e_hat"] for e in es], marker="o")
+        ax[1, 1].plot([e["episode"] for e in es], [e["mean_c_en"] for e in es], marker="o")
     titles = (
         "loss per update block",
         "held-out expert agreement",
         "on-time share per episode",
-        "mean ê per episode",
+        "mean C^en per episode",
     )
     for a, t in zip(ax.flat, titles, strict=True):
         a.set_title(t)

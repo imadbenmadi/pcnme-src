@@ -23,7 +23,7 @@ def sites(cfg: Config) -> dict[str, Site]:
 def start(cfg: Config) -> dict[str, NeighbourTable]:
     s = sites(cfg)
     active = [s[z] for z in cfg.layout.zones if z not in cfg.layout.joining_zones]
-    return {me.zone_id: NeighbourTable.at_start(me, active, cfg.layout.d_nb_m) for me in active}
+    return {me.zone_id: NeighbourTable.at_start(me, active, cfg.layout.l_nb_m) for me in active}
 
 
 def test_the_config_layout_matches_section_18(cfg: Config) -> None:
@@ -35,7 +35,7 @@ def test_the_config_layout_matches_section_18(cfg: Config) -> None:
         "z4": (900, 900),
         "z5": (600, 600),
     }
-    assert (lay.zone_radius_m, lay.d_nb_m, lay.joining_zones) == (350, 900, ("z5",))
+    assert (lay.zone_radius_m, lay.l_nb_m, lay.joining_zones) == (350, 900, ("z5",))
 
 
 def test_candidates_overlap_or_lie_within_d_nb(cfg: Config) -> None:
@@ -66,7 +66,7 @@ def test_z5_joins_the_lowest_free_position_of_every_zone_that_counts_it(cfg: Con
     assert [t[z].positions[3] for z in ("z1", "z2", "z3", "z4")] == ["z5"] * 4
     assert t["z1"].positions[:3] == ["z2", "z3", "z4"]  # the others never move
     s = sites(cfg)
-    mine = NeighbourTable.at_start(z5, [s[z] for z in ("z1", "z2", "z3", "z4")], cfg.layout.d_nb_m)
+    mine = NeighbourTable.at_start(z5, [s[z] for z in ("z1", "z2", "z3", "z4")], cfg.layout.l_nb_m)
     assert mine.positions == ["z1", "z2", "z3", "z4"]
 
 

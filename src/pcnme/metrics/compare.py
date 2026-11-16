@@ -26,10 +26,10 @@ from pcnme.metrics.stats import t_cdf
 KEY = (  # metric, label, scale
     ("on_time", "on time %", 100.0),
     ("latency_p99_s", "p99 latency ms", 1000.0),
-    ("mean_e_hat", "mean ê", 1.0),
+    ("mean_c_en", "mean C^en", 1.0),
     ("energy_per_task_j", "J / task", 1.0),
 )
-FIGURES = ("on_time", "latency_p99_s", "mean_e_hat")
+FIGURES = ("on_time", "latency_p99_s", "mean_c_en")
 Row = Mapping[str, str]
 
 

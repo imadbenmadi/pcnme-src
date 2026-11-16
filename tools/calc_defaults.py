@@ -76,15 +76,15 @@ def main(path: Path) -> None:
     capacity = c_gpu / mean_gpu
     print(f"mean GPU run of the mix {mean_gpu * 1e3:.1f} ms; zone GPU capacity {capacity:.1f} tasks/s")
 
-    # Deadlines and the TOF-Broker (final-design 7.1): E_strong = mean run on the strongest class,
+    # Deadlines and the TOF-Broker (final-design 7.1): T_run_strong = mean run on the strongest class,
     # fastest slot type.
-    e_strong = {name: min(mean_of(r) for r in tt[name][strong].values()) for name in active}
+    t_run_strong = {name: min(mean_of(r) for r in tt[name][strong].values()) for name in active}
     for name, t in active.items():
         for kind in ("loose", "tight"):
             d = t["deadline"][kind]
-            if isinstance(d, str):  # "1.1x_E_strong": calibrated rule for T2's tight deadline
-                d = float(d.split("x")[0]) * e_strong[name]
-            boulder = e_strong[name] >= alpha * d
+            if isinstance(d, str):  # "1.1x_T_run_strong": calibrated rule for T2's tight deadline
+                d = float(d.split("x")[0]) * t_run_strong[name]
+            boulder = t_run_strong[name] >= alpha * d
             print(f"  {name} {kind} D = {d:.3f} s -> {'boulder' if boulder else 'pebble'}")
 
     # Scenario loads and the one WAN bandwidth (final-design 16.2).
@@ -111,7 +111,7 @@ def main(path: Path) -> None:
     e_wan = energy["e_wan_nj_per_bit"] * NJ * pue_net
     e_down = energy["e_down_nj_per_bit"] * NJ
     p_fog, p_cl = hw[ref]["p_dyn_w"], hw["cloud"]["p_dyn_w"]
-    e_bar = 0.0
+    c_en_max = 0.0
     for name, t in active.items():
         s_in, s_out = bits[name], t["result_kb"] * KB_TO_BITS
         rows = tt[name][ref]
@@ -134,13 +134,13 @@ def main(path: Path) -> None:
             + (e_wan + e_bh + e_down) * s_out
         )
         ratios = {k: v / e_ref for k, v in opts.items()}
-        e_bar = max(e_bar, *ratios.values())
+        c_en_max = max(c_en_max, *ratios.values())
         print(
             f"  {name}: E_ref {e_ref:.3f} J; worst-case ratios "
             + ", ".join(f"{k} {v:.2f}" for k, v in ratios.items())
             + f"; network share {e_bh * s_in / e_ref:.4f}"
         )
-    print(f"e_bar (placeholder) = {e_bar:.2f}")
+    print(f"c_en_max (placeholder) = {c_en_max:.2f}")
 
     # Discount horizon at S2 (final-design 11.3).
     gamma, tau = cfg["rl"]["gamma_per_tau"], cfg["rl"]["tau"]

@@ -97,7 +97,7 @@ class AttemptInfo:
     probes: int = 0
     probe_timer: EventHandle | None = None
     done_seen: bool = False  # a probe said done: if no result follows, it was lost (QUESTIONS Q23)
-    t_up: float = 0.0  # κ_up (T̂_in + δ̄_reply): the upload timeout, counted from the end of the own send (C7)
+    t_to: float = 0.0  # κ_up (T̂_in + δ̄_reply): the upload timeout, counted from the end of the own send (C7)
     decided: bool = False  # a placement decision sent it (11.3.1); False for a boulder or the soft fallback
     t_end: float | None = None  # when it ended at the anchor: refused, timed out, lost or cancelled (11.4)
     report: Report | None = None  # its executor's report, if one reached the anchor by close + G (12.5)
@@ -220,7 +220,7 @@ def publish_report(client: Client, executor_id: str, report: Report) -> None:
 def busy_share(slots: Mapping[SlotType, SlotState]) -> float:
     """The "load" of a state message (5.2): busy slots / slots (QUESTIONS Q20)."""
     c = sum(s.c for s in slots.values())
-    return sum(s.u for s in slots.values()) / c if c else 0.0
+    return sum(s.n_busy for s in slots.values()) / c if c else 0.0
 
 
 def start_state_loop(
@@ -346,7 +346,7 @@ class Zone:
         self.cloud = cloud
         x, y = config.layout.zone_positions_m[zone_id]
         self.site = Site(zone_id, x, y, config.layout.zone_radius_m)
-        self.neighbours = NeighbourTable.at_start(self.site, list(start_sites), config.layout.d_nb_m)  # 7.5
+        self.neighbours = NeighbourTable.at_start(self.site, list(start_sites), config.layout.l_nb_m)  # 7.5
         if neighbour_order is not None:
             self.neighbours.permute(neighbour_order)  # 13.6: this episode's order, in training
         offline = ZoneStatus(zone_id, "offline", x, y, self.site.radius)
@@ -373,7 +373,7 @@ class Zone:
         bh_d, wan_d = sum(lk.backhaul_delay) / 2, sum(lk.wan_delay) / 2  # mean delays
         pub = {z: bh_d + lk.broker_extra_delay + bh_d for z in config.layout.zones}  # δ̄_pub (Q20)
         pub[CLOUD] = wan_d + lk.broker_extra_delay + bh_d
-        self.store = StateStore(zone_id, clock, sp.stale_after, pub, sp.wan_ewma_lambda)
+        self.store = StateStore(zone_id, clock, sp.stale_after, pub, sp.wan_ewma_eta)
         self._est = PathEstimates(config, self.store)  # Ŵ_WAN from the state store (4.3)
         self._reply_cloud = (
             wan_d + bh_d
@@ -498,7 +498,7 @@ class Zone:
         self,
         task: Task,
         rate: float | None = None,
-        b_car: float | None = None,
+        t_bud_car: float | None = None,
         on_rx: Callable[[], None] | None = None,
     ) -> None:
         """The car uploads its task over the zone's radio, sharing its airtime with the other uploads in
@@ -507,10 +507,10 @@ class Zone:
         upload (5.3 POST /tasks, 15.3) and `on_rx` answers it at t_rx; in fast mode T^bud_car comes from the
         car."""
         now = self._clock.now
-        if rate is None or b_car is None:  # fast mode: the car is attached here; the testbed sends both
+        if rate is None or t_bud_car is None:  # fast mode: the car is attached here; the testbed sends both
             car, attach_rate = self._cars[task.car_id]
             rate = attach_rate if rate is None else rate
-            b_car = car.budget(task, now) if b_car is None else b_car
+            t_bud_car = car.budget(task, now) if t_bud_car is None else t_bud_car
         d = hops.delay(
             self._streams, hops.RADIO_UP, self._cfg.radio.uplink_delay, task.task_id, hops.UPLOAD_ATTEMPT
         )
@@ -525,7 +525,7 @@ class Zone:
             rec.parts["upload"] = tr.duration
             if on_rx is not None:
                 on_rx()
-            self._intake(rec, b_car)
+            self._intake(rec, t_bud_car)
 
         self._uploads[task.task_id] = self.uplink.send(
             size_bits=task.input_bits, rate=rate, delay=d, on_delivered=arrived
@@ -605,14 +605,14 @@ class Zone:
             self.counts["detached: no GPS for T_leave"] += 1
         self.detach(car_id)
 
-    def _intake(self, rec: TaskRecord, b_car: float) -> None:
+    def _intake(self, rec: TaskRecord, t_bud_car: float) -> None:
         now = self._clock.now
         task = rec.task
         if HOP is not None:
             HOP(task.task_id, 0, "intake (upload complete)", None)
         rec.t_rx = now
         rec.d_a = anchor_deadline(
-            now, b_car, rec.w_radio, task.input_bits, rec.rate, self._mean_radio
+            now, t_bud_car, rec.w_radio, task.input_bits, rec.rate, self._mean_radio
         )  # 6A.3
         row = self.anchor.open(task, t_rx=now, d_a=rec.d_a)
         self._anchor_role(task.car_id, +1)  # 6A.4: register
@@ -956,7 +956,7 @@ class Zone:
         """9.3, CHANGES C7: while the zone's own send is still going, only the deadline cap applies (an upload
         still being sent is not a failure). T^to = κ_up (T̂_in + δ̄_reply) starts when that send is done."""
         info = rec.attempts[attempt]
-        info.t_up = self._kappa * (t_in + reply)
+        info.t_to = self._kappa * (t_in + reply)
         cap = max(self._clock.now, self._cap(rec))
         info.timer = self._clock.schedule(cap, lambda: self._upload_cap(rec, attempt))
 
@@ -967,10 +967,10 @@ class Zone:
             return  # replied already, or ended
         self._clock.cancel(info.timer)
         now, cap = self._clock.now, self._cap(rec)
-        if now + info.t_up >= cap:
+        if now + info.t_to >= cap:
             info.timer = self._clock.schedule(max(now, cap), lambda: self._upload_cap(rec, attempt))
         else:
-            info.timer = self._clock.schedule(now + info.t_up, lambda: self._upload_timeout(rec, attempt))
+            info.timer = self._clock.schedule(now + info.t_to, lambda: self._upload_timeout(rec, attempt))
 
     def _upload_cap(self, rec: TaskRecord, attempt: int) -> None:
         """C7: no reply by the deadline cap: the attempt is dropped, with no re-send (the time is gone)."""

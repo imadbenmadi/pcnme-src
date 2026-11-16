@@ -60,7 +60,7 @@ class CarFleet:
         lay = cfg.layout
         self.centres = {z: lay.zone_positions_m[z] for z in lay.zones if z not in lay.joining_zones}
         fleet = fleet_size if fleet_size is not None else cfg.cars.count[0]
-        n_hot = round(cfg.cars.hotspot_h[sc.mobility] * fleet)
+        n_hot = round(cfg.cars.h_hot[sc.mobility] * fleet)
         grid = RoadGrid.from_area(lay.area_m, cfg.cars.grid.block_m)
         hot_nodes = grid.within(lay.zone_positions_m["z1"], lay.zone_radius_m)
         speeds = cfg.cars.speed_low_mps if sc.mobility == "low" else cfg.cars.speed_high_mps
@@ -199,7 +199,7 @@ class CarFleet:
         assert zone is not None
         app.uploading[task.task_id] = zone
         rate = shannon_rate(math.dist(app.car.position, self.centres[zone]), self.cfg.radio)
-        up = Upload(task, b_car=app.car.budget(task, now), rate=rate)
+        up = Upload(task, t_bud_car=app.car.budget(task, now), rate=rate)
         if self.tracer is not None:
             self.tracer.mark(task.task_id, 0, "created", task.created)
             self.tracer.mark(task.task_id, 0, "upload sent", None)

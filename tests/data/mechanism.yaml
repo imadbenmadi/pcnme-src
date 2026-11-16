@@ -16,7 +16,7 @@ layout:                          # R: the same zone layout on both maps
     z4: [900, 900]
     z5: [600, 600]
   joining_zones: [z5]            # final doc 18: z5 is off at the start and joins (topology experiment, 15.7)
-  d_nb_m: 900                   # R: makes diagonal zones neighbours; every zone gets <= 4
+  l_nb_m: 900                   # R: makes diagonal zones neighbours; every zone gets <= 4
   handover_hysteresis_m: 20      # R: switch only when the new access point is 20 m closer
 
 cars:
@@ -35,7 +35,7 @@ cars:
   calibration: {seconds: 120.0, seed: 2999}   # R: the positions-only map run (tools/calibrate_map.py); the last training seed
   calibrated:                    # C (Q29): tools/calibrate_map.py on the dev map, smallest fleet
     coverage: {low: 0.8626, high: 0.8489}      # share of task creations with coverage; lambda_car / coverage
-    hotspot_h: {low: 0.200, high: 0.175}       # C (Q30): share of cars on z1's roads, so z1 = 1.6 x the mean
+    h_hot: {low: 0.200, high: 0.175}       # C (Q30): share of cars on z1's roads, so z1 = 1.6 x the mean
 
 radio:                           # P: VFC (Friis free-space + Shannon)
   bandwidth: 40.0e6
@@ -59,7 +59,7 @@ task_types:                      # sizes M (BDD100K JPEG at quality 80); run tim
   T3: {model: yolov8n-seg, cls: hard, share: 0.15, input_kb: 150, result_kb: 3, deadline: {loose: 0.100, tight: 0.070}}
   T4: {model: detector+ocr, cls: soft, share: 0.10, input_kb: 150, result_kb: 3, deadline: {loose: 1.0, tight: 0.5}}
   T2: {model: yolov8l x60 frames, cls: soft, share: 0.02, input_kb: 9000, result_kb: 10,
-       deadline: {loose: 3.0, tight: 1.1x_E_strong}}   # C: tight D = 1.1 x mean run on the strongest fog class -> a boulder at alpha = 0.8
+       deadline: {loose: 3.0, tight: 1.1x_T_run_strong}}   # C: tight D = 1.1 x mean run on the strongest fog class -> a boulder at alpha = 0.8
   T5: {enabled: false}           # optional stress test (PointPillars)
   L_max: equal_to_D              # final doc
 
@@ -84,9 +84,9 @@ hardware:                        # run times and powers are M; placeholders belo
     p_idle_w: 57                 # P: Behbehani et al. (per server, reporting only)
 
 time_table_placeholder:          # run per task (s), per type / hardware class / slot type; a missing row = cannot run there
-  # A row is either a mean alone (placeholder) or {mean, p5, p95, longest_step} as measured in the calibration run.
+  # A row is either a mean alone (placeholder) or {mean, p5, p95, t_abort} as measured in the calibration run.
   # The factors fill only the values a row does not give: a measured p5, p95 or longest step always wins.
-  factors: {p5: 0.75, p95: 1.3, longest_step: 0.5}  # x the mean (final doc 18, Time table); p5 = the p5 of
+  factors: {p5: 0.75, p95: 1.3, t_abort: 0.5}  # x the mean (final doc 18, Time table); p5 = the p5 of
                                                      # the lognormal fitted to mean and p95 (CHANGES C5)
   T1: {F-GPU: {gpu: 0.008, cpu: 0.090}, F-CPU: {cpu: 0.090}, cloud: {gpu: 0.004, cpu: 0.045}}
   T3: {F-GPU: {gpu: 0.010, cpu: 0.110}, F-CPU: {cpu: 0.110}, cloud: {gpu: 0.005, cpu: 0.055}}
@@ -104,12 +104,12 @@ energy:
                                  # apply PUE 1.5 to network devices only (QUESTIONS Q3)
   car_tx_w: 0.158                # P: Behbehani (DSRC 22 dBm); reporting only
   reference_class: F-GPU
-  e_bar: computed                # C: max E_k / E_ref over types and options with p95 times
+  c_en_max: computed                # C: max E_k / E_ref over types and options with p95 times
 
 stateplane:
   state_period: 0.100
   stale_after: 0.300             # 3 x state period
-  wan_ewma_lambda: 0.2           # R
+  wan_ewma_eta: 0.2           # R
   r3:                            # 9.2 R3, event-driven state (an extension; the 16.4 state-period experiment)
     enabled: false               # final doc: off; the state period alone
     delta: 2                     # STAND-IN (QUESTIONS Q47): publish when a slot type's queue changed by >= delta tasks
@@ -117,9 +117,9 @@ stateplane:
     heartbeat: 0.100             # final doc 9.2: at least every 100 ms
 
 scheduler:
-  reserve_hard_r: 4              # R
-  headroom_h: 2                  # R: small next to n^max_q
-  soft_promotion_A_max: 0.200    # R: 2 x the loose hard deadline
+  n_res: 4              # R
+  n_head: 2                  # R: small next to n^max_q
+  T_age: 0.200    # R: 2 x the loose hard deadline
   probe_timeout: {fog: 0.050, cloud: 0.300}   # R: about 10 backhaul RTTs / the WAN RTT max + margin
   T_keep: 10.0                   # R: >= longest D + L_max = 6 s
   retries: {hard: 1, soft: 2}    # final doc
@@ -140,8 +140,8 @@ tof:
   strongest_class: F-GPU         # final doc 7.1 and 18: a deployment constant, so the rule needs no fog state
 
 reward:
-  B: 1.0
-  P: 2.0
+  r_ok: 1.0
+  C_pen: 2.0
   w3: 1.0
   C_drop: 5.0                    # 1 + (1 + w3) L_max/D + C_pen
   w: 0.0788                      # C: w* = the median knee weight (13.3) of the small M5.3 runs with the C9

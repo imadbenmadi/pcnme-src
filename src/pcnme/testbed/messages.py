@@ -12,7 +12,7 @@ from pcnme.ids import TaskId
 @dataclass(frozen=True, slots=True)
 class Upload:
     task: Task
-    b_car: float  # T^bud_car, s: the car's budget when the upload starts (6A.2); never a timestamp (5.4)
+    t_bud_car: float  # T^bud_car, s: the car's budget when the upload starts (6A.2); never a timestamp (5.4)
     rate: float  # R_car, bit/s: the Shannon rate at the car's simulated position (4.2)
 
 

@@ -31,7 +31,7 @@ def main() -> None:
         a: [
             b
             for b in active
-            if b != a and math.dist(lay.zone_positions_m[a], lay.zone_positions_m[b]) <= lay.d_nb_m
+            if b != a and math.dist(lay.zone_positions_m[a], lay.zone_positions_m[b]) <= lay.l_nb_m
         ]
         for a in active
     }

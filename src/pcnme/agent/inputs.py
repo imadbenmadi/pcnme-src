@@ -117,11 +117,11 @@ def numbers(cfg: Config, em: EnergyModel, ctx: DecisionContext, view: OptionView
         hw, states, pending, h = ctx.here_hw, ctx.here, {}, 0
         t_in, t_ret = est.t_in_here(), est.t_ret_fog()
     elif view.option == "cloud":
-        hw, states, pending, h = "cloud", ctx.cloud, ctx.cloud_pending, cfg.scheduler.headroom_h
+        hw, states, pending, h = "cloud", ctx.cloud, ctx.cloud_pending, cfg.scheduler.n_head
         t_in, t_ret = est.t_in_cloud(ctx.task.input_bits, ctx.backhaul_wait), est.t_ret_cloud()
     else:
         n = ctx.neighbours[i - 1] if i - 1 < len(ctx.neighbours) else NeighbourView(None)
-        hw, states, pending, h = n.hw, n.slots, n.pending, cfg.scheduler.headroom_h
+        hw, states, pending, h = n.hw, n.slots, n.pending, cfg.scheduler.n_head
         t_in, t_ret = est.t_in_neighbour(ctx.task.input_bits, ctx.backhaul_wait), est.t_ret_fog()
     path_only = OptionView(view.option, view.masked, t_in=t_in, t_ret=t_ret)
     if states is None or hw not in cfg.hardware:
@@ -135,12 +135,12 @@ def numbers(cfg: Config, em: EnergyModel, ctx: DecisionContext, view: OptionView
 
 
 def _option(
-    view: OptionView, age: float | None, d: float, e_ref: float, e_bar: float, s: Scales
+    view: OptionView, age: float | None, d: float, e_ref: float, c_en_max: float, s: Scales
 ) -> list[float]:
     present = 0.0 if view.masked in _ABSENT else 1.0
     if view.masked == "empty":
         return [0.0] * len(OPTION_INPUTS)
-    energy = min(view.energy / e_ref, e_bar) / e_bar
+    energy = min(view.energy / e_ref, c_en_max) / c_en_max
     age_in = 0.0 if age is None else _time(age / s.stale_period)
     return [
         present,
@@ -191,10 +191,10 @@ def build_inputs(
         1.0 if task.cls == "hard" else 0.0,
         d / scales.max_deadline,
     ]
-    e_ref, e_bar = em.e_ref(task.task_type), cfg.derived.e_bar
+    e_ref, c_en_max = em.e_ref(task.task_type), cfg.derived.c_en_max
     ages = (None, *(n.age for n in ctx.neighbours), *([None] * (4 - len(ctx.neighbours))), ctx.cloud_age)
     for view, age in zip(ctx.views, ages, strict=True):
-        out += _option(numbers(cfg, em, ctx, view), age, d, e_ref, e_bar, scales)
+        out += _option(numbers(cfg, em, ctx, view), age, d, e_ref, c_en_max, scales)
     out += _mobility(ctx.mobility, d, anchor, positions)
     out.append(cfg.reward.w)
     return tuple(out)

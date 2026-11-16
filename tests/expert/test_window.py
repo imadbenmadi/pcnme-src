@@ -167,7 +167,7 @@ def rec(cfg: Config, kind: str, outcome: str, latency: float | None, energy: flo
 
 
 def test_the_objectives_by_hand(cfg: Config) -> None:
-    e_ref, e_bar = cfg.derived.e_ref, cfg.derived.e_bar
+    e_ref, c_en_max = cfg.derived.e_ref, cfg.derived.c_en_max
     rs = [
         rec(cfg, "T1", "on_time", 0.05, 1.5 * e_ref["T1"]),  # C^time = 0.5, C^en = 1.5
         rec(cfg, "T4", "late", 1.5, 100 * e_ref["T4"]),  # C^time = 1.5 + 0.5 = 2, C^en capped at C^en_max
@@ -176,7 +176,7 @@ def test_the_objectives_by_hand(cfg: Config) -> None:
     o = objectives(cfg, rs)
     assert (o.n, o.drops) == (3, 1)
     assert o.f1 == pytest.approx((0.5 + 2.0 + 5.0) / 3)
-    assert o.f2 == pytest.approx((1.5 + e_bar + e_bar) / 3)
+    assert o.f2 == pytest.approx((1.5 + c_en_max + c_en_max) / 3)
     assert objectives(cfg, []).n == 0
 
 

@@ -28,16 +28,16 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class RewardParams:
-    b: float
+    r_ok: float
     w3: float
     c_drop: float
     w: float  # the time weight; the energy weight is 1 - w (QUESTIONS Q32 stand-in until M5)
-    e_bar: float
+    c_en_max: float
 
     @classmethod
     def from_config(cls, cfg: Config) -> RewardParams:
         r = cfg.reward
-        return cls(b=r.b, w3=r.w3, c_drop=r.c_drop, w=r.w, e_bar=cfg.derived.e_bar)
+        return cls(r_ok=r.r_ok, w3=r.w3, c_drop=r.c_drop, w=r.w, c_en_max=cfg.derived.c_en_max)
 
 
 def c_time(latency: float, deadline: float, w3: float) -> float:
@@ -45,24 +45,24 @@ def c_time(latency: float, deadline: float, w3: float) -> float:
     return latency / deadline + w3 * max(0.0, latency - deadline) / deadline
 
 
-def e_hat(energy: float, e_ref: float, e_bar: float) -> float:
+def c_en(energy: float, e_ref: float, c_en_max: float) -> float:
     """12.3: C^en = min(E / E_ref, C^en_max)."""
-    return min(energy / e_ref, e_bar)
+    return min(energy / e_ref, c_en_max)
 
 
 def delivered(p: RewardParams, latency: float, deadline: float, energy_ratio: float) -> float:
     """11.4: the attempt the car kept, on time or (soft) late; energy_ratio = E / E_ref of that attempt."""
-    return p.b - p.w * c_time(latency, deadline, p.w3) - (1 - p.w) * min(energy_ratio, p.e_bar)
+    return p.r_ok - p.w * c_time(latency, deadline, p.w3) - (1 - p.w) * min(energy_ratio, p.c_en_max)
 
 
 def wasted(p: RewardParams, t_waste: float, deadline: float, energy_ratio: float) -> float:
     """11.4: refused, lost, cancelled or second: the anchor time it wasted and the energy it really spent."""
-    return -(p.w * t_waste / deadline + (1 - p.w) * min(energy_ratio, p.e_bar))
+    return -(p.w * t_waste / deadline + (1 - p.w) * min(energy_ratio, p.c_en_max))
 
 
 def dropped(p: RewardParams) -> float:
     """11.4: the last attempt of a dropped task, and a task dropped with every option masked (7.3)."""
-    return p.b - p.w * p.c_drop - (1 - p.w) * p.e_bar
+    return p.r_ok - p.w * p.c_drop - (1 - p.w) * p.c_en_max
 
 
 @dataclass(frozen=True, slots=True)

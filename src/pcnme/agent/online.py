@@ -290,7 +290,7 @@ class Episode:
 
     seed: int
     on_time: float
-    mean_e_hat: float
+    mean_c_en: float
     tasks: int
     updates: int
     mean_loss: float
@@ -301,11 +301,11 @@ def episode_stats(cfg: Config, recs: Sequence[TaskRecord]) -> tuple[float, float
     attempt; C^en_max for a drop, as in 13.2.4)."""
     if not recs:
         return 0.0, 0.0
-    e_bar = cfg.derived.e_bar
+    c_en_max = cfg.derived.c_en_max
     e = [
-        min(sum(a.energy for a in r.rewards.values()) / cfg.derived.e_ref[r.task.task_type], e_bar)
+        min(sum(a.energy for a in r.rewards.values()) / cfg.derived.e_ref[r.task.task_type], c_en_max)
         if r.outcome in ("on_time", "late")
-        else e_bar
+        else c_en_max
         for r in recs
     ]
     return sum(r.outcome == "on_time" for r in recs) / len(recs), float(np.mean(e))

@@ -231,7 +231,7 @@ def training_info(trained: Trained | None) -> dict[str, Any] | None:
             {
                 "seed": e.seed,
                 "on_time": e.on_time,
-                "mean_e_hat": e.mean_e_hat,
+                "mean_c_en": e.mean_c_en,
                 "tasks": e.tasks,
                 "updates": e.updates,
                 "mean_loss": e.mean_loss,
@@ -339,7 +339,7 @@ def report_constants(cfg: Config, scenario: str) -> dict[str, Any]:
         "objective": {
             "w3": cfg.reward.w3,
             "c_drop": cfg.reward.c_drop,
-            "e_bar": cfg.derived.e_bar,
+            "c_en_max": cfg.derived.c_en_max,
             "e_ref": dict(cfg.derived.e_ref),
         },
     }

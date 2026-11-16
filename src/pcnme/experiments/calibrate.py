@@ -76,7 +76,7 @@ def calibrate(
     h = round(hi * fleet) / fleet  # whole cars
     coverage, share = measure(cfg, mobility, h, seconds, seed, fleet)
     n = len([z for z in cfg.layout.zones if z not in cfg.layout.joining_zones])
-    return {"coverage": coverage, "hotspot_h": h, "z1_share": share, "z1_over_mean": share * n}
+    return {"coverage": coverage, "h_hot": h, "z1_share": share, "z1_over_mean": share * n}
 
 
 def measure_trace(cfg: Config, path: Path, seconds: float, seeds: Sequence[int], fleet: int) -> float:

@@ -100,7 +100,7 @@ def _eval_job(
             numbers={
                 "seed": seed,
                 "on time": round(m["on_time"], 4),
-                "mean ê": round(m["mean_e_hat"], 3),
+                "mean C^en": round(m["mean_c_en"], 3),
                 "p99 ms": round(1e3 * m["latency_p99_s"], 1),
             },
         )
@@ -200,9 +200,9 @@ def _training_curves(paths: MapPaths) -> None:
         for method, rows in sorted(methods.items()):
             x = [int(r["episode"]) for r in rows]
             a1.plot(x, [100 * float(r["on_time"]) for r in rows], label=method)
-            a2.plot(x, [float(r["mean_e_hat"]) for r in rows], label=method)
+            a2.plot(x, [float(r["mean_c_en"]) for r in rows], label=method)
         a1.set(xlabel="training episode", ylabel="on time %", title=f"{scenario}: on-time share in training")
-        a2.set(xlabel="training episode", ylabel="mean ê", title=f"{scenario}: mean ê in training")
+        a2.set(xlabel="training episode", ylabel="mean C^en", title=f"{scenario}: mean C^en in training")
         a1.legend(fontsize=7)
         fig.tight_layout()
         paths.results.mkdir(parents=True, exist_ok=True)

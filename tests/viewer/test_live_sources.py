@@ -174,7 +174,7 @@ def test_a_later_delta_reads_from_a_little_before_its_cursor_and_skips_the_city(
 def _train_dir(root: Path, name: str, episodes: int, log_end: str) -> Path:
     d = root / name
     d.mkdir(parents=True)
-    rows = ["episode,seed,on_time,mean_e_hat,tasks,updates,mean_loss,decisions_used,wall_s"]
+    rows = ["episode,seed,on_time,mean_c_en,tasks,updates,mean_loss,decisions_used,wall_s"]
     rows += [f"{i},{1999 + i},0.9{i},1.2,9000,{100 * i},0.5,{1000 * i},60" for i in range(1, episodes + 1)]
     (d / "episodes.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
     (d / "train.log").write_text(f"start\n{log_end}\n", encoding="utf-8")

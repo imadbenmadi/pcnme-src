@@ -21,18 +21,18 @@ if TYPE_CHECKING:
 
 
 def state(
-    remaining: tuple[float, ...], b_hard: float = 0.0, b_soft: float = 0.0, u: int | None = None
+    t_rem: tuple[float, ...], omega_hard: float = 0.0, omega_soft: float = 0.0, u: int | None = None
 ) -> SlotState:
-    busy = sum(1 for r in remaining if r > 0) if u is None else u
+    busy = sum(1 for r in t_rem if r > 0) if u is None else u
     return SlotState(
-        c=len(remaining),
-        capacity=32,
+        c=len(t_rem),
+        n_max=32,
         n_hard=0,
         n_soft=0,
-        b_hard=b_hard,
-        b_soft=b_soft,
-        remaining=remaining,
-        u=busy,
+        omega_hard=omega_hard,
+        omega_soft=omega_soft,
+        t_rem=t_rem,
+        n_busy=busy,
     )
 
 
@@ -106,7 +106,7 @@ def test_stealing_uses_the_water_filling_estimate_too() -> None:
 
 
 def test_class_backlogs() -> None:
-    s = state((0.002, 0.700), b_hard=0.008, b_soft=0.025)
+    s = state((0.002, 0.700), omega_hard=0.008, omega_soft=0.025)
     assert wait_estimate(s, "hard") == pytest.approx(0.010)  # 2 + 8
     assert wait_estimate(s, "soft") == pytest.approx(0.035)  # 2 + 8 + 25, still below 700
 
@@ -117,9 +117,9 @@ def test_the_snapshot_publishes_each_slots_remaining_time(make_node: Callable[..
     node.submit("T1", 1e6)  # 8 ms on the other
     node.run(0.002)
     gpu = node.executor.snapshot()["gpu"]
-    assert gpu.remaining == pytest.approx((0.006, 0.718))  # sorted, one entry per slot
+    assert gpu.t_rem == pytest.approx((0.006, 0.718))  # sorted, one entry per slot
     assert gpu.r == pytest.approx(0.724)  # the old sum R, kept for logs
-    assert node.executor.snapshot()["cpu"].remaining == (0.0, 0.0)
+    assert node.executor.snapshot()["cpu"].t_rem == (0.0, 0.0)
 
 
 def test_with_a_t2_on_one_gpu_slot_the_new_estimate_matches_the_real_wait(
@@ -141,8 +141,8 @@ def test_with_a_t2_on_one_gpu_slot_the_new_estimate_matches_the_real_wait(
         node.run(t)
         task = types[int(rng.choice(len(types), p=shares))]
         gpu = node.executor.snapshot()["gpu"]
-        t2_running = any(r > 0.050 for r in gpu.remaining)  # only a T2 runs longer than 50 ms on the GPU
-        old = 0.0 if gpu.u < gpu.c else (gpu.r + gpu.b_hard) / gpu.c
+        t2_running = any(r > 0.050 for r in gpu.t_rem)  # only a T2 runs longer than 50 ms on the GPU
+        old = 0.0 if gpu.n_busy < gpu.c else (gpu.r + gpu.omega_hard) / gpu.c
         req = node.request(task.name, task.deadline["loose"])
         reply = node.executor.submit(req)
         if task.cls == "hard" and t2_running and isinstance(reply, Accepted) and reply.slot == "gpu":

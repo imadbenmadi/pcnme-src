@@ -141,11 +141,13 @@ def test_t2_tight_deadline_is_1_1_times_e_strong(cfg: Config) -> None:
 
 
 def test_e_strong_is_the_fastest_slot_on_the_strongest_class(cfg: Config) -> None:
-    assert dict(cfg.derived.e_strong) == pytest.approx({"T1": 0.008, "T3": 0.010, "T4": 0.025, "T2": 0.720})
+    assert dict(cfg.derived.t_run_strong) == pytest.approx(
+        {"T1": 0.008, "T3": 0.010, "T4": 0.025, "T2": 0.720}
+    )
 
 
 def test_only_t2_with_tight_deadlines_is_a_boulder(cfg: Config) -> None:
-    # final-design 7.1: boulder iff E_strong >= alpha x D; 0.720 >= 0.8 x 0.792 = 0.634
+    # final-design 7.1: boulder iff T_run_strong >= alpha x D; 0.720 >= 0.8 x 0.792 = 0.634
     boulders = {(t, mode) for t in cfg.task_types for mode in ("loose", "tight") if cfg.is_boulder(t, mode)}
     assert boulders == {("T2", "tight")}
 
@@ -158,7 +160,7 @@ def test_boulder_rule_uses_alpha(raw: dict[str, Any]) -> None:
 
 
 def test_boulder_rule_is_inclusive(raw: dict[str, Any]) -> None:
-    # final-design 7.1 uses >=: E_strong exactly alpha x D is a boulder (T1: 0.008 = 0.8 x 0.010).
+    # final-design 7.1 uses >=: T_run_strong exactly alpha x D is a boulder (T1: 0.008 = 0.8 x 0.010).
     cfg = edited(raw, assign("task_types.T1.deadline.tight", 0.010))
     assert cfg.is_boulder("T1", "tight")
 
@@ -232,8 +234,8 @@ def test_e_ref_rounded_as_in_the_design(cfg: Config) -> None:
 
 def test_e_bar(cfg: Config) -> None:
     # final-design 12.3: largest E_k / E_ref over every type and option, p95 run times (18: about 11.7)
-    assert cfg.derived.e_bar == pytest.approx(E_BAR, rel=1e-12)
-    assert round(cfg.derived.e_bar, 2) == 11.70
+    assert cfg.derived.c_en_max == pytest.approx(E_BAR, rel=1e-12)
+    assert round(cfg.derived.c_en_max, 2) == 11.70
 
 
 def test_network_energy_per_bit_and_pue(cfg: Config) -> None:
@@ -267,7 +269,7 @@ def test_derived_values_equal_calc_defaults_output(which: str, repo_root: Path) 
     assert number(r"mean GPU run of the mix ([\d.]+) ms") == f"{d.mean_gpu_run * 1e3:.1f}"
     assert number(r"zone GPU capacity ([\d.]+) tasks/s") == f"{d.zone_capacity:.1f}"
     assert number(r"B_WAN = (\d+) Mbps") == f"{d.b_wan / 1e6:.0f}"
-    assert number(r"e_bar \(placeholder\) = ([\d.]+)") == f"{d.e_bar:.2f}"
+    assert number(r"c_en_max \(placeholder\) = ([\d.]+)") == f"{d.c_en_max:.2f}"
     for name, task in cfg.task_types.items():
         assert number(rf"{name}: E_ref ([\d.]+) J") == f"{d.e_ref[name]:.3f}"
         for mode in ("loose", "tight"):
@@ -285,19 +287,19 @@ def test_derived_values_equal_calc_defaults_output(which: str, repo_root: Path) 
 def test_placeholder_rows_use_the_factors(cfg: Config) -> None:
     row = cfg.time_table.row("T1", "F-GPU", "cpu")
     assert row is not None
-    assert (row.mean, row.p5, row.p95, row.longest_step) == pytest.approx((0.090, 0.0675, 0.117, 0.045))
+    assert (row.mean, row.p5, row.p95, row.t_abort) == pytest.approx((0.090, 0.0675, 0.117, 0.045))
 
 
 def test_measured_values_win_over_the_factors(raw: dict[str, Any]) -> None:
-    measured = {"mean": 0.090, "p95": 0.200, "longest_step": 0.030}
+    measured = {"mean": 0.090, "p95": 0.200, "t_abort": 0.030}
     cfg = edited(raw, assign("time_table_placeholder.T1.F-GPU.cpu", measured))
     row = cfg.time_table.row("T1", "F-GPU", "cpu")
     assert row is not None
-    assert (row.mean, row.p95, row.longest_step) == (0.090, 0.200, 0.030)
+    assert (row.mean, row.p95, row.t_abort) == (0.090, 0.200, 0.030)
     assert row.p5 == pytest.approx(0.75 * 0.090)  # not measured: the factor fills it (C5)
-    # e_bar follows the measured p95 (12.3)
+    # c_en_max follows the measured p95 (12.3)
     expected = (1.5 * 20 * 0.200 + E_BH * 150 * 8000 + E_RET_HERE_SMALL) / E_REF["T1"]
-    assert cfg.derived.e_bar == pytest.approx(expected, rel=1e-12)
+    assert cfg.derived.c_en_max == pytest.approx(expected, rel=1e-12)
 
 
 def test_a_missing_row_means_cannot_run_there(cfg: Config) -> None:
@@ -440,7 +442,7 @@ def test_an_unknown_key_is_refused(raw: dict[str, Any], key: str) -> None:
         ("tof.alpha", 0.0),
         ("links.backhaul_delay", [0.005, 0.001]),  # low > high
         ("links.wan_bw", 500e6),  # computed (18): only "calibrated" is allowed
-        ("energy.e_bar", 11.7),
+        ("energy.c_en_max", 11.7),
         ("task_types.T2.deadline.tight", "1.1xE"),
         ("task_types.T1.cls", "firm"),
         ("scenarios.S1.deadlines", "medium"),
