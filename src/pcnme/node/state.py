@@ -37,7 +37,7 @@ class SlotState:
 
     @property
     def r(self) -> float:
-        """The sum of the remaining times (the old pooled estimate): kept for logs; the estimate uses each T^rem_q,j (C4)."""
+        """Sum of the remaining times (the old pooled estimate), kept for logs; the estimate uses each T^rem_q,j."""
         return sum(self.t_rem)
 
 
