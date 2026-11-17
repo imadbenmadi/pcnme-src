@@ -1,39 +1,80 @@
-<!-- PCNME — Final Design, revision 128 (28 Oct 2026) and the later changes listed below. The notation changed on 15 Nov 2026 (docs/NOTATION.md). This file is now the master copy: the claude.ai copy and the printed copy follow it. Do not edit it by hand except through the design-change skill. -->
+<!-- PCNME — Final Design, version 3 (17 Nov 2026): revision 128 (28 Oct 2026), the later changes in Appendix D, the notation of 15 Nov 2026 (docs/NOTATION.md, Appendix A) and the reorganisation of 17 Nov (overview, a purpose box per section, worked examples, appendices). Section numbers 1–19 are unchanged: the code cites them. This file is the master copy: the claude.ai copy and the printed copy follow it. Do not edit it by hand except through the design-change skill. -->
 
 # PCNME — Final Design
 
-## Status and how to read this
+## How to read this document
 
-This is the one complete design of PCNME. It merges the PCNME Architecture doc, the Decision Maker, State, Messages and Agent I/O, the Agreed list, the Tracker, and every decision in PCNME Fix Holes (holes 1–26, the approved older proposals, notes N1–N21). Where those disagree, this doc follows Fix Holes. It replaces all of them as the source for the math, the methodology and the code.
+This is the complete design of PCNME: the system, its mathematical models, its decision maker, its learning pipeline and its evaluation. It is the specification the code implements, and the code cites its section numbers (for example `# final-design 8.4 step 2`), so the numbers of sections 1 to 19 never change.
 
-- **Two layers everywhere.** Part I describes PCNME as it would run in a real city: N fog zones, each with up to 4 neighbours, thousands of cars, one broker cluster, one cloud. Part II describes how it is evaluated: 4 zones plus 1 that joins, 1 cloud, 10 car containers with 20–100 virtual cars each, in fast mode and on a Docker testbed. The architecture never says "5 fogs" (N1).
-- **Every design decision is made.** Every number has a default in section 18 (27 Oct), chosen together so they fit each other (for example, bandwidths that give the three traffic levels). Values tagged M are placeholders until the calibration run measures them.
-- **Where a rule came from** is listed at the end, so any line can be traced to its hole.
+- **Start with "PCNME on one page"** below. It gives the whole path from the inputs to the outputs.
+- **Part I (sections 3–14)** describes PCNME as it would run in a real city. **Part II (15–16)** describes how it is evaluated. **Part III (17–19)** gives the limits, every number and the origin of each decision.
+- **Every section opens with a box**: its purpose, its inputs and its outputs.
+- **Every model is written the same way**: inputs with units, the equations, the outputs, a worked example with the real numbers, and the source.
+- **Symbols** follow one rule: one base letter is one kind of quantity with one unit (T a duration, t an instant, D and d a deadline, W a wait, δ a link delay, L a latency, S a size, B a bandwidth, E and e an energy, P a power, C a cost, n a count, ℓ a length). A hat is an estimate made before the fact, a bar a mean. Appendix A has the full table.
+- **Appendices**: A notation, B results, C references, D the history of changes.
 
-**Changes after the printed copy (27 Oct, rev 117).** Every later change is listed here with its section and its Fix Holes note, so a printed copy stays valid: read this list, then mark the changed sections on paper.
+## PCNME on one page
 
-| Date | Section | Change | Note |
-| --- | --- | --- | --- |
-| 28 Oct | 16.2 | ρ_fog uses every task of the whole mix, boulders included (not pebbles only), so S4–S6 keep S2's arrival rate | CHANGES C2 (QUESTIONS Q1) |
-| 16 Nov | 13.7 | Phase 2 (FedAvg + fine-tuning) is evaluated in fast mode only; on the testbed it is future work (since 15.5's trainer process holds the learning network, FedAvg would run there) | QUESTIONS Q64 |
-| 16 Nov | all | The notation reaches the code: Python names, config keys, message fields and CSV columns renamed as in docs/NOTATION.md section 6 (for example mean_e_hat → mean_c_en, e_bar → c_en_max, reward B, P → r_ok, C_pen); the existing result files were rewritten the same way; config_hash changes with the keys | docs/NOTATION.md |
-| 15 Nov | all | Notation: one base letter per kind of quantity, one unit (docs/NOTATION.md); names only, no rule, formula, number or behaviour changes | docs/NOTATION.md |
-| 11 Nov | 15.5 | On the testbed a zone that learns online gets a second CPU: its trainer runs in its own process (replay, updates), the zone sends it the samples and installs the trainer's newest weights between two decisions. Fast mode, which has no compute time, learns in place as before | QUESTIONS Q62 |
-| 7 Nov | 9.6 | A car always knows whether its serving zone serves it: the attach is repeated until confirmed, and a zone names the cars it does not serve in its reply to their GPS, which then attach again (testbed transport detail) | QUESTIONS Q61 |
-| 6 Nov | 16.2, 18 | S6 (mixed fog) has loose deadlines, not tight: with tight ones every method was near a capacity ceiling (the hard tasks need 80 % of the 4 GPU slots with 14–20 ms of slack), so S6 measured which tasks a method sacrifices rather than placement on unequal nodes. The TOF-Broker is now exercised in S4 and S5 | QUESTIONS Q60 |
-| 28 Oct | 13.2 | Random draws keyed by task, not by event order: a run time is a uniform keyed by (seed, task id, attempt) through the inverse CDF of the row it runs on; a delay is keyed by (seed, task id, attempt, hop); arrivals and mobility stay sequential per car | CHANGES C3 (QUESTIONS Q6) |
-| 28 Oct | 8.5, 5.2 | The wait estimate is water-filling over each slot's remaining time T^rem_q,j (published per slot instead of their sum R): Σ max(0, Ŵ^queue_q − T^rem_q,j) = Ω_q; still 0 while a slot is free; for c_q = 1 the same as before | CHANGES C4 |
-| 28 Oct | 14.4, 18 | Run times are lognormal, fitted to each row's mean and p95; the placeholder p5 factor is 0.75 (was 0.9); measured rows report the fitted p5 next to the measured one | CHANGES C5 (QUESTIONS Q7) |
-| 29 Oct | 4.1, 4.2, 6A.3, 15.3, 17 | The radio uplink shares its airtime equally among the cars uploading at once (each advances at R_car ÷ n_up) instead of one car at a time; W_radio is the extra push time from sharing, still known exactly at t_rx | CHANGES C6 (QUESTIONS Q18) |
-| 29 Oct | 18, 14.3 | The car's encode time is a config value, `timing.encode` (M, placeholder 0); the upload starts after it, and T^bud_car does not subtract it again | QUESTIONS Q14 |
-| 29 Oct | 15.2 | Every drawn time is rounded to whole nanoseconds and every radio rate to whole bit/s, so one seed gives the same run on every OS | web review of PR #20 |
-| 29 Oct | 16.2, 18 | λ_car is divided by the share of task creations with coverage, measured once per map by a positions-only calibration run (tag C); frames made in a gap are reported as uncovered | QUESTIONS Q29 |
-| 29 Oct | 16.2, 18 | The hotspot share h_hot (cars on z1's roads) is set by the map calibration run so that z1 = 1.6 × the mean load | QUESTIONS Q30 |
-| 29 Oct | 9.3 | The upload timeout T^to starts when the zone's own send has finished; before that only the deadline cap applies, and reaching it drops the attempt with no re-send | CHANGES C7 (QUESTIONS Q31) |
-| 29 Oct | 16.2 | S3 shows an overloaded system: under Greedy the fog GPUs saturate (97–100 %); under cloud-only placement the WAN queue grows without limit (M2 test); it no longer says the WAN congests under every method | M3 acceptance runs after C7 |
-| 29 Oct | 9.6, 6E.15 | The anchor keeps its subscriptions for a car until G after its last task of the car closes (not at the close), so the energy reports G waits for still reach it | CHANGES C8 (QUESTIONS Q35) |
-| 29 Oct | 13.2 | The initial NSGA-II population holds the greedy plan, an energy-greedy plan and mutated copies of both (half the population), the rest random; so no front point is dominated by greedy | CHANGES C9 (QUESTIONS Q38) |
-| 30 Oct | 16.3 | Evaluation seeds are never used for planning that any method learns from; the knee reference plans on evaluation seeds (a reference no method learns from), only for S2 and S4 on the first 5 evaluation seeds | CHANGES C10 (QUESTIONS Q45) |
+**The problem.** Connected cars produce computing tasks, for example object detection on every camera frame, with deadlines of 50 ms to a few seconds. A car cannot run them itself. Each task must be placed on a fog node near the road or in the cloud so that it meets its deadline with the lowest latency and energy, while the car keeps moving from one zone to the next.
+
+**The decision.** The zone a task arrives in (its anchor) decides once where the whole task runs, among 6 options: its own fog node, one of up to 4 neighbour zones, or the cloud.
+
+**The method, in three steps.**
+
+1. A fixed rule, the **TOF-Broker**, sends a task that is too heavy for any fog node straight to the cloud.
+2. A learned agent, a **D3QN**, places every other task. It sees 48 numbers: the task, the estimated time and energy of each of the 6 options, and where the car is going.
+3. The agent does not start from zero. Offline, **NSGA-II** computes plans that are Pareto-optimal in latency and energy; the **knee point** of each front is taken as the expert; the agent is pretrained on these plans with **DQfD**, then keeps learning online.
+
+**The contribution** is that chain: NSGA-II front → knee point → demonstrations → pretrained D3QN, for task offloading.
+
+### The whole system as inputs and outputs
+
+| Stage | Inputs | Model or rule | Outputs | Section |
+| --- | --- | --- | --- | --- |
+| Task arrival | Task type, class, size S, deadline D, the car's budget | Intake: deadline bookkeeping | Anchor copy with its deadline d_A | 6, 14 |
+| Network | S, bandwidth B, pipe state, link delays δ | Link model | Transfer times T_transfer, estimates T̂_in,k and T̂_ret,k | 4 |
+| Queue | Slots c_q, remaining times T^rem, backlog Ω | Water-filling wait estimate | Queue wait Ŵ^queue_k,q | 8 |
+| Execution | Task type, hardware class, slot type | Time table | Run time T̄^run_k,q, energy per run | 8, 14 |
+| Energy | S, energy per bit, power, PUE, run time | Energy model | Energy E_k of an attempt, estimate Ê_k | 12 |
+| Mobility | Position, speed, heading, zone circles | Exit-time predictor | T_exit and the next zone | 10 |
+| Decision | All of the above, as 48 numbers | TOF-Broker → masks → D3QN | One of 6 placements | 7, 11 |
+| Feedback | Measured latency L and energy E of the closed task | Costs C^time, C^en and the reward r | One training sample | 11 |
+| Offline expert | Windows of tasks, the same costs | NSGA-II → knee point → weight w\* | Demonstrations and w\* | 13 |
+| Evaluation | 8 methods, 6 scenarios, 20 seeds, 2 maps | Simulation and Docker testbed | On-time share, latency, energy, cold start | 15, 16, Appendix B |
+
+### The components at a glance
+
+| Component | Where | Input | Output | Section |
+| --- | --- | --- | --- | --- |
+| Car application | Car | Camera frames, GPS | Task uploads with a time budget; GPS every 100 ms; confirmation of each result | 6, 10 |
+| Access point | Zone | Radio signal | The upload, at the car's radio rate | 4.2 |
+| Intake | Zone | A complete upload | An anchored task with its deadline on the zone's clock | 6 A |
+| TOF-Broker | Zone | Task type, D, the time table | Boulder (to the cloud) or pebble (to the agent) | 7.1 |
+| Masks | Zone | The state store, the task | The options that can work right now | 7.2 |
+| D3QN agent | Zone | 48 numbers | 6 action values; the best unmasked option | 7.3, 11 |
+| Fog node | Zone | Tasks placed on it | Results; accept or refuse; its queue state every 100 ms | 8 |
+| State store | Zone | Neighbours' state messages, own queues | The numbers behind masks and agent inputs | 5.2, 8.5 |
+| Mobility predictor | Zone | The car's last GPS | T_exit and the next zone | 10.2 |
+| Anchor table | Zone | Tasks the zone owns | Retries, cancels, the reward of each attempt | 9 |
+| Replay buffer and trainer | Zone | Finished attempts (s, a, r, s′, Δt) | Updated network weights | 11.3, 13.5 |
+| MQTT broker | Metro edge | Small control messages | Delivery to every subscriber | 5 |
+| Cloud | Remote | Boulders and tasks sent there | Results; in phase 2 the averaged model | 3, 13.7 |
+
+### What was run, against what this design plans
+
+The sections describe the full plan. The experiments behind Appendix B used a smaller budget; every difference is listed here.
+
+| Item | Planned in this design | Run for the results |
+| --- | --- | --- |
+| NSGA-II budget (13.2, 18) | Population 100, 100 generations, 20 windows per scenario | Population 40, 20 generations, 6 windows per scenario |
+| Training budget (16.1) | The same for every learning method | 1 million decisions per method and scenario; several learners were still improving at the end |
+| Deployed weight w\* (13.3) | Median knee weight | 0.414 on the VFC grid (27 of 36 windows have a knee), 0.344 on LuST (22 of 36) |
+| Simulation runs (16.3) | 8 methods × 6 scenarios × 20 seeds | Done on both maps: 960 runs per map, 200 cars |
+| Testbed runs (15, 16.3) | 5 seeds, 200–1 000 cars | 5 seeds, 40 cars, 60 s per run, VFC grid only |
+| Federated learning, phase 2 (13.7) | Evaluated in simulation | Built and tested in simulation; the comparison of its three variants was not run: future work |
+| Ablations and sweeps (16.4), α_TOF sweep (7.1) | The experiments listed in 16.4 | Not run: future work; α_TOF stays 0.8 |
+| Topology experiments (15.7) | Zone join, zone kill, broker restart | Not run: future work |
+| Task type T5 (14.1) | Optional | Off |
 
 ## 1. What PCNME is
 
@@ -76,16 +117,16 @@ The MQTT broker cluster at the metro edge is messaging infrastructure, like the 
 | Masking | Removing options that cannot work right now before the agent chooses |
 | Neighbour position | One of the agent's 4 fixed neighbour outputs; an empty position is always masked |
 | Link model | Every bulk transfer = wait for its shared FIFO pipe + size ÷ bandwidth + a random delay |
-| Traffic intensity (TI) | Bits arriving per second ÷ a pipe's bandwidth. Below 1 the pipe keeps up; above 1 its queue grows without limit (N2) |
-| Node load ρ_node | Task arrival rate × mean run time ÷ number of slots; at or above 1 the node's queue explodes (N3) |
+| Traffic intensity (TI) | Bits arriving per second ÷ a pipe's bandwidth. Below 1 the pipe keeps up; above 1 its queue grows without limit |
+| Node load ρ_node | Task arrival rate × mean run time ÷ number of slots; at or above 1 the node's queue explodes |
 | WAN pipe | The metro-edge router's uplink to the internet: one pipe shared by all zones. "Cloud congestion" means this pipe is full, not the cloud's compute |
 | State store | A zone's in-memory copy of its own state and its neighbours' latest snapshots |
 | Snapshot version | A per-zone pair (epoch, counter) on every state snapshot (state messages and task replies); newest version wins, epoch compared first (5.5) |
 | Anchor table | A zone's in-memory list of the tasks it owns |
 | Car registry | A zone's in-memory record of the cars it serves or anchors: last GPS, speed, heading, current zone |
 | Exit time (T_exit) | Predicted time until the car leaves its zone: time until the car, going straight on at its speed and heading, crosses its zone's coverage circle (10.2); infinity when stopped |
-| Attach | A car connecting to a zone's access point; the zone announces it on car/{id}/attach. In real 5G the network decides the handover from the car's signal reports (N6) |
-| MQTT, broker, topic | MQTT is the protocol. The broker (EMQX) delivers each message published on a topic to every subscriber of that topic (N11) |
+| Attach | A car connecting to a zone's access point; the zone announces it on car/{id}/attach. In real 5G the network decides the handover from the car's signal reports |
+| MQTT, broker, topic | MQTT is the protocol. The broker (EMQX) delivers each message published on a topic to every subscriber of that topic |
 | QoS 0 / 1, retained, last will | At most once / at least once (may arrive twice). Retained = the broker keeps the last message for new subscribers. Last will = the broker publishes "offline" for a client that dies |
 | Pareto front, knee point | Plans where no objective improves without the other getting worse; the knee = the front point farthest from the line through the two extremes |
 | D3QN | Double + dueling deep Q-network: the agent's network |
@@ -96,11 +137,13 @@ The MQTT broker cluster at the metro edge is messaging infrastructure, like the 
 
 ### Notation
 
-Symbols follow [docs/NOTATION.md](NOTATION.md) (approved 15 Nov 2026): one base letter is one kind of quantity with one unit (T a duration, t an instant on one clock, D / d a deadline length / instant, W a wait, δ a link delay, L a latency measured by the car, S a size, B a bandwidth, E / e an energy / energy per bit, P a power, C a cost, n a count, ℓ a length on the map); a hat is an estimate made before the fact, a bar a mean from the configuration or the time table, ^lo / ^hi the 5 % / 95 % quantiles. Its section 2 maps every symbol used up to revision 128 to its new name; its section 6 gives each symbol's Python name, config key and message field.
+Symbols follow one rule: one base letter is one kind of quantity with one unit. The rules, every symbol, the names used before 15 Nov 2026 and the name of each symbol in the code are in Appendix A.
 
 # Part I — PCNME in the real world
 
 ## 3. The fog zone and its components
+
+> **Purpose.** Name every part of the system and say what each one holds. **Inputs.** None: this is the structure. **Outputs.** The vocabulary used by every later section; the table "The components at a glance" at the start of the document gives each part's input and output.
 
 A fog zone is one physical site: the access point and the fog node sit together, so deciding at the zone costs no extra network hop. Assumption: one fog server per access point. Every zone has the same parts and runs the same agent network. A zone has up to 4 neighbour zones (section 7.5). All zones and the cloud connect to one MQTT broker cluster at the metro edge, a regional site a few ms from every zone. All zone → cloud traffic leaves through the metro-edge router's uplink.
 
@@ -128,6 +171,8 @@ Zones talk to each other over the backhaul and to everything else through the me
 
 ## 4. Networks and the link model
 
+> **Purpose.** Turn "send S bits over a link" into a time. **Inputs.** Size S (bit), bandwidth B (bit/s), the pipe's state t_free, the link's delay range. **Outputs.** The real transfer time T_transfer, and the estimates T̂_in,k (input to option k) and T̂_ret,k (result back to the car) that the masks and the agent use.
+
 ### 4.1 One model for every link that carries task data
 
 ```latex
@@ -139,6 +184,21 @@ W_{pipe} = \max(0,\; t_{free} - t_{now}), \qquad t_{free} \leftarrow \max(t_{now
 ```
 
 S = the size in bits, B = the pipe's bandwidth, δ = a random delay drawn per transfer, t_free = when the pipe is next free. The delay does not hold the pipe: the next transfer can be pushed while this one travels. Waiting costs time, never energy (section 12). A cloud transfer crosses two pipes in series, the zone's own backhaul pipe and the shared WAN pipe. Its packets flow through both at once, so it reaches the WAN pipe δ_bh after it starts on the backhaul pipe, and the WAN pipe, the narrowest, sets the push time: T = W_bh + δ_bh + W_WAN + S ÷ B_WAN + δ_WAN. Fast mode simulates it this way; on the testbed TCP through two links does it by itself. The radio uplink is the one exception: the cars uploading at once share its airtime instead of queueing (4.2, CHANGES C6).
+
+| Symbol | Meaning | Unit |
+| --- | --- | --- |
+| S | Size of what is sent | bit |
+| B | Bandwidth of the pipe | bit/s |
+| δ | Delay drawn for this transfer, uniform between δ_min and δ_max | s |
+| t_now, t_free | Present instant; instant the pipe is next free | s |
+| W_pipe | Wait until the pipe is free | s |
+| T_transfer | Time until the receiver has the whole payload | s |
+
+**Why three terms.** S ÷ B is the time to push the bits, and it grows with the size. δ is the travel and processing time, and it does not depend on the size. W_pipe is the congestion: a pipe serves one transfer at a time, so a second task waits until the first has been pushed. Without W_pipe, sending every task to the cloud would look free; with it, a WAN whose traffic intensity passes 1 builds an ever-growing wait.
+
+**Worked example.** A 76 KB frame is 608 000 bits. To a neighbour over the 1 Gbit/s backhaul: 0.6 ms of push plus a 1–5 ms delay, about 3.6 ms. To the cloud over the 36 Mbit/s WAN: 16.9 ms of push, plus 3 ms and 62.5 ms of mean delay, about 82 ms before any queue.
+
+**Source.** The base paper [1] models the delay of a request as its size times a per-byte transmission delay, for the request and the response, plus a processing time (its Eq. 10–16), with no queueing and no propagation term. PCNME keeps that structure (size ÷ bandwidth for the push) and adds the propagation delay δ and the pipe wait W_pipe. The delay ranges come from the VFC environment (Appendix C [2]). The explicit first-in-first-out wait is PCNME's own addition.
 
 ### 4.2 Every link
 
@@ -153,8 +213,16 @@ S = the size in bits, B = the pipe's bandwidth, δ = a random delay drawn per tr
 - **"50–200 ms to the cloud" is the round trip.** Each crossing draws 25–100 ms one way: the input pays one crossing (router → cloud), the result one (cloud → broker).
 - **Results pay only delays:** they are small, so no bandwidth term. Their path: executor → broker → serving zone → radio.
 - **The car's upload** happens before the decision and costs the same for every option, but it eats slack, so it is modelled.
-- **The WAN is the narrowest pipe.** Example: 200 KB inputs on 100 Mbps = about 62 tasks per second for the whole city, while a 1 Gbps backhaul pushes about 625 per second per zone (N4). This is the reason fog computing exists, not a flaw of PCNME: the agent decides which tasks deserve the WAN (N9).
+- **The WAN is the narrowest pipe.** Example: 200 KB inputs on 100 Mbps = about 62 tasks per second for the whole city, while a 1 Gbps backhaul pushes about 625 per second per zone. This is the reason fog computing exists, not a flaw of PCNME: the agent decides which tasks deserve the WAN.
 - **Connections are persistent and warm** (zones to zones, zones to the cloud), so TCP slow start does not distort transfer times. Stated as an assumption.
+
+**The radio rate.** The rate of a car at distance ℓ from the access point follows from free-space path loss and the Shannon capacity, with f_c the carrier frequency, c the speed of light, G the antenna gains and N₀ the noise density:
+
+```latex
+R_{car} = B_{radio} \log_2\!\left(1 + \frac{P_{radio}\, G}{PL(\ell)\, N_0\, B_{radio}}\right), \qquad PL(\ell) = \left(\frac{4 \pi\, \ell\, f_c}{c}\right)^{2}
+```
+
+With 40 MHz, 1 W, 5 + 5 dBi, −174 dBm/Hz and 5.9 GHz this gives 930 Mbit/s at 10 m and 540 Mbit/s at 300 m. Source: the radio model of the VFC environment [2] and Shannon [13].
 
 ### 4.3 Known and estimated parts
 
@@ -166,6 +234,8 @@ Bandwidths and mean delays are configuration (provisioned in the real world). On
 Then the agent's network estimates are T̂_in,k = Ŵ^pipe_k + S ÷ B_k + δ̄_k (0 for here; for the cloud Ŵ^pipe = own backhaul pipe wait + Ŵ_WAN, B = B_WAN because the narrowest link sets the rate while packets flow through both links at once, and δ̄ = δ̄_bh + δ̄_WAN) and T̂_ret,k = the sum of mean delays on the result path.
 
 ## 5. Messaging and time
+
+> **Purpose.** Fix what is sent, on which channel, and how deadlines survive unsynchronised clocks. **Inputs.** The events of a task's life (upload, placement, result, confirmation) and each node's state. **Outputs.** 8 MQTT topics for small control messages, 6 HTTP and WebSocket calls for bulk data and for the car, time budgets instead of clock times, and identifiers that need no central database.
 
 ### 5.1 Why MQTT, and what goes where
 
@@ -243,6 +313,8 @@ In fast mode every epoch is 0 and ids are deterministic, so the tie rule "then t
 
 ## 6. Lifecycle of a task
 
+> **Purpose.** Follow one task from its creation to the reward. **Inputs.** A task created on a car. **Outputs.** A result delivered to the car (or a drop), a confirmation with the measured latency L, and one training sample per attempt. The three deadline equations of this section are the only place where time crosses from one machine to another.
+
 Three loops run all the time: **GPS** (each car → its serving zone every 100 ms; the zone publishes car/{id}/gps), **state** (each zone publishes zone/{id}/state every 100 ms; neighbours keep the newest version), **learning** (agents learn from every closed attempt; FedAvg rounds in phase 2). A task then goes through five phases.
 
 ### A. Intake (at the anchor)
@@ -275,7 +347,7 @@ T^{bud}_k = d_A - t_{send} - \hat{T}_{in,k} - \hat{T}_{ret,k}
 The anchor records the send as pending. The executor sets its local deadline d_k = arrival + T^bud_k. This is exact when the input takes its estimated time; if it takes longer (mainly a WAN-wait error), d_k is late by that error. The cost is bounded: a hard result that reaches the car after D counts as a drop (no ack by the end), so the error can waste a slot but never turns a miss into a success. For here, d_k = d_A − T̂_ret,here.
 
 10. **Accept or refuse.** The executor picks the slot type and answers at once: accepted (slot type, its wait estimate, snapshot) or refused (full or late, snapshot). A refusal leads to one re-decision (section 9.2). After acceptance the anchor starts the watchdog.
-11. **Queue and run.** The task waits in the queue of its slot type, then holds one slot for its whole run (section 8). A zone that accepted a task never forwards it (N12).
+11. **Queue and run.** The task waits in the queue of its slot type, then holds one slot for its whole run (section 8). A zone that accepted a task never forwards it.
 
 ### D. Delivery
 
@@ -290,6 +362,8 @@ The anchor records the send as pending. The executor sets its local deadline d_k
 
 ## 7. The decision maker
 
+> **Purpose.** Choose where a task runs. **Inputs.** The task, the time table, the state store, the car's predicted exit time. **Outputs.** One of 6 placements, or a drop when nothing can work. It has three stages in a fixed order: a rule (TOF-Broker), a filter (masks), and a learned choice (the agent).
+
 Order of checks for every task: intake → TOF-Broker → masks → agent → send and accept → run → delivery → reward. Fixed rules are written in code; only the choice among unmasked options is learned.
 
 ### 7.1 TOF-Broker [fixed]
@@ -297,6 +371,16 @@ Order of checks for every task: intake → TOF-Broker → masks → agent → se
 1. **Boulder** if T̄^run_strong ≥ α_TOF · D, where T̄^run_strong is the mean run time of the task type on the strongest fog hardware class, on its fastest slot type. "Strongest fog class" is a deployment constant, so the rule needs no fog state. Inspired by Tof-NSGAII (Mokni & Yassa 2024), which marks a task "intensive" when its cost ÷ the fog node's capacity ≥ 1. PCNME compares with the deadline instead, because a task can fit a fog node and still miss its deadline there.
 2. **α_TOF = 0.8 by default**: if even the best fog run takes 80 % of D, less than 20 % is left for queue, transfer and return. The final α_TOF comes from a sweep {0.5, 0.65, 0.8, 1.0} in fast mode on S2 and S4 (best on-time rate).
 3. **Boulders go to the cloud**, never to a fog queue. A boulder is dropped at intake when the cloud fails the same "cannot meet the deadline" test as the mask (7.2): T̂_in,cloud + T̄^run_cloud + T̂_ret,cloud > time left for a hard task, > time left + L_max for a soft one (the cloud never queues). No agent decision is made, so no transition is stored.
+
+**The rule as an equation.**
+
+```latex
+\text{boulder} \iff \bar{T}^{run}_{strong} \;\ge\; \alpha_{TOF} \cdot D, \qquad \alpha_{TOF} = 0.8
+```
+
+**Worked example.** A 60-frame clip (T2) runs 3.87 s on a fog GPU slot. With the loose deadline D = 6 s the threshold is 4.8 s, so it is a pebble and the agent places it. With the tight deadline D = 4.26 s (1.1 × its run time) the threshold is 3.40 s, so it is a boulder and goes to the cloud, where it runs in 0.66 s. A frame (T1: 22.6 ms against D = 50–100 ms) is always a pebble.
+
+**Source.** Sorting tasks by their requirement before the optimiser comes from Tof-NSGAII [4], which splits by fog capacity. Splitting by deadline, and the names boulder and pebble, are PCNME's own.
 
 ### 7.2 Masks [fixed]
 
@@ -317,9 +401,17 @@ An option is masked when:
 | Cannot run | 𝒬_k is empty because no slot type there can run the task (for example a GPU-only task, a node without a GPU) |
 | Cannot meet the deadline | Hard: T̂_in + Ŵ^queue + T̄^run + T̂_ret on q\* > time left. Soft: the same against time left + L_max |
 
+**The deadline mask as one inequality.** With t_left = d_A − t_now the time left on the anchor's clock, option k stays only if
+
+```latex
+\hat{T}_{in,k} + \hat{W}^{queue}_{k,q^*} + \bar{T}^{run}_{k,q^*} + \hat{T}_{ret,k} \;\le\; t_{left} \;(\text{hard}), \qquad \le\; t_{left} + L_{max} \;(\text{soft})
+```
+
+Each term comes from one model: T̂_in and T̂_ret from the link model (4.3), Ŵ^queue from the queue model (8.5), T̄^run from the time table (14.4).
+
 ### 7.3 The agent's choice [learned]
 
-The agent scores all 6 options and takes the best unmasked one. What a good agent ends up doing (intuition, not code): run here when it finishes in time cheaply (C2); run in the zone the car is heading to when the car would leave first, with a margin (C3); run on a less busy neighbour when it finishes earlier even after the transfer (C4); use the cloud only when it is truly better and the deadline allows the round trip (C5). C3 and C4 are the same action with different reasons; the cases explain why an action is picked, they are not separate mechanisms (N13).
+The agent scores all 6 options and takes the best unmasked one. What a good agent ends up doing (intuition, not code): run here when it finishes in time cheaply (C2); run in the zone the car is heading to when the car would leave first, with a margin (C3); run on a less busy neighbour when it finishes earlier even after the transfer (C4); use the cloud only when it is truly better and the deadline allows the round trip (C5). C3 and C4 are the same action with different reasons; the cases explain why an action is picked, they are not separate mechanisms.
 
 **If every option is masked**, the task is dropped at once, hard or soft, with the drop reward logged; no transition is stored, because no decision was made.
 
@@ -352,6 +444,8 @@ C6 (cloud super task) and C11 (steps split across nodes) were removed on 13 Octo
 6. In training, which neighbour sits in which position is shuffled per episode (section 13.6), so the network treats the 4 positions alike.
 
 ## 8. Queues and execution
+
+> **Purpose.** Say how a node runs the tasks placed on it and how long a new task will wait. **Inputs.** The tasks placed on the node, each with its class, deadline and slot types; the time table. **Outputs.** Which task each free slot takes; accept or refuse; the published queue state (n^busy_q, T^rem_q,j, Ω_q); the wait estimate Ŵ^queue_q that masks and agent use.
 
 Queue waiting is what makes overload real. It comes from fixed slots on every node and from the shared pipes (section 4). Every node, fog or cloud, runs the same scheduler, in fast mode and on the testbed. See it animated in the Fog Node Queue Lab (example numbers).
 
@@ -402,7 +496,11 @@ Per slot type with c_q > 0: c_q, n^max_q, n_q^hard, n_q^soft, Ω_q^hard and Ω_q
 \sum_{j=1}^{c_q} \max(0,\; \hat{W}^{queue,hard}_q - T^{rem}_{q,j}) = \Omega_q^{hard}, \qquad \sum_{j=1}^{c_q} \max(0,\; \hat{W}^{queue,soft}_q - T^{rem}_{q,j}) = \Omega_q^{hard} + \Omega_q^{soft}
 ```
 
-For c_q = 1 this is T^rem + Ω, exact in the mean; with equal T^rem_q,j it equals the pooled (R_q + Ω) ÷ c_q, which it replaces because one long run (a 3.9 s T2 on one GPU slot) would be spread over every slot and the wait overestimated several times over. It treats queued work as divisible, so it can underestimate by up to one task's run per slot. The hard estimate assumes the new task waits behind every queued hard task. The soft one ignores hard tasks that arrive later (optimistic); the status probe covers that (section 9.3). The anchor's own pending sends (R1) are added to the backlog of their class on their q*. The executor's own estimate (8.3) is the same function on its exact state, without pending sends.
+For c_q = 1 this is T^rem + Ω, exact in the mean; with equal T^rem_q,j it equals the pooled estimate (the sum of the remaining times plus Ω, divided by c_q), which it replaces because one long run (a 3.9 s T2 on one GPU slot) would be spread over every slot and the wait overestimated several times over. It treats queued work as divisible, so it can underestimate by up to one task's run per slot. The hard estimate assumes the new task waits behind every queued hard task. The soft one ignores hard tasks that arrive later (optimistic); the status probe covers that (section 9.3). The anchor's own pending sends (R1) are added to the backlog of their class on their q*. The executor's own estimate (8.3) is the same function on its exact state, without pending sends.
+
+**Worked example.** A slot type has c_q = 2 slots with remaining times T^rem = 10 ms and 30 ms, and a backlog Ω_q = 40 ms. The equation asks for the level Ŵ at which the backlog fills both slots: (Ŵ − 10) + (Ŵ − 30) = 40, so Ŵ = 40 ms. Check: the first slot is free at 10 ms and works on the backlog for 30 ms; the second is free at 30 ms and works for 10 ms; together 40 ms of backlog, finished at 40 ms. Pooling the two slots as one would give (10 + 30 + 40) ÷ 2 = 40 ms here, but with remaining times of 5 ms and 80 ms and the same backlog the water level is 45 ms (the first slot alone clears the backlog) while pooling says 62.5 ms: pooling makes the task wait for a slot it does not need.
+
+**Why an estimate is enough.** The estimate uses mean run times and ignores later arrivals with earlier deadlines. Its error is corrected twice: the executor checks the deadline again on arrival and refuses if it cannot hold (9.2), and the agent learns from the reward what the estimate hides.
 
 ### 8.6 Dropping and aborting
 
@@ -425,9 +523,11 @@ Queue orders compared (cheap experiment): FIFO; classes with FIFO inside; the fu
 
 ## 9. Failures, refusals, retries and cleanup
 
+> **Purpose.** Make every failure end in a defined state. **Inputs.** An attempt that was refused, lost, late or duplicated; a zone or a car that disappeared. **Outputs.** A retry, a cancel or a drop, each with its reward, and no task, slot or subscription left behind.
+
 ### 9.1 One table of failure rules
 
-Each failure has its own rule because each has a different cause (N14).
+Each failure has its own rule because each has a different cause.
 
 | What went wrong | Rule |
 | --- | --- |
@@ -518,6 +618,8 @@ If the anchor zone dies, the tasks it owns are lost: the car may still get a res
 
 ## 10. Mobility and result delivery
 
+> **Purpose.** Deliver the result to a car that has moved, and tell the agent where the car is going. **Inputs.** The car's GPS (position x_car, velocity v) every 100 ms; the zones' coverage circles. **Outputs.** The exit time T_exit and the next zone (6 of the agent's 48 inputs); the result pushed by whichever zone serves the car when it is ready.
+
 The result is published once and the broker delivers it to whichever zone serves the car, so every result can find the car. The prediction only decides where to run a task: a wrong prediction costs time, never the result.
 
 ### 10.1 GPS and the anchor
@@ -526,7 +628,7 @@ The result is published once and the broker delivers it to whichever zone serves
 - The anchors of the car's open tasks receive it wherever the car is, so they always know its current zone. The car never needs to know where its anchors are.
 - The anchor recomputes the prediction on every GPS update. A running task is never moved (live migration is out of scope).
 - In a real 5G network the core already knows each car's cell; the anchor's GPS tracking is PCNME's explicit version of that, and GPS is what makes prediction possible.
-- At city scale GPS is the largest MQTT load: it grows with cars, not zones (10 000 cars × 10 updates per second = 100 000 messages per second). Ways to reduce it: fewer updates far from a zone edge, or GPS only for cars with open tasks (N5). Cite EMQX cluster benchmarks; do not claim unchecked numbers.
+- At city scale GPS is the largest MQTT load: it grows with cars, not zones (10 000 cars × 10 updates per second = 100 000 messages per second). Ways to reduce it: fewer updates far from a zone edge, or GPS only for cars with open tasks. Cite EMQX cluster benchmarks; do not claim unchecked numbers.
 
 ### 10.2 The mobility predictor
 
@@ -537,6 +639,8 @@ Supervised, not RL: where the car went is known afterwards. A swappable module:
 3. LSTM/GRU on GPS history: an extension, only with realistic routes (real traces or SUMO); random turns cannot be learned. Learned trajectory prediction (MATM, PODRL, MAPSM) is cited, not claimed.
 
 Proactive placement in the next zone (C3) needs a safety margin: the car must clearly leave before the result is ready.
+
+**Where the exit-time formula comes from.** The car at x_car moving with velocity v is at x_car + v·t after t seconds. It leaves the zone when its distance to the centre x_z equals the radius ℓ_z: |x_car + v·t − x_z|² = ℓ_z². This is a quadratic in t, and T_exit is its positive root. With v = 0 there is no root, so T_exit is infinite: a stopped car never leaves.
 
 ### 10.3 How a result reaches the car
 
@@ -560,6 +664,8 @@ Why the executor publishes, not the anchor: it saves one backhaul hop (2–5 ms,
 | During execution | Move a half-run task (live migration) | Future work |
 
 ## 11. The agent
+
+> **Purpose.** Learn which placement is best in each situation. **Inputs.** The state s: 48 numbers built from the zone's own memory. **Outputs.** 6 action values Q(s, a); the action is the unmasked option with the largest value. **Feedback.** One reward r per attempt, known when the task closes.
 
 One D3QN (double + dueling deep Q-network) per fog zone, all starting from the same pretrained network. No agent on the cars and no global agent. An LSTM is added only if an experiment shows that load history helps.
 
@@ -604,6 +710,14 @@ A masked option still gets its numbers (zeros where unknown); the mask removes i
 | 1–4 Neighbour k | POST /tasks to the zone in position k |
 | 5 Cloud | POST /tasks to the cloud through the WAN pipe |
 
+**The network.** Two hidden layers of 256 units feed two heads: a value V(s) and an advantage A(s, a) for each of the 6 actions. They are combined as
+
+```latex
+Q(s, a) = V(s) + A(s, a) - \frac{1}{6} \sum_{a'} A(s, a')
+```
+
+V says how good the situation is whatever is chosen; A says how much better one option is than the average option. Separating them helps here because in many states (an idle system) every option is fine and only V matters. Source: the dueling network [18].
+
 ### 11.3 The RL step
 
 1. One step = one placement decision at an anchor: a task's first decision, or a re-decision after a refusal or a lost attempt.
@@ -639,7 +753,29 @@ w and 1 − w come from the knee (section 13.3). Every reward is r_ok minus the 
 
 **Latency L** = radio upload + forwarding + queue wait + run on the slot type used + result return, measured end to end by the car from task creation.
 
+**The reward as equations.** Two unit-free costs are computed for each task, and the reward is their weighted sum subtracted from a bonus:
+
+```latex
+C^{time} = \begin{cases} \dfrac{L}{D} + w_3\, \dfrac{\max(0,\; L - D)}{D} & \text{delivered} \\[2mm] C_{drop} = 1 + (1 + w_3)\, \dfrac{L_{max}}{D} + C_{pen} = 5 & \text{dropped} \end{cases}
+```
+
+```latex
+C^{en} = \begin{cases} \min\!\left( \dfrac{E}{E_{ref}},\; C^{en}_{max} \right) & \text{delivered} \\[2mm] C^{en}_{max} & \text{dropped} \end{cases}
+```
+
+```latex
+r = r_{ok} - w \cdot C^{time} - (1 - w) \cdot C^{en}, \qquad r_{ok} = 1
+```
+
+**Property: a drop is never the cheap choice.** The worst delivery is a soft task delivered L_max = D late: C^time = 2 + w3 = 3, and C^en ≤ C^en_max. A drop has C^time = 5 and C^en = C^en_max. So a drop is worse than any delivery in both costs, for every weight w. Neither the optimiser nor the agent can learn to drop tasks to save energy.
+
+**Why divide by D and by E_ref.** A 50 ms frame and a 6 s clip differ by a factor of 120 in time and 250 in energy. Dividing by the task's own deadline and reference energy puts every task on the same scale, so one weight w serves all task types.
+
+**Source.** Charging a failed task for its energy follows QECO [6]. The two unit-free costs, the cap and the property above are PCNME's own.
+
 ## 12. Energy
+
+> **Purpose.** Give every placement an energy. **Inputs.** Sizes S and S_res (bit); energy per bit of the links crossed (J/bit); the slot's mean dynamic power P̄ (W); the site's PUE; the run time (s). **Outputs.** The energy E_k of an attempt (J), its estimate Ê_k before placing, and the reference E_ref that makes it unit-free.
 
 ### 12.1 Whose energy
 
@@ -672,10 +808,23 @@ E_k = E^{fwd}_k + E^{exec}_{k,q} + E^{ret}_k
 - **No WAN energy penalty factor:** the WAN's own per-bit energy makes the cloud cost more. (This also removes the clash with Paper 1's α, which means something else.)
 - **Energy per run, not data-sheet power:** with 2 slots on one GPU each stream draws part of its power; measuring at the real slot setup captures that. Real world: RAPL (CPU) and nvidia-smi (GPU). Fast mode and testbed: from the time table.
 
+**Worked example: one T1 frame (S = 608 kbit, S_res = 24 kbit).**
+
+| Option | Forwarding | Execution | Return | E_k | E_k ÷ E_ref |
+| --- | --- | --- | --- | --- | --- |
+| Own node, GPU slot | 0 | 1.5 × 0.914 J = 1.371 J | 0.0001 J | 1.37 J | 1.00 |
+| Own node, CPU slot | 0 | 1.5 × 41.7 W × 69.5 ms = 4.35 J | 0.0001 J | 4.35 J | 3.17 |
+| Neighbour, GPU slot | 0.0001 J | 1.371 J | 0.0001 J | 1.37 J | 1.00 |
+| Cloud, GPU slot | 0.0002 J | 1.1 × 150 W × 9.1 ms = 1.50 J | 0.0001 J | 1.50 J | 1.10 |
+
+Execution dominates: the network terms are about 0.01 % of the total. The conflict between latency and energy therefore does not come from distance. It comes from the slot type (a free CPU slot finishes sooner than a busy GPU queue, at three times the energy) and from the cloud.
+
+**Source.** The structure follows the base paper [1], Eq. 1–9: the energy of a request is the transmission energy of its bytes to the executor, the processing energy, the share forwarded to the cloud, and the energy to send the response back. PCNME keeps the per-bit transmission terms and replaces the per-byte processing energy of [1] (a mix of idle and busy power, its Eq. 4 and 9) with the measured dynamic power of the slot times its run time; idle power is left out of the decision and reported separately (12.6). The per-bit energies, the cloud power and the PUE values come from Behbehani et al. [3] and the Uptime survey [14]. The fog slot energies are measured.
+
 ### 12.3 E_ref
 
 ```latex
-E_{ref}(\text{type}) = PUE_{fog} \cdot \bar{P}_{ref,q_{ref}} \cdot \bar{T}_{ref,q_{ref}} + E^{ret}_{here}
+E_{ref}(\text{type}) = PUE_{fog} \cdot \bar{P}_{ref} \cdot \bar{T}^{run}_{ref} + E^{ret}_{here}
 ```
 
 The energy of running that task type locally on the reference fog class, on its fastest slot type. E/E_ref = 1 means "as costly as running it here on a standard fog node". It is fixed, so the reward's scale never drifts. C^en_max = the largest Ê_k ÷ E_ref over every task type and option, computed with the p95 run time from the time table and the link energies. It caps every energy ratio in the inputs, the reward and NSGA-II; being the worst case, it only ever clips rare retries.
@@ -706,6 +855,8 @@ Dynamic energy per task split into forwarding, execution and return; car upload 
 
 ## 13. The learning pipeline
 
+> **Purpose.** Give the agent a good policy before its first real decision, then keep improving it. **Inputs.** Windows of tasks from each scenario; the costs C^time and C^en; the simulator. **Outputs.** A Pareto front of plans per window; its knee point; the weight w\*; demonstrations (s, a, r, s′, Δt); the pretrained network; in phase 2 a shared model.
+
 ### 13.1 Overview
 
 Offline, in fast mode: NSGA-II plans windows of tasks → the knee plan and the whole front become demonstrations → DQfD-style pretraining of one global D3QN. Online, in every zone: the same network decides and keeps learning; FedAvg averages the zones in phase 2.
@@ -726,6 +877,14 @@ C^time = L/D + w3 · max(0, L − D)/D for a delivered task; for a dropped task 
 5. **No hard constraint:** under overload drops are unavoidable, and a feasibility constraint would collapse the front onto the fewest-drop plans. The drop cost keeps "any drop is worse than any delivery", as in the reward.
 6. **Operators:** tournament selection, crossover, and a mutation that moves a task to another valid option (no arithmetic on node ids). Plain NSGA-II in pymoo. **Initial population** (CHANGES C9): the greedy plan, an energy-greedy plan (each window task's first decision takes the open option with the lowest Ê, 12.4, i.e. the cheapest that meets the deadline), and mutated copies of both (the same mutation operator) fill half of it; the rest are random valid plans. NSGA-II is elitist, so no point of the final front is dominated by the greedy plan. MMDE / DE mutation (used in Paper 1) is not used: it builds new genes by arithmetic, V = X₁ + F · (X₂ − X₃), which needs genes on a numeric scale, while PCNME's genes are categorical actions relative to each task's anchor, so a difference such as "Nb3 − Nb1" has no meaning.
 
+**The problem in one statement.** For one window with N_task tasks, find the placements a = (a₁, …, a_N) that minimise both objectives at once:
+
+```latex
+\min_{a \in \{0,\dots,5\}^{N_{task}}} \; \big( f_1(a),\; f_2(a) \big), \qquad f_1 = \text{mean } C^{time}, \quad f_2 = \text{mean } C^{en}
+```
+
+No single plan is best in both, so the answer is a set: the Pareto front, the plans where one objective cannot improve without the other getting worse. The two objectives are the same two costs as in the reward (11.4), so the expert and the agent pursue one goal.
+
 ### 13.3 The knee point and the weight w
 
 Knees as a concept: Branke et al. 2004, whose angle measure also uses the slopes to the two neighbours. The farthest-from-the-line rule is Das 1999, as used in KnEA (Zhang, Tian, Jin 2015, Eq. 4–5), which keeps only points on the convex side; KnEA applies it inside small neighbourhoods, PCNME takes the single knee of the final front. Normalise the final front: f̃_i = (f_i − f_i^min) ÷ Δf_i, with Δf_i = f_i^max − f_i^min. The knee is the front point farthest from the line through the two extremes, which on normalised axes is the point with the smallest f̃₁ + f̃₂. The local slope at the knee, from its two neighbours on the front sorted by f̃₁ (one-sided at an end), gives the weight on normalised axes:
@@ -744,6 +903,12 @@ w = \frac{\tilde w / \Delta f_1}{\tilde w / \Delta f_1 + (1-\tilde w)/\Delta f_2
 - **Every front point p** gets its own w_p by the same formulas, for training conditioned on w (the supervisor's request).
 - **Limitation:** if the front is not convex around the knee, no weighted sum selects exactly that point; the reward then asks for the nearest trade-off while the margin loss still teaches the knee's actions.
 
+**Reading the formulas.** σ is the exchange rate at the knee: how many units of normalised energy the front gives up for one unit of normalised latency. A weighted sum w̃·f̃₁ + (1 − w̃)·f̃₂ has its minimum where the front's slope equals w̃ ÷ (1 − w̃); setting that equal to σ gives w̃ = σ ÷ (1 + σ). The last formula undoes the normalisation, because the reward uses the costs themselves.
+
+**What the runs gave.** w\* = 0.414 on the VFC grid (27 of 36 windows have a knee) and 0.344 on LuST (22 of 36). The window weights are widely spread, with quartiles near 0.0005 and 0.72 on the grid and about a third below 0.01, where the front is almost flat in energy. One median weight is a simplification and is listed as a limitation.
+
+**Source.** NSGA-II: Deb et al. [7], run with pymoo [21]. The knee as the point farthest from the line through the extremes: Das [8], as used in KnEA [9]; the concept: Branke et al. [20]. Turning the slope at the knee into the reward weight is PCNME's own step.
+
 ### 13.4 From plans to demonstrations
 
 1. Replay the knee plan in fast mode with the agent's input builder on. At each decision record s (48 inputs with w = the knee's weight), a = the plan's gene, then r, s' and Δt from the same replay with the online reward function.
@@ -758,6 +923,21 @@ w = \frac{\tilde w / \Delta f_1}{\tilde w / \Delta f_1 + (1-\tilde w)/\Delta f_2
 - **Online:** every zone keeps learning from its own closed attempts. The expert transitions stay in the replay buffer for good, in a part that is never overwritten. Prioritized replay (α_PER = 0.4, β_PER = 0.6, priority bonus ε_d = 1.0 on expert and ε_a = 0.001 on own transitions) decides how often they are drawn, so their share follows how much they still teach. The margin loss applies to them only. DQfD's own ablations show that dropping the n-step or the margin loss each hurts badly, and Maus et al. 2025 found that preloading demonstrations into a DQN's replay alone gave nothing. The earlier rule (expert share shrinks, margin fades, close to Zhang et al.'s Fading-BC) is kept as an ablation (16.4). Online learning fixes the distribution shift (states the expert never showed).
 - IQL (offline RL) stays as an ablation.
 - Limitation: the expert is clairvoyant. With common random numbers an NSGA-II plan sees the window's future arrivals, run times and delays, which the agent never sees, so some expert actions have reasons that are not in s. The TD and n-step losses and online learning correct those; the greedy-expert baseline and the expert filter (16.4) measure the effect (Maus et al. 2025).
+
+**The loss as an equation.**
+
+```latex
+J = J_{DQ} + \lambda_1 J_n + \lambda_2 J_E + \lambda_3 J_{L2}, \qquad J_E = \max_{a \in \mathcal{A}(s)} \big[ Q(s, a) + m_E \cdot \mathbb{1}(a \ne a_E) \big] - Q(s, a_E)
+```
+
+| Term | What it does |
+| --- | --- |
+| J_DQ | The one-step loss on the target of 11.3: makes the values consistent with the rewards |
+| J_n | The same with a 10-step return: carries a late reward back faster |
+| J_E | The margin loss: pushes the expert's action a_E above every other action by at least m_E = 0.8. It is zero once the expert's action is already the best by that margin |
+| J_L2 | Weight decay: keeps the network from fitting the small demonstration set too closely |
+
+Without J_E the network would learn values only for the actions the expert took and could rate the others arbitrarily high. Without J_DQ it would copy the expert without learning what the actions are worth, and could not improve online. Source: Hester et al. [10].
 
 ### 13.6 Neighbour order in training
 
@@ -781,7 +961,15 @@ In the third variant every transition trains both copies; the personal copy take
 
 **Where it is evaluated (16 Nov, QUESTIONS Q64).** Phase 2 is evaluated in fast mode only. On the testbed each learning zone's network lives in its trainer process (15.5), so FedAvg's upload, install and fine-tuning would run there; that is future work.
 
+**The averaging rule.** With θ_z the weights of zone z after local training and n_z its number of new samples in the round:
+
+```latex
+\theta^{(g+1)} = \frac{\sum_z n_z\, \theta_z}{\sum_z n_z}
+```
+
 ## 14. Workloads and tasks
+
+> **Purpose.** Define the tasks and how long they take. **Inputs.** Real camera frames (BDD100K) and real models (YOLOv8) on real hardware (GTX 1070). **Outputs.** The task types with their class, deadline, size and share; and the time table: mean run time, 5 % and 95 % quantiles and energy per run for each (task type, hardware class, slot type).
 
 ### 14.1 Task types
 
@@ -802,7 +990,7 @@ A task may be a small DAG, for example one frame: step 1 decode (CPU) → step 2
 
 ### 14.3 Inputs and bundles
 
-- **Each frame is compressed on the car as JPEG,** on its own (N10). Video coding is rejected: it makes frames depend on each other, so one task could not be decoded alone. Input size = the compressed size; step 1 decodes it on the executor. The encode time is inside L (the car's clock starts at creation).
+- **Each frame is compressed on the car as JPEG,** on its own. Video coding is rejected: it makes frames depend on each other, so one task could not be decoded alone. Input size = the compressed size; step 1 decodes it on the executor. The encode time is inside L (the car's clock starts at creation).
 - **Raw video is** far too heavy: one uncompressed 720p frame is about 2.8 MB (1080p about 6.2 MB). As JPEG (quality 80) a BDD100K 720p frame is 76 KB on average (5–95 %: 34–127 KB, measured on 300 frames in the calibration run), and even then 30 frames per second is about 18 Mbps per car (8–30 Mbps). Compression makes every pipe carry more tasks per second, so the bandwidths are chosen with the compressed sizes.
 - **Bundles at the car** (for example 60 frames = 2 s of video, 6–18 MB as JPEG) fit soft analytics only: the first frame already waited 2 s. For real-time work the usual trick is detecting every Nth frame and tracking in between.
 
@@ -813,6 +1001,8 @@ One row per (task type, hardware class, slot type): mean, p5 and p95 of the run 
 # Part II — The evaluation environment
 
 ## 15. Fast mode and the Docker testbed
+
+> **Purpose.** Evaluate the same code in two ways. **Inputs.** A configuration, a scenario, a method and a random seed. **Outputs.** In fast mode (a discrete-event simulation), a bit-identical event log per seed in seconds of computing: used for all training and for the 960 evaluation runs per map. On the Docker testbed (real MQTT and HTTP over shaped networks), the same metrics in real time: used to measure the gap between simulation and a running system.
 
 ### 15.1 Real world vs evaluation
 
@@ -893,6 +1083,8 @@ Later and optional: a live map dashboard (cars, zone circles coloured by load) f
 
 ## 16. Experiments
 
+> **Purpose.** Say what is compared, under which load, and how it is measured. **Inputs.** 8 methods, 6 scenarios, 2 maps, 20 random seeds. **Outputs.** On-time share, latency, energy per task, refusal rate and decisions until stable, each as a mean with a 95 % interval and paired tests. The numbers are in Appendix B.
+
 ### 16.1 Methods compared
 
 Every learning method runs its own algorithm inside PCNME's zone agent, with the same 48 inputs, 6 actions, masks, reward and time-based discount, and the same training budget in decisions. These are algorithm-level reimplementations in PCNME's setting, and the thesis says so: the original papers decide on the device.
@@ -913,7 +1105,7 @@ Fairness: the same scenarios, seeds and online budget on the testbed for every m
 
 ### 16.2 Scenarios
 
-Designed by load, not by number of cars. Two exact definitions: ρ_fog = the city-mean arrival rate per zone × the mix's mean GPU run on F-GPU ÷ c_GPU (the load if every task of the whole mix, boulders included, ran on its anchor's GPU; so S2 and S4–S6 have the same arrival rate and differ only in deadlines, mobility or fog hardware, and in S4–S6 the real fog load is lower because T2 goes to the cloud), and TI_WAN = the cloud-eligible bits per second (soft tasks and boulders) ÷ B_WAN (the WAN load if all of them went to the cloud). One B_WAN, set so that TI_WAN = 0.9 at ρ_fog = 0.9, gives TI_WAN = ρ_fog in S1–S3, because both scale with the arrival rate. The arrival rate per car is divided by the share of task creations made with coverage, measured once per map by a short positions-only calibration run (tag C, QUESTIONS Q29), so that the creations that reach a zone meet ρ_fog; a frame made in a coverage gap is reported as uncovered, apart from the method's drops. The hotspot (40 % of cars through z1) puts z1 at 1.6 × the mean load in every scenario: a share h_hot of the cars stays on the roads between z1's intersections and the rest roam the whole map, with h_hot set by the same calibration run so that z1 holds 40 % of the covered load (tag C, QUESTIONS Q30). With these deadlines a hard task cannot reach the cloud in time (T1: about 140 ms mean round trip against D = 100 ms), so the cloud serves soft tasks and boulders only, which is the reason fog exists (N9).
+Designed by load, not by number of cars. Two exact definitions: ρ_fog = the city-mean arrival rate per zone × the mix's mean GPU run on F-GPU ÷ c_GPU (the load if every task of the whole mix, boulders included, ran on its anchor's GPU; so S2 and S4–S6 have the same arrival rate and differ only in deadlines, mobility or fog hardware, and in S4–S6 the real fog load is lower because T2 goes to the cloud), and TI_WAN = the cloud-eligible bits per second (soft tasks and boulders) ÷ B_WAN (the WAN load if all of them went to the cloud). One B_WAN, set so that TI_WAN = 0.9 at ρ_fog = 0.9, gives TI_WAN = ρ_fog in S1–S3, because both scale with the arrival rate. The arrival rate per car is divided by the share of task creations made with coverage, measured once per map by a short positions-only calibration run (tag C, QUESTIONS Q29), so that the creations that reach a zone meet ρ_fog; a frame made in a coverage gap is reported as uncovered, apart from the method's drops. The hotspot (40 % of cars through z1) puts z1 at 1.6 × the mean load in every scenario: a share h_hot of the cars stays on the roads between z1's intersections and the rest roam the whole map, with h_hot set by the same calibration run so that z1 holds 40 % of the covered load (tag C, QUESTIONS Q30). With these deadlines a hard task cannot reach the cloud in time (T1: about 140 ms mean round trip against D = 100 ms), so the cloud serves soft tasks and boulders only, which is the reason fog exists.
 
 | Scenario | Traffic intensity | Deadlines | Mobility | Shows |
 | --- | --- | --- | --- | --- |
@@ -926,9 +1118,23 @@ Designed by load, not by number of cars. Two exact definitions: ρ_fog = the cit
 
 City maps (decided 27 Oct, N19): the VFC grid, simple and complex (traffic lights, random stops), for development and the S1–S3 checks; a LuST crop (SUMO, 1.2 × 1.2 km of central Luxembourg, with the same zone layout as the grid, 18) for the final results. SUMO runs once per scenario; its trajectories (FCD output, 100 ms) are replayed in fast mode and by the car containers, with no live coupling, so both runtimes see the same cars. A peak window for S3 and S5, off-peak for S1. Fallback: TAPASCologne or Bologna. Real routes also make the LSTM predictor option possible (10.2). Run S1–S3 first: if the WAN pipe does not congest in S3, stop and debug the queueing.
 
+**The two load numbers as equations.** With λ_zone the task arrival rate of one zone, T̄^run_mix the mean GPU run time of the task mix and c_GPU the number of GPU slots:
+
+```latex
+\rho_{fog} = \frac{\lambda_{zone} \cdot \bar{T}^{run}_{mix}}{c_{GPU}}, \qquad TI_{WAN} = \frac{\text{bits sent to the cloud per second}}{B_{WAN}}
+```
+
+Below 1 the queue keeps up; at or above 1 it grows without limit. With c_GPU = 2 and the calibrated mix, ρ_fog = 0.9 means 38.9 tasks per second per zone.
+
 ### 16.3 Metrics and statistics
 
-Shares delivered on time, late, dropped and failed; mean, p99 and worst-1 % latency; dynamic and total energy; refusal rate; wasted-attempt energy; delivery success after a zone change; next-zone acc@1 and T_exit error; decisions until the on-time rate is stable; for NSGA-II the hypervolume of the fronts; load balance as Jain's fairness index over zone loads, with a per-zone load chart; the agent's mean (latency, energy) point on the NSGA-II front of the same windows and its distance to it; the demonstration up-sample ratio (how often expert transitions are drawn compared with uniform sampling, as in DQfD's Fig. 1); early-stage performance = the mean over the first N online decisions after deployment (Zhang et al.). Evaluation seeds are never used for planning that any method learns from, for demonstrations or for training (Maus et al.); the knee reference (16.1) plans on its evaluation seeds because it is a reference line that no method learns from, and runs only for S2 and S4 on the first 5 evaluation seeds (CHANGES C10). Testbed: 5 seeds per scenario and method, mean ± 95 % confidence interval (Student t with 4 degrees of freedom, t = 2.78). Fast mode: 20 seeds (t = 2.09 with 19 degrees of freedom; N19). Fast mode and testbed are both reported on the same scenarios and seeds (the simulation-to-testbed gap).
+Shares delivered on time, late, dropped and failed; mean, p99 and worst-1 % latency; dynamic and total energy; refusal rate; wasted-attempt energy; delivery success after a zone change; next-zone acc@1 and T_exit error; decisions until the on-time rate is stable; for NSGA-II the hypervolume of the fronts; load balance as Jain's fairness index over zone loads, with a per-zone load chart; the agent's mean (latency, energy) point on the NSGA-II front of the same windows and its distance to it; the demonstration up-sample ratio (how often expert transitions are drawn compared with uniform sampling, as in DQfD's Fig. 1); early-stage performance = the mean over the first N_early online decisions (N_early = 1 000) after deployment (Zhang et al.). Evaluation seeds are never used for planning that any method learns from, for demonstrations or for training (Maus et al.); the knee reference (16.1) plans on its evaluation seeds because it is a reference line that no method learns from, and runs only for S2 and S4 on the first 5 evaluation seeds (CHANGES C10). Testbed: 5 seeds per scenario and method, mean ± 95 % confidence interval (Student t with 4 degrees of freedom, t = 2.78). Fast mode: 20 seeds (t = 2.09 with 19 degrees of freedom; N19). Fast mode and testbed are both reported on the same scenarios and seeds (the simulation-to-testbed gap).
+
+**Two formulas.** Load balance is Jain's index over the zone loads x_z; every reported mean has a Student t interval over the n = 20 seeds with standard deviation s:
+
+```latex
+J = \frac{\left(\sum_z x_z\right)^2}{N_z \sum_z x_z^2}, \qquad \bar{x} \pm t_{0.975,\, n-1} \cdot \frac{s}{\sqrt{n}}
+```
 
 ### 16.4 Ablations and extra experiments
 
@@ -996,7 +1202,7 @@ One sentence each in the thesis.
 - A result counted as a drop that the car actually received (every ack lost) is possible but very rare; it is counted from the car's log.
 - The NSGA-II expert is clairvoyant within its window (13.5).
 
-## 18. Numbers (defaults, 27 Oct)
+## 18. Numbers
 
 Every number now has a default; together they form config/default.yaml. Tag: **P** = from a paper, **R** = chosen by the reason given, **C** = calibrated by the rule given (computed when the config loads, or in fast mode), **M** = measured in the calibration run (the value shown is a placeholder until then). The arithmetic that checks these values fit together is in calc_defaults.py; its results are quoted in the last column.
 
@@ -1040,7 +1246,7 @@ Every number now has a default; together they form config/default.yaml. Tag: **P
 | Fast mode | Episode length; seeds | 60 s; seed ranges 1000–1999 NSGA-II and demonstrations, 2000–2999 training, 3000–3999 evaluation (20 evaluation seeds, 5 on the testbed) | P | VFC (1 min); Maus et al. (disjoint seeds) |
 | FedAvg | T_fl; upload deadline; K | 60 s fast mode, 300 s testbed, 1 h real world; 30 s; 500 steps | R | One round per fast-mode episode |
 
-Reminders for that step: write every formula with its real-world and its simulation version; node load ρ_node and link TI both appear (N2, N3); the compressed frame sizes go into the time table next to the run times.
+Reminders for that step: write every formula with its real-world and its simulation version; node load ρ_node and link TI both appear; the compressed frame sizes go into the time table next to the run times.
 
 ## 19. Where each decision came from
 
@@ -1080,3 +1286,329 @@ Fix Holes holds the full reasoning, the rejected options and the real-world vs s
 | 16 Experiments | Hole 7; Tracker (scenarios, verification); hole 3 (state-period experiment); hole 23 Part H |
 | 17 Assumptions | Holes 16–19; Architecture (out of scope); N15 |
 | Literature reading (27 Oct): 1, 7.1, 13.3, 13.5, 16.1–16.4, 17, 18 | Fix Holes N19; PCNME — Literature Review |
+
+# Appendix A — Notation
+
+One base letter is one kind of quantity with one unit. Approved on 15 Nov 2026; the same table is `docs/NOTATION.md` in the repository.
+
+### Rules
+
+One base letter is one kind of quantity with one unit. The subscript says which instance.
+
+| Letter | Always means | Unit |
+| --- | --- | --- |
+| T | A duration that is computed, estimated or configured | s |
+| t | An instant on one machine's clock | s |
+| D, d | Deadline: D = its length, d = its instant on one clock | s |
+| W | A waiting time (in a pipe or in a queue) | s |
+| δ | A link delay | s |
+| L | Latency measured by the car | s |
+| S | A size | bit |
+| B | A bandwidth or bit rate of a link | bit/s |
+| E, e | Energy: E = of an attempt or task, e = per bit | J, J/bit |
+| P | Power | W |
+| C | A cost inside the objective and the reward | none |
+| n | A count (tasks, slots, places) | none |
+| w | The latency weight of the reward | none |
+| r, Q, s, a, γ | Reward, Q-value, state, action, discount | none |
+| ℓ | A length on the map | m |
+
+| Mark | Always means |
+| --- | --- |
+| x̂ (hat) | An estimate made before the fact |
+| x̄ (bar) | A mean from the configuration or the time table |
+| x^lo, x^hi | The 5 % and 95 % quantiles from the time table |
+| x̃ (tilde) | Normalised to the range of the Pareto front |
+| x* | The chosen one (q* the assumed slot type, w* the deployed weight) |
+
+| Index | Runs over |
+| --- | --- |
+| k | The 6 placement options: here, neighbour 1–4, cloud |
+| q | Slot types: GPU, CPU |
+| i | Tasks |
+| j | Slots of one type on a node; steps of the n-step return |
+| z | Zones |
+| g | FedAvg rounds |
+| p | Points of a Pareto front |
+
+Names are not symbols: S1–S6 (scenarios), T1–T6 (task types), C1–C14 (cases), z1–z5 (zones), R1–R3 (herding
+rules), F-GPU and F-CPU (hardware classes) never appear inside an equation and keep their names.
+
+### Old → new
+
+"Sections" are the sections of `docs/final-design.md` where the symbol appears.
+
+#### Run times, budgets and timers
+
+| Old | New | Meaning | Unit | Sections |
+| --- | --- | --- | --- | --- |
+| Ê_k,q | T̄^run_k,q | Mean run time of the task's type on option k, slot type q (time table) | s | 7.2, 8.3, 8.4, 11.1, 12.4 |
+| Ê_strong, Ê_cloud | T̄^run_strong, T̄^run_cloud | The same on the strongest fog class / on the cloud, fastest slot type | s | 7.1 |
+| Ê^low, Ê^high | T^run,lo, T^run,hi | 5 % and 95 % quantile of the run time | s | 8.4, 8.6, 9.3 |
+| T_run | T^run | The real busy time of the slot for one attempt | s | 12.2 |
+| B_car | T^bud_car | Time budget the car sends: D − time since creation | s | 5.3, 5.4, 6A, 9.7 |
+| B_k (budget) | T^bud_k | Time budget the anchor sends to executor k | s | 5.3, 6C |
+| Û_up | T̂_radio | Time the upload took on the radio, taken off the budget | s | 6A |
+| T_up,k | T^to_k | Upload timeout for a send to option k | s | 9.3 |
+| d_abort | T_abort | Longest step of the task on that slot type | s | 8.6, 12.2, 12.5, 14.2 |
+| A_max | T_age | Wait after which a soft task may be promoted | s | 8.4, 18 |
+| ℓ (in 9.3) | L_late | Lateness a class may have: 0 for hard, L_max for soft | s | 9.3 |
+| t_s | t_send | Instant the anchor starts a send | s | 6C, 9.3 |
+
+#### Links, waits and delays
+
+| Old | New | Meaning | Unit | Sections |
+| --- | --- | --- | --- | --- |
+| d, d_min, d_max | δ, δ_min, δ_max | Random delay drawn per transfer and its bounds | s | 4.1 |
+| d_bh, d_WAN | δ_bh, δ_WAN | The drawn delay on the backhaul / the WAN | s | 4.1 |
+| δ̂_radio, δ̂_reply, δ̂_pub | δ̄_radio, δ̄_reply, δ̄_pub | Configured mean delay of a link or path | s | 5.4, 6A, 9.3 |
+| ŵ_WAN | Ŵ_WAN | Moving-average estimate of the wait in the shared WAN pipe | s | 4.3, 5.2 |
+| ŵ_k | Ŵ^pipe_k | Estimated pipe wait on the way to option k | s | 4.3 |
+| Ŵ_k,q^κ, Ŵ_q | Ŵ^queue_k,q, Ŵ^queue_q | Estimated queue wait for the task's class; the class is written as a word (hard, soft) | s | 7.2, 8.3, 8.5, 9.3, 11.1 |
+| λ (WAN estimate) | η | Smoothing factor of the moving average | none | 4.3, 18 |
+| S_r | S_res | Size of a result (S stays the input size) | bit | 12.2 |
+| R_z | ℓ_z | Radius of a zone's coverage circle | m | 10.2, 18 |
+| l_nb | ℓ_nb | Largest centre distance that makes two zones neighbours | m | 7.5, 18 |
+| p, c (in 10.2) | x_car, x_z | Position of the car / centre of the zone | m | 10.2 |
+
+#### Slots and queues
+
+| Old | New | Meaning | Unit | Sections |
+| --- | --- | --- | --- | --- |
+| U_k | 𝒬_k | Set of slot types usable for this task on option k | none | 7.2 |
+| u_q | n^busy_q | Busy slots of type q | none | 5.2, 8.5 |
+| Q_q | n^max_q | Capacity of the queue of slot type q | none | 7.2, 8.2, 18 |
+| r (in 8.2) | n_res | Queue places kept for hard tasks | none | 7.2, 8.2, 18 |
+| h (in 7.2) | n_head | Headroom: places the mask keeps free at a neighbour | none | 7.2, 9.2, 18 |
+| B_q^hard, B_q^soft | Ω_q^hard, Ω_q^soft | Backlog: sum of the mean run times of the queued tasks of that class | s | 5.2, 8.5 |
+| r_q,i | T^rem_q,j | Remaining mean time of the task on slot j (0 if free) | s | 5.2, 8.5 |
+| n (in 4.2) | n_up | Uploads in progress on a zone's radio | none | 4.1, 4.2 |
+| "the soft task S" | the soft task i | A task is always i | none | 8.4 |
+
+#### Energy, cost and reward
+
+| Old | New | Meaning | Unit | Sections |
+| --- | --- | --- | --- | --- |
+| c^time | C^time | Time cost of a task: L/D plus the lateness term, or C_drop | none | 11.4, 13.2 |
+| ê | C^en | Energy cost of a task: min(E / E_ref, C^en_max) | none | 11.1, 11.4, 13.2 |
+| ē | C^en_max | Cap of the energy cost | none | 11.1, 11.4, 12.3, 13.2, 18 |
+| B (= 1) | r_ok | Reward bonus of a delivered task | none | 11.4, 18 |
+| P (= 2) | C_pen | Extra cost of a drop inside C_drop | none | 11.4, 13.2, 18 |
+| p̄_k,q | P̄_k,q | Mean dynamic power of a time-table row | W | 12.2, 12.3, 12.4, 18 |
+| w1, w2 | w, 1 − w | They were other names for the same number | none | 11.4, 13.3 |
+
+#### Learning
+
+| Old | New | Meaning | Unit | Sections |
+| --- | --- | --- | --- | --- |
+| s (in 13.3) | σ | Slope of the front at the knee (s stays the state) | none | 13.3 |
+| R_i | Δf_i | Range of objective i on the front: f_i^max − f_i^min | none | 13.3 |
+| N (in 13.2) | N_task | Tasks in one NSGA-II window | none | 13.2 |
+| N1–N4 (genes) | Nb1–Nb4 | Neighbour positions as gene values | none | 13.2 |
+| n (n-step) | n_step | Length of the n-step return | none | 13.5, 18 |
+| k (n-step sum) | j | Step inside the n-step return | none | 13.5 |
+| k (FedAvg) | g | FedAvg round | none | 5.2, 5.3, 13.7 |
+| l(a_E, a) = 0.8 | m_E | Margin of the expert loss | none | 13.5, 18 |
+| α (TOF-Broker) | α_TOF | Boulder threshold | none | 7.1, 16.4, 18 |
+| α, β0 (replay) | α_PER, β_PER | Prioritized-replay exponents | none | 13.5, 18 |
+| h (in 16.2) | h_hot | Share of cars kept on z1's roads | none | 16.2, 18 |
+| S1–S4 (DAG steps) | step 1–step 4 | Internal steps of a task | none | 14.2 |
+
+### Symbols that stay
+
+D, L, L_max, slack, d_A, d_k · t_now, t_free, t_rx, t_acc, t_wd · T_transfer, T̂_in,k, T̂_ret,k, T_exit, T_waste,
+T_win, T_warmup, T_fl, T_ack, T_probe, T_keep, T_leave, G, m_wd, τ, Δt · S, B, B_k (bandwidth), B_WAN, R_car,
+W_pipe, W_bh, W_WAN, W_radio, δ̄_k, TI, κ_up · ρ_fog, ρ_node, λ_car · c_q, n_q^hard, n_q^soft, q, q*, F_q ·
+E_k, E^fwd, E^exec, E^ret, Ê_k (energy), E_ref, E_waste, e_bh, e_wan, e_down, PUE, P_tx · w, w3, w̃, w_p, w*,
+C_drop, r, f₁, f₂, f̃ · s, a, s′, γ, Q(s, a), 𝒜(s), y, ε, K, H · J_DQ, J_n, J_E, a_E, λ1–λ3, ε_d, ε_a ·
+v, 𝒰(a, b), u.
+
+### Symbol → code
+
+(Filled by the notation sweep: for every symbol of section 2 that has one, its Python name, its config key and
+its message field.)
+
+| Symbol | Python name | Config key | Message field |
+| --- | --- | --- | --- |
+| T̄^run_k,q | `RunRow.mean` (node/timetable.py); `OptionView.run` (zone/decision.py) | `time_table_placeholder.<type>.<class>.<slot>` (`mean`, or the number alone) | — |
+| T̄^run_strong | `Derived.t_run_strong` (config.py) | computed from the time table and `tof.strongest_class` | — |
+| T̄^run_cloud | `TimeTable.fastest(task, "cloud")`, its row's `mean` (config.py) | `time_table_placeholder.<type>.cloud` | — |
+| T^run,lo, T^run,hi | `RunRow.low`, `RunRow.high`; `TimeRow.p5`, `TimeRow.p95` | `p5`, `p95` of a row; `time_table_placeholder.factors.p5` / `.p95` | — |
+| T^run | `Report.busy` (node/executor.py) | — | — |
+| T^bud_car | `Car.budget()` (car/car.py); `Upload.t_bud_car` (testbed/messages.py) | — | `t_bud_car` (testbed upload); `T_bud_car_ms` in 5.3 |
+| T^bud_k | `TaskRequest.budget` (node/executor.py); `budget` in zone/zone.py | — | `budget` (TaskRequest); `budget_ms` in 5.3 |
+| T̂_radio | `upload` in `anchor_deadline()` (zone/intake.py) | — | — |
+| T^to_k | `t_to` of the attempt (zone/zone.py) | `timing.kappa_up` (κ_up) | — |
+| T_abort | `RunRow.t_abort` | `t_abort` of a row; `time_table_placeholder.factors.t_abort` | — |
+| T_age | `Scheduler.t_age` (config.py) | `scheduler.T_age` | — |
+| L_late | `_cap()` (zone/zone.py): `l_max` for soft, 0 for hard | — | — |
+| t_send | `t_send` (agent/reward.py, experiments/city.py) | — | — |
+| δ, δ_min, δ_max | `hops.delay()` (net/hops.py) | `radio.delay`, `radio.downlink_delay`, `links.backhaul_delay`, `links.wan_delay` (each `[min, max]`) | — |
+| δ_bh, δ_WAN | `d_bh`, `d_wan` (net/series.py, zone/zone.py) | `links.backhaul_delay`, `links.wan_delay` | — |
+| δ̄_radio, δ̄_reply, δ̄_pub | `mean_radio_delay` (zone/intake.py); `_reply_delay()` (zone/zone.py); `StateStore.pub_delay` | the means of the delay intervals above; `links.broker_extra_delay` | — |
+| Ŵ_WAN | `StateStore.wan.estimate`, `Snapshot.wan_wait` (zone/statestore.py) | — | `wan_wait` (Snapshot); `wan_wait_ms` in 5.2 |
+| Ŵ^pipe_k | `wait` in `PathEstimates.t_in_cloud()` / the `backhaul_wait` argument (zone/estimates.py) | — | — |
+| Ŵ^queue_k,q, Ŵ^queue_q | `wait_estimate()` (node/state.py), `Executor.wait_estimate()`, `Accepted.wait`, `OptionView.wait` | — | `wait` (Accepted); `wait_ms` in 5.3 |
+| η | `StateStore.wan_eta`; `StatePlane.wan_ewma_eta` (config.py) | `stateplane.wan_ewma_eta` | — |
+| S_res | `TaskType.result_bits` (config.py) | `task_types.<type>.result_kb` | — |
+| ℓ_z | `Layout.zone_radius_m`; `Site.radius`, `ZoneStatus.radius` | `layout.zone_radius_m` | `radius` (zone status) |
+| ℓ_nb | `Layout.l_nb_m`; `NeighbourTable.l_nb` (zone/layout.py) | `layout.l_nb_m` | — |
+| x_car, x_z | `Gps.x`, `Gps.y`; `Site.x`, `Site.y` | `layout.zone_positions_m` (x_z) | `x`, `y` (GPS, zone status) |
+| 𝒬_k | `usable` (zone/masks.py) | — | — |
+| n^busy_q | `SlotState.n_busy` (node/state.py) | — | `n_busy` (SlotState and 5.2) |
+| n^max_q | `SlotState.n_max` | `hardware.<class>.queue.<slot>` | `n_max` (SlotState and 5.2) |
+| n_res | `Scheduler.n_res` | `scheduler.n_res` | — |
+| n_head | `Scheduler.n_head`; `headroom` (zone/masks.py) | `scheduler.n_head` | — |
+| Ω_q^hard, Ω_q^soft | `SlotState.omega_hard`, `SlotState.omega_soft` | — | `omega_hard`, `omega_soft` (SlotState); `omega_hard_ms`, `omega_soft_ms` in 5.2 |
+| T^rem_q,j | `SlotState.t_rem` | — | `t_rem` (SlotState); `t_rem_ms` in 5.2 |
+| n_up | `len(RadioUplink._active)` (net/radio.py) | — | — |
+| C^time | `c_time()` (agent/reward.py) | — | — |
+| C^en | `c_en()` (agent/reward.py, energy.py); column `mean_c_en` | — | — |
+| C^en_max | `Derived.c_en_max` (config.py) | `energy.c_en_max` (`computed`) | — |
+| r_ok | `Reward.r_ok`, `RewardParams.r_ok` (config.py, agent/reward.py) | `reward.r_ok` | — |
+| C_pen | `Reward.c_pen` | `reward.C_pen` | — |
+| P̄_k,q | `RunRow.power` (node/timetable.py); `TimeRow.p_dyn_w` (config.py) | `energy_j` of a measured row ÷ its mean; `hardware.<class>.p_dyn_w.<slot>` otherwise | — |
+| w, 1 − w | `Reward.w` | `reward.w` | — |
+| σ | `Knee.slope` (expert/knee.py) | — | — |
+| Δf_i | `Knee.ranges` | — | — |
+| N_task | the window's task count (expert/window.py) | — | — |
+| Nb1–Nb4 | action indices 1–4 (agent/inputs.py, expert/nsga.py) | — | — |
+| n_step | `Dqfd.n_step` (config.py) | `dqfd.n_step` | — |
+| g | `RoundMsg.k`, `FedState.k` (fl/fedavg.py) | — | `k` (fl/round) |
+| m_E | `Dqfd.margin` | `dqfd.margin` | — |
+| α_TOF | `Tof.alpha` (config.py) | `tof.alpha`, `tof.alpha_sweep` | — |
+| α_PER, β_PER | `Replay.alpha` (agent/replay.py); `Per.alpha`, `Per.beta0` (config.py) | `dqfd.per.alpha`, `dqfd.per.beta0` (`dqfd.per.beta_final` = 1) | — |
+| h_hot | `Cars.h_hot` (config.py); `self.h` (experiments/city.py) | `cars.calibrated.h_hot` | — |
+| step 1–step 4 | — (inside the measured run time) | — | — |
+
+# Appendix B — Results at a glance
+
+Fast mode, 8 methods × 6 scenarios × 20 evaluation seeds per map (960 runs per map). Each cell is the mean over the 20 seeds; the best value of a column is bold. Computed from `data/<map>/results/summary.csv` at commit 76e89b7. Confidence intervals, paired tests, the testbed runs and the limitations are in `docs/RESULTS.md`.
+
+### VFC grid: tasks delivered on time (%)
+
+| Method | S1 | S2 | S3 | S4 | S5 | S6 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| PCNME | **99.9** | **99.8** | **98.4** | **94.2** | **93.3** | 92.1 |
+| D3QN + greedy expert | **99.9** | **99.8** | 97.2 | 93.5 | 92.7 | 92.3 |
+| D3QN from scratch | **99.9** | 99.6 | 86.4 | 93.6 | 93.1 | 91.9 |
+| VFC PPO | 99.8 | 99.1 | 86.3 | 93.8 | 93.0 | 89.3 |
+| Tang & Wong | 99.8 | 98.6 | 80.1 | 93.2 | 92.7 | 79.2 |
+| QECO | 99.8 | 98.6 | 78.4 | 93.2 | 92.8 | 80.9 |
+| Greedy | **99.9** | **99.8** | 92.3 | 92.6 | 92.2 | **96.9** |
+| Random | 99.5 | 98.1 | 81.3 | 90.9 | 90.3 | 81.0 |
+
+### LuST (Luxembourg): tasks delivered on time (%)
+
+| Method | S1 | S2 | S3 | S4 | S5 | S6 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| PCNME | 99.8 | **99.8** | 49.4 | 94.5 | 92.2 | 96.4 |
+| D3QN + greedy expert | **99.9** | **99.8** | **53.7** | 94.0 | 92.0 | 96.7 |
+| D3QN from scratch | 99.8 | 99.6 | 49.0 | 94.7 | 92.4 | 92.5 |
+| VFC PPO | 99.6 | 98.9 | 44.5 | **94.9** | **92.5** | 94.0 |
+| Tang & Wong | 99.7 | 98.7 | 48.8 | 94.2 | 91.8 | 81.2 |
+| QECO | 99.7 | 99.1 | 46.3 | 94.1 | 92.0 | 84.8 |
+| Greedy | **99.9** | 99.6 | 52.6 | 93.6 | 90.9 | **97.0** |
+| Random | 99.4 | 98.3 | 43.0 | 92.0 | 89.4 | 84.5 |
+
+### VFC grid: dynamic energy per task (J)
+
+| Method | S1 | S2 | S3 | S4 | S5 | S6 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| PCNME | 2.17 | **2.21** | **2.36** | 2.12 | 2.11 | 3.22 |
+| D3QN + greedy expert | 2.17 | **2.21** | 2.57 | 2.11 | 2.10 | 3.33 |
+| D3QN from scratch | 2.19 | 2.47 | 3.71 | 2.11 | 2.10 | 3.19 |
+| VFC PPO | 2.62 | 3.15 | 3.92 | 2.12 | 2.12 | 4.18 |
+| Tang & Wong | 3.04 | 3.25 | 3.97 | 2.13 | 2.11 | 4.37 |
+| QECO | 3.04 | 3.23 | 3.96 | 2.11 | 2.10 | 4.19 |
+| Greedy | **2.16** | 2.22 | 2.81 | **2.10** | **2.09** | **2.83** |
+| Random | 3.19 | 3.50 | 3.98 | 2.18 | 2.16 | 4.50 |
+
+### LuST (Luxembourg): dynamic energy per task (J)
+
+| Method | S1 | S2 | S3 | S4 | S5 | S6 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| PCNME | 2.24 | **2.22** | 2.90 | 2.13 | 2.08 | **2.66** |
+| D3QN + greedy expert | 2.24 | 2.23 | 2.75 | 2.13 | 2.08 | 2.67 |
+| D3QN from scratch | 2.33 | 2.53 | 2.95 | 2.14 | 2.09 | 3.08 |
+| VFC PPO | 3.05 | 3.31 | 3.22 | 2.15 | 2.09 | 4.01 |
+| Tang & Wong | 3.24 | 3.23 | 3.08 | 2.17 | 2.10 | 4.32 |
+| QECO | 3.23 | 3.01 | 3.15 | 2.13 | 2.09 | 4.05 |
+| Greedy | **2.22** | 2.27 | **2.71** | **2.12** | **2.06** | 2.70 |
+| Random | 3.34 | 3.53 | 3.20 | 2.21 | 2.14 | 4.47 |
+
+### Cold start on the VFC grid
+
+Early-stage on time (the tasks of the first 1 000 decisions after deployment, %) · decisions until the on-time share of the last 1 000 tasks is ≥ 95 % to the end of the run (median over the seeds that get there; how many of them).
+
+| method | S1 | S2 | S3 | S4 | S5 | S6 |
+| --- | --- | --- | --- | --- | --- | --- |
+| PCNME | 99.9 ± 0.1 · 999 (20/20) | 99.9 ± 0.1 · 998 (20/20) | 99.2 ± 0.2 · 1,001 (17/20) | 96.5 ± 0.4 · 8,856 (5/20) | 96.2 ± 0.4 · 8,729 (3/20) | 95.0 ± 1.2 · 8,528 (8/20) |
+| Greedy | 99.9 ± 0.1 · 999 (20/20) | 99.9 ± 0.0 · 999 (20/20) | 99.4 ± 0.2 · 8,955 (9/20) | 95.9 ± 0.4 · – (0/20) | 96.0 ± 0.4 · 9,243 (1/20) | 98.2 ± 0.3 · 3,907 (19/20) |
+| D3QN + greedy demos | 99.9 ± 0.1 · 999 (20/20) | 99.9 ± 0.1 · 998 (20/20) | 99.3 ± 0.2 · 1,003 (14/20) | 95.9 ± 0.4 · 9,020 (5/20) | 96.0 ± 0.4 · 9,056 (2/20) | 96.9 ± 0.7 · 8,835 (2/20) |
+| D3QN (scratch) | 99.9 ± 0.1 · 999 (20/20) | 99.8 ± 0.0 · 1,000 (20/20) | 96.1 ± 0.7 · 14,841 (3/20) | 96.1 ± 0.4 · 8,586 (4/20) | 96.0 ± 0.4 · 9,123 (4/20) | 95.7 ± 0.9 · 9,058 (4/20) |
+| VFC PPO | 99.8 ± 0.1 · 999 (20/20) | 99.5 ± 0.2 · 999 (20/20) | 97.0 ± 0.9 · 14,095 (2/20) | 96.2 ± 0.4 · 8,460 (2/20) | 96.1 ± 0.4 · 9,254 (1/20) | 95.7 ± 1.1 · 8,494 (5/20) |
+| Tang & Wong | 99.8 ± 0.1 · 1,000 (20/20) | 99.4 ± 0.2 · 1,004 (19/20) | 95.3 ± 1.0 · 14,384 (1/20) | 95.9 ± 0.4 · 8,820 (1/20) | 96.0 ± 0.4 · 9,175 (1/20) | 91.4 ± 1.2 · – (0/20) |
+| QECO | 99.8 ± 0.1 · 999 (20/20) | 99.6 ± 0.2 · 1,001 (19/20) | 96.0 ± 1.0 · 14,624 (1/20) | 95.9 ± 0.4 · 8,819 (1/20) | 96.0 ± 0.4 · 9,269 (4/20) | 91.9 ± 1.3 · – (0/20) |
+| Random | 99.6 ± 0.1 · 1,001 (20/20) | 99.1 ± 0.3 · 1,008 (18/20) | 97.1 ± 0.9 · 13,938 (1/20) | 94.3 ± 0.4 · – (0/20) | 94.2 ± 0.4 · – (0/20) | 93.6 ± 1.4 · – (0/20) |
+
+Sources: `data/vfc/results/report.csv` (early_on_time), `data/vfc/results/extra-runs.csv` (decisions until stable).
+
+# Appendix C — References
+
+Numbers in square brackets in this document refer to this list. 16 of the 21 are in the thesis paper library; the 5 that are not are marked. [1] is the base paper of this work: its energy model (Eq. 1–9), delay model (Eq. 10–16) and bi-objective NSGA-II problem (Eq. 27) are the starting point of sections 4, 12 and 13.
+
+| # | Reference | In the library |
+| --- | --- | --- |
+| 1 | V. Jafari, M. H. Rezvani, "Joint optimization of energy consumption and time delay in IoT-fog-cloud computing environments using NSGA-II metaheuristic algorithm," J. Ambient Intell. Humanized Comput., 14:1675–1698, 2023. [doi](https://doi.org/10.1007/s12652-021-03388-2) | Yes |
+| 2 | M. P. Toopchinezhad, M. Ahmadi, "Deep Reinforcement Learning for Delay-Optimized Task Offloading in Vehicular Fog Computing," arXiv:2410.03472, 2024 (the VFC environment). [arXiv](https://arxiv.org/abs/2410.03472) | Yes |
+| 3 | F. S. Behbehani, T. Elgorashi, J. M. H. Elmirghani, "Power Minimization in Vehicular Cloud Architecture," arXiv:2102.09011. [arXiv](https://arxiv.org/abs/2102.09011) | Yes |
+| 4 | I. Mokni, S. Yassa, "A multi-objective approach for optimizing IoT applications offloading in fog–cloud environments with NSGA-II" (Tof-NSGAII), J. Supercomput., 80(19):27034–27072, 2024. [doi](https://doi.org/10.1007/s11227-024-06431-z) | Yes |
+| 5 | M. Tang, V. W. S. Wong, "Deep Reinforcement Learning for Task Offloading in Mobile Edge Computing Systems," IEEE Trans. Mobile Comput., 21(6):1985–1997, 2022. [arXiv](https://arxiv.org/abs/2005.02459) | Yes |
+| 6 | I. Rahmaty, H. Shah-Mansouri, A. Movaghar, "QECO: A QoE-Oriented Computation Offloading Algorithm Based on Deep Reinforcement Learning for Mobile Edge Computing," IEEE Trans. Netw. Sci. Eng., 12(4), 2025. [doi](https://doi.org/10.1109/TNSE.2025.3556809) | Yes |
+| 7 | K. Deb, A. Pratap, S. Agarwal, T. Meyarivan, "A fast and elitist multiobjective genetic algorithm: NSGA-II," IEEE Trans. Evol. Comput., 6(2):182–197, 2002. [doi](https://doi.org/10.1109/4235.996017) | Yes |
+| 8 | I. Das, "On characterizing the 'knee' of the Pareto curve based on normal-boundary intersection," Struct. Optim., 18(2–3):107–115, 1999 | **No** (cited through [9], which credits it) |
+| 9 | X. Zhang, Y. Tian, Y. Jin, "A knee point-driven evolutionary algorithm for many-objective optimization," IEEE Trans. Evol. Comput., 19(6):761–776, 2015. [doi](https://doi.org/10.1109/TEVC.2014.2378512) | **No** (Das [8] and this paper are cited for the knee definition; neither is in the library) |
+| 10 | T. Hester et al., "Deep Q-learning from Demonstrations," AAAI, 32(1), 2018. [link](https://ojs.aaai.org/index.php/AAAI/article/view/11757) | Yes |
+| 11 | S. J. Bradtke, M. O. Duff, "Reinforcement Learning Methods for Continuous-Time Markov Decision Problems," NIPS 7, 1995 | Yes |
+| 12 | Y. Yin et al., "Mobility-Aware Assisted Deep Reinforcement Learning for Collaborative Task Migration and Resource Allocation in Vehicular Edge Computing," IEEE Trans. Veh. Technol., 2026. [doi](https://doi.org/10.1109/tvt.2026.3660321) | Yes |
+| 13 | C. E. Shannon, "A Mathematical Theory of Communication," Bell Syst. Tech. J., 1948 | **No** (textbook result) |
+| 14 | Uptime Institute, Global Data Center Survey 2023 | **No** (web report) |
+| 15 | F. Yu et al., "BDD100K: A Diverse Driving Dataset for Heterogeneous Multitask Learning," CVPR, 2020 | Yes |
+| 16 | Ultralytics, YOLOv8 model table with published inference times (docs.ultralytics.com; cite the release used) | **No** (web documentation) |
+| 17 | H. van Hasselt, A. Guez, D. Silver, "Deep Reinforcement Learning with Double Q-learning," AAAI, 2016. [arXiv](https://arxiv.org/abs/1509.06461) | Yes |
+| 18 | Z. Wang et al., "Dueling Network Architectures for Deep Reinforcement Learning," ICML, 2016. [arXiv](https://arxiv.org/abs/1511.06581) | Yes |
+| 19 | L. Kleinrock, Queueing Systems, Volume 1: Theory, Wiley, 1975 | Yes (a scan) |
+| 20 | J. Branke, K. Deb, H. Dierolf, M. Osswald, "Finding Knees in Multi-objective Optimization," PPSN VIII, LNCS 3242, 2004 | Yes |
+| 21 | J. Blank, K. Deb, "pymoo: Multi-Objective Optimization in Python," IEEE Access, 8:89497–89509, 2020. [doi](https://doi.org/10.1109/ACCESS.2020.2990567) | Yes |
+
+Other works named in the text (the closest prior work in section 1, the baselines in 16.1) are listed with links in the References document of the project.
+
+# Appendix D — History of changes
+
+Changes made to the design after the printed version of 27 Oct 2026, newest first by topic. CHANGES and QUESTIONS refer to `docs/CHANGES.md` and `docs/QUESTIONS.md` in the repository.
+
+| Date | Section | Change | Note |
+| --- | --- | --- | --- |
+| 28 Oct | 16.2 | ρ_fog uses every task of the whole mix, boulders included (not pebbles only), so S4–S6 keep S2's arrival rate | CHANGES C2 (QUESTIONS Q1) |
+| 16 Nov | 13.7 | Phase 2 (FedAvg + fine-tuning) is evaluated in fast mode only; on the testbed it is future work (since 15.5's trainer process holds the learning network, FedAvg would run there) | QUESTIONS Q64 |
+| 16 Nov | all | The notation reaches the code: Python names, config keys, message fields and CSV columns renamed as in docs/NOTATION.md section 6 (for example mean_e_hat → mean_c_en, e_bar → c_en_max, reward B, P → r_ok, C_pen); the existing result files were rewritten the same way; config_hash changes with the keys | docs/NOTATION.md |
+| 15 Nov | all | Notation: one base letter per kind of quantity, one unit (docs/NOTATION.md); names only, no rule, formula, number or behaviour changes | docs/NOTATION.md |
+| 11 Nov | 15.5 | On the testbed a zone that learns online gets a second CPU: its trainer runs in its own process (replay, updates), the zone sends it the samples and installs the trainer's newest weights between two decisions. Fast mode, which has no compute time, learns in place as before | QUESTIONS Q62 |
+| 7 Nov | 9.6 | A car always knows whether its serving zone serves it: the attach is repeated until confirmed, and a zone names the cars it does not serve in its reply to their GPS, which then attach again (testbed transport detail) | QUESTIONS Q61 |
+| 6 Nov | 16.2, 18 | S6 (mixed fog) has loose deadlines, not tight: with tight ones every method was near a capacity ceiling (the hard tasks need 80 % of the 4 GPU slots with 14–20 ms of slack), so S6 measured which tasks a method sacrifices rather than placement on unequal nodes. The TOF-Broker is now exercised in S4 and S5 | QUESTIONS Q60 |
+| 28 Oct | 13.2 | Random draws keyed by task, not by event order: a run time is a uniform keyed by (seed, task id, attempt) through the inverse CDF of the row it runs on; a delay is keyed by (seed, task id, attempt, hop); arrivals and mobility stay sequential per car | CHANGES C3 (QUESTIONS Q6) |
+| 28 Oct | 8.5, 5.2 | The wait estimate is water-filling over each slot's remaining time T^rem_q,j (published per slot instead of their sum R): Σ max(0, Ŵ^queue_q − T^rem_q,j) = Ω_q; still 0 while a slot is free; for c_q = 1 the same as before | CHANGES C4 |
+| 28 Oct | 14.4, 18 | Run times are lognormal, fitted to each row's mean and p95; the placeholder p5 factor is 0.75 (was 0.9); measured rows report the fitted p5 next to the measured one | CHANGES C5 (QUESTIONS Q7) |
+| 29 Oct | 4.1, 4.2, 6A.3, 15.3, 17 | The radio uplink shares its airtime equally among the cars uploading at once (each advances at R_car ÷ n_up) instead of one car at a time; W_radio is the extra push time from sharing, still known exactly at t_rx | CHANGES C6 (QUESTIONS Q18) |
+| 29 Oct | 18, 14.3 | The car's encode time is a config value, `timing.encode` (M, placeholder 0); the upload starts after it, and T^bud_car does not subtract it again | QUESTIONS Q14 |
+| 29 Oct | 15.2 | Every drawn time is rounded to whole nanoseconds and every radio rate to whole bit/s, so one seed gives the same run on every OS | web review of PR #20 |
+| 29 Oct | 16.2, 18 | λ_car is divided by the share of task creations with coverage, measured once per map by a positions-only calibration run (tag C); frames made in a gap are reported as uncovered | QUESTIONS Q29 |
+| 29 Oct | 16.2, 18 | The hotspot share h_hot (cars on z1's roads) is set by the map calibration run so that z1 = 1.6 × the mean load | QUESTIONS Q30 |
+| 29 Oct | 9.3 | The upload timeout T^to starts when the zone's own send has finished; before that only the deadline cap applies, and reaching it drops the attempt with no re-send | CHANGES C7 (QUESTIONS Q31) |
+| 29 Oct | 16.2 | S3 shows an overloaded system: under Greedy the fog GPUs saturate (97–100 %); under cloud-only placement the WAN queue grows without limit (M2 test); it no longer says the WAN congests under every method | M3 acceptance runs after C7 |
+| 29 Oct | 9.6, 6E.15 | The anchor keeps its subscriptions for a car until G after its last task of the car closes (not at the close), so the energy reports G waits for still reach it | CHANGES C8 (QUESTIONS Q35) |
+| 29 Oct | 13.2 | The initial NSGA-II population holds the greedy plan, an energy-greedy plan and mutated copies of both (half the population), the rest random; so no front point is dominated by greedy | CHANGES C9 (QUESTIONS Q38) |
+| 30 Oct | 16.3 | Evaluation seeds are never used for planning that any method learns from; the knee reference plans on evaluation seeds (a reference no method learns from), only for S2 and S4 on the first 5 evaluation seeds | CHANGES C10 (QUESTIONS Q45) |
+| 17 Nov | 8.5, 16.3 | Leftover symbols: the pooled estimate in words (was R_q), N_early (was N); NOTATION.md section 2 extended | NOTATION.md |
+| 17 Nov | all | Version 3: reorganised front part (one page, inputs and outputs, components, planned versus run), a purpose box on every section, worked examples and explained equations in 4, 7, 8.5, 10.2, 11, 12, 13 and 16, references and results as appendices. No rule, formula or number changed | this document |

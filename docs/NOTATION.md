@@ -84,6 +84,7 @@ rules), F-GPU and F-CPU (hardware classes) never appear inside an equation and k
 | R_z | ℓ_z | Radius of a zone's coverage circle | m | 10.2, 18 |
 | l_nb | ℓ_nb | Largest centre distance that makes two zones neighbours | m | 7.5, 18 |
 | p, c (in 10.2) | x_car, x_z | Position of the car / centre of the zone | m | 10.2 |
+| U_up | T_radio | The real upload time on the radio (the estimate is T̂_radio) | s | 4.1, 6A |
 
 ### 2.3 Slots and queues
 
@@ -98,6 +99,7 @@ rules), F-GPU and F-CPU (hardware classes) never appear inside an equation and k
 | r_q,i | T^rem_q,j | Remaining mean time of the task on slot j (0 if free) | s | 5.2, 8.5 |
 | n (in 4.2) | n_up | Uploads in progress on a zone's radio | none | 4.1, 4.2 |
 | "the soft task S" | the soft task i | A task is always i | none | 8.4 |
+| R_q | (in words) | Sum of the remaining slot times; the old pooled estimate, no longer used | s | 8.5 |
 
 ### 2.4 Energy, cost and reward
 
@@ -127,6 +129,8 @@ rules), F-GPU and F-CPU (hardware classes) never appear inside an equation and k
 | α, β0 (replay) | α_PER, β_PER | Prioritized-replay exponents | none | 13.5, 18 |
 | h (in 16.2) | h_hot | Share of cars kept on z1's roads | none | 16.2, 18 |
 | S1–S4 (DAG steps) | step 1–step 4 | Internal steps of a task | none | 14.2 |
+| λ_E | λ2 | Weight of the expert margin loss | none | 13.5 |
+| N (early stage) | N_early | Online decisions counted for early-stage performance | none | 16.3, 18 |
 
 ## 3. Renames that depend on the context
 
