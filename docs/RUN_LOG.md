@@ -437,3 +437,13 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 - config_hash changes with the renamed keys: runs before 16 Nov carry the old hash, so a rerun of train.py or
   evaluate.py treats them as made with another config. The exported viewer (../pcnme-history-viewer) still has
   the old names until it is exported again.
+
+## 17 Nov: the results tag and design version 3
+
+- Tag `results-v1` = commit 35205fd, the last commit before the code rename. The stored results under data/ were
+  made with it, and its config_hash values match the ones in summary.csv. To rerun or extend a stored run with
+  matching hashes: `git checkout results-v1`. The current code gives the same numbers under new names, with new
+  hashes.
+- docs/final-design.md replaced by version 3: an overview, a purpose box on every section, worked examples and
+  appendices (notation, results, references, history). Section numbers 1–19 and every rule unchanged. The last
+  leftover symbols renamed (NOTATION.md section 2). No run was made.

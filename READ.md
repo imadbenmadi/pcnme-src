@@ -117,6 +117,8 @@ The live screen is [`src/pcnme/pipeline/screen.py`](src/pcnme/pipeline/screen.py
 - **Behaviour:** refusal_rate, wasted_share, jain_load (1 = perfectly even zones), early_on_time (the first
   1,000 decisions).
 - **Provenance:** wall_s, commit, config_hash, run_dir.
+  The stored runs were made before the 16 Nov rename and carry its hashes: to rerun or extend them with matching
+  hashes, check out the tag `results-v1` (docs/RUN_LOG.md, 17 Nov).
 
 Compare methods per scenario with report.md beside it (mean ± 95 % interval over the seeds). The training curves
 are training-<S>.png.

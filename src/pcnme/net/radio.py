@@ -49,7 +49,7 @@ class RadioTransfer:
 
     @property
     def duration(self) -> float:
-        """The upload time U_up = W_radio + S / R_car + δ."""
+        """The upload time T_radio = W_radio + S / R_car + δ."""
         return self.delivery - self.start
 
 
