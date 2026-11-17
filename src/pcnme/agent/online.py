@@ -247,7 +247,7 @@ class OnlineAgent:
         return max(0.0, 1.0 - self.budget.used / self.budget.total)
 
     def loss_config(self) -> Config:
-        """The config of the loss: the margin weight λ_E x margin_scale() when fading."""
+        """The config of the loss: the margin weight λ2 x margin_scale() when fading."""
         f = self.margin_scale()
         if f == 1.0:
             return self.cfg
