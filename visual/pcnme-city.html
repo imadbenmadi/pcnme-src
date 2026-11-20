@@ -1,0 +1,749 @@
+<title>PCNME City</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+/* Layout: header + flow picker; a wide stage (the city map on the left, metro edge and cloud on the right) next to the decision panel; under them the trace and the message reference. */
+:root {
+  --bg: #ffffff; --ink: #0b0d10; --muted: #4a5260; --line: #d3d9e0; --soft: #f3f5f8; --pick: #eaf1fe;
+  --road: #e6e9ee; --zone: #2563eb; --anchor: #c026d3; --serving: #2563eb; --exec: #15803d;
+  --task: #2563eb; --result: #15803d; --ack: #b45309; --ctl: #64748b; --state: #94a3b8; --wan: #7c3aed; --bad: #b91c1c;
+  --f-text: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --f-math: "STIX Two Text", "Cambria Math", "Times New Roman", serif;
+  --f-num: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--ink); }
+body { margin: 0; font: 16px/1.55 var(--f-text); }
+.wrap { max-width: 1400px; margin: 0 auto; padding-block: 24px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 18px; }
+h1 { font-size: 30px; line-height: 1.2; margin: 0; font-weight: 600; }
+h2 { font-size: 18px; margin: 0 0 10px; font-weight: 600; }
+p { margin: 0; }
+.lead { color: var(--muted); font-size: 17px; max-width: 100ch; }
+.m { font-family: var(--f-math); font-size: 1.1em; }
+.m i, .calc i, .dtab i { font-style: italic; }
+sub, sup { font-size: 0.7em; }
+.n { font-family: var(--f-num); font-variant-numeric: tabular-nums; font-size: 0.86em; }
+
+.flows { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.flows button { text-align: left; display: flex; gap: 10px; align-items: baseline; font: 500 15px var(--f-text); color: var(--ink); background: var(--bg);
+  border: 1.5px solid var(--line); border-radius: 7px; padding: 8px 12px; cursor: pointer; }
+.flows button b { font: 600 13px var(--f-num); color: var(--zone); min-width: 18px; }
+.flows button small { display: block; font: 500 12px var(--f-num); color: var(--muted); }
+.flows button[aria-pressed="true"] { border-color: var(--ink); background: var(--pick); }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.controls button, .controls select { font: 500 15px var(--f-text); color: var(--ink); background: var(--bg); border: 1.5px solid var(--line); border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+.controls button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.controls label { display: flex; gap: 8px; align-items: center; font-size: 14.5px; color: var(--muted); }
+button:focus-visible, select:focus-visible { outline: 3px solid var(--zone); outline-offset: 2px; }
+.gate { font: 600 14px var(--f-text); color: var(--anchor); }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(380px, 470px); gap: 18px; align-items: start; }
+@media (max-width: 1100px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.stagebox { border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; min-width: 0; }
+svg#map { display: block; width: 100%; min-width: 820px; height: auto; font-family: var(--f-text); }
+.box { border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; min-width: 0; }
+.empty { color: var(--muted); font-size: 15px; }
+.calc { display: grid; grid-template-columns: minmax(110px, 140px) 1fr; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin-top: 8px; }
+.calc > div { padding: 7px 10px; border-bottom: 1px solid var(--line); min-width: 0; }
+.calc > .lab { background: var(--soft); font-size: 14px; }
+.calc > .val { font-family: var(--f-math); font-size: 16.5px; overflow-x: auto; }
+.calc > .res { background: var(--pick); font-weight: 600; }
+.calc > div:nth-last-child(-n+2) { border-bottom: 0; }
+.dtab { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 8px; table-layout: auto; }
+.dtab th, .dtab td { border: 1px solid var(--line); padding: 4px 5px; text-align: right; white-space: nowrap; }
+.dtab td:last-child { white-space: normal; min-width: 92px; }
+.dtab th { background: var(--soft); font-weight: 600; }
+.dtab td { font-family: var(--f-num); font-variant-numeric: tabular-nums; font-size: 13px; }
+.dtab td.l, .dtab th.l { text-align: left; font-family: var(--f-text); font-size: 14px; }
+.dtab tr.masked td { color: var(--muted); }
+.dtab tr.chosen td { background: var(--pick); font-weight: 600; }
+.qbar { display: inline-block; max-width: 44px; height: 9px; background: var(--zone); border-radius: 2px; vertical-align: 0; margin-right: 6px; }
+.why { color: var(--bad); font-family: var(--f-text); font-size: 13px; }
+.stage-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.stage-h small { color: var(--muted); font-size: 13px; }
+.note { font-size: 14px; color: var(--muted); }
+
+.below { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 18px; }
+@media (max-width: 1000px) { .below { grid-template-columns: minmax(0, 1fr); } }
+.log { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 520px; overflow-y: auto; }
+.log li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; font-size: 15px; align-items: baseline; }
+.log .k { font: 600 12.5px var(--f-num); color: var(--muted); text-align: right; }
+.log li.task .x { color: var(--task); } .log li.result .x { color: var(--result); } .log li.ack .x { color: var(--ack); }
+.log li.warn .x { color: var(--bad); } .log li.done .x { font-weight: 600; }
+.log li .x .m { font-size: 1.05em; }
+.topics { width: 100%; border-collapse: collapse; font-size: 14px; }
+.topics td, .topics th { border-bottom: 1px solid var(--line); padding: 6px 6px; text-align: left; vertical-align: top; }
+.topics th { font-weight: 600; background: var(--soft); }
+.topics code { font: 500 13px var(--f-num); }
+.topics tr.hot td { background: var(--pick); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; color: var(--muted); }
+.dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; vertical-align: -1px; margin-right: 6px; }
+.ring { display: inline-block; width: 13px; height: 13px; border-radius: 50%; border: 2.5px solid; vertical-align: -2px; margin-right: 6px; }
+.foot { font-size: 14px; color: var(--muted); max-width: 120ch; }
+</style>
+
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <h1>PCNME City</h1>
+    <p class="lead">Car 7 and its tasks moving through the PCNME zones: upload, TOF-Broker, masks, the agent's choice, execution, result delivery, ack and reward. The map is the VFC grid of the thesis (1200 m × 1200 m, roads every 200 m, zones of radius 350 m). Every time, size and cost in the panels comes from the design and the config; the Q-values are example values.</p>
+  </header>
+
+  <div class="flows" id="flows" role="group" aria-label="Flows"></div>
+  <div class="controls" role="group" aria-label="Playback">
+    <button id="pause" class="primary" type="button">Pause</button>
+    <button id="step" type="button">Step mode: off</button>
+    <button id="next" type="button">Next step</button>
+    <label for="speed">Speed <select id="speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.6">1.6×</option></select></label>
+    <label><input type="checkbox" id="ambient" checked> show state and GPS messages</label>
+    <span class="gate" id="gate" hidden>Step mode: press Next step</span>
+  </div>
+
+  <div class="main">
+    <div class="stagebox"><svg id="map" viewBox="0 0 1000 680" role="img" aria-label="City map with zones, cars, the metro edge and the cloud"></svg></div>
+    <section class="box" aria-labelledby="h-dec">
+      <div class="stage-h"><h2 id="h-dec" style="margin:0">Decision at the anchor</h2><small id="dzone"></small></div>
+      <div id="decision"><p class="empty" style="margin-top:8px">Pick a flow. The anchor's decision fills in step by step: deadline, TOF-Broker, masks, agent, then the reward.</p></div>
+    </section>
+  </div>
+
+  <div class="legend">
+    <span><i class="dot" style="background:var(--task)"></i>task input (HTTP POST /tasks)</span>
+    <span><i class="dot" style="background:var(--result)"></i>result (car/7/result)</span>
+    <span><i class="dot" style="background:var(--ack)"></i>ack (car/7/ack)</span>
+    <span><i class="dot" style="background:var(--ctl)"></i>attach, status</span>
+    <span><i class="dot" style="background:var(--state)"></i>zone state and GPS (every 100 ms)</span>
+    <span><i class="ring" style="border-color:var(--anchor)"></i>anchor</span>
+    <span><i class="ring" style="border-color:var(--serving)"></i>serving zone</span>
+    <span><i class="ring" style="border-color:var(--exec)"></i>executor</span>
+  </div>
+
+  <div class="below">
+    <section class="box" aria-labelledby="h-trace">
+      <div class="stage-h"><h2 id="h-trace" style="margin:0">Trace</h2><small id="ftitle"></small></div>
+      <ul class="log" id="log" aria-live="polite" style="margin-top:10px"><li><span class="k"></span><span class="x" style="color:var(--muted)">Pick a flow to follow car 7.</span></li></ul>
+    </section>
+    <section class="box" aria-labelledby="h-top">
+      <h2 id="h-top">Messages (final design 5.2, 5.3)</h2>
+      <table class="topics" id="topics">
+        <tr><th>Channel</th><th>From → to</th></tr>
+        <tr data-t="post"><td><code>POST /tasks</code> HTTP</td><td>car → serving zone; anchor → neighbour or cloud (input + budget <span class="m"><i>T</i><sup>bud</sup></span>)</td></tr>
+        <tr data-t="attach"><td><code>car/{id}/attach</code> QoS 1</td><td>zone the car attached to → the car's anchors, previous serving zone</td></tr>
+        <tr data-t="gps"><td><code>car/{id}/gps</code> QoS 0</td><td>serving zone, every 100 ms → the car's anchors</td></tr>
+        <tr data-t="result"><td><code>car/{id}/result</code> QoS 1</td><td>executor, once → serving zone + anchor</td></tr>
+        <tr data-t="ack"><td><code>car/{id}/ack</code> QoS 1</td><td>serving zone → anchor (latency <span class="m"><i>L</i></span> measured by the car)</td></tr>
+        <tr data-t="state"><td><code>zone/{id}/state</code> QoS 0</td><td>every zone + cloud, every 100 ms → neighbours</td></tr>
+        <tr data-t="status"><td><code>zone/{id}/status</code> QoS 1</td><td>every zone + cloud → all zones; last will = offline</td></tr>
+        <tr data-t="ws"><td><code>WebSocket /cars/{id}</code></td><td>serving zone ↔ car: result pushed, confirm back</td></tr>
+      </table>
+      <p class="note" style="margin-top:10px">Cars are never MQTT clients. Task inputs never travel over MQTT. No decision compares clocks of two machines: messages carry budgets, durations and versions.</p>
+    </section>
+  </div>
+  <p class="foot">Numbers used: T1 frame <span class="m"><i>S</i></span> = 76 KB = 608 kbit, result 3 KB, <span class="m"><i>D</i></span> = 100 ms (hard); T4 <span class="m"><i>D</i></span> = 1000 ms (soft, <span class="m"><i>L</i><sub>max</sub> = <i>D</i></span>); T2 clip 4572 KB. Radio 40 MHz at 5.9 GHz (Shannon), backhaul 1 Gbit/s with delay 1–5 ms (mean 3 ms), WAN 36 Mbit/s with delay 25–100 ms (mean 62.5 ms), broker +1 ms. Fog GTX 1070 time table, cloud A100. State period 100 ms, stale after 300 ms, handover hysteresis 20 m, <span class="m"><i>T</i><sub>ack</sub></span> = 200 ms, <span class="m"><i>α</i><sub>TOF</sub></span> = 0.8, <span class="m"><i>w</i>*</span> = 0.414, <span class="m"><i>C</i><sub>drop</sub></span> = 5, <span class="m"><i>C</i><sup>en</sup><sub>max</sub></span> = 9.197. The animation is slowed down many times; the times in the panels are the model's.</p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  // ---------- geometry: 1200 m x 1200 m map drawn at 0.5 px/m, offset (20, 30) ----------
+  var SC = 0.5, OX = 20, OY = 30;
+  var px = function (m) { return { x: OX + m[0] * SC, y: OY + m[1] * SC }; };
+  var R_M = 350, HYST_M = 20;
+  var ZONES = { z1: [300, 300], z2: [900, 300], z3: [300, 900], z4: [900, 900], z5: [600, 600] };
+  var NB = { z1: ["z2", "z3", "z4", "z5"], z2: ["z1", "z4", "z3", "z5"], z3: ["z1", "z4", "z2", "z5"], z4: ["z2", "z3", "z1", "z5"], z5: ["z1", "z2", "z3", "z4"] };
+  var METRO = { x: 790, y: 330 }, ROUTER = { x: 860, y: 330 }, BROKER = { x: 790, y: 330 }, CLOUD = { x: 860, y: 110 };
+  var COL = { task: "#2563eb", result: "#15803d", ack: "#b45309", ctl: "#64748b", state: "#94a3b8", wan: "#7c3aed", bad: "#b91c1c", anchor: "#c026d3", serving: "#2563eb", exec: "#15803d" };
+
+  // ---------- model numbers ----------
+  var B_RADIO = 40e6, P_RADIO = 1, G = 10, N0 = Math.pow(10, (-174 - 30) / 10), FC = 5.9e9, C = 3e8;
+  var S_T1 = 608000, S_T2 = 36576000, S_RES = 24000;
+  function shannon(dm) { var pl = Math.pow(4 * Math.PI * Math.max(dm, 5) * FC / C, 2); var snr = P_RADIO * G / (pl * N0 * B_RADIO); return { R: B_RADIO * Math.log2(1 + snr), pl: pl, snr: snr }; }
+  var W_STAR = 0.414, CENMAX = 9.197, EREF_T1 = 1.3711, EREF_T4 = 4.5736, EREF_T2 = 338.25;
+  function waterFill(rem, om) { var r = rem.slice().sort(function (a, b) { return a - b; }); for (var m = 1; m <= r.length; m++) { var s = 0; for (var i = 0; i < m; i++) s += r[i]; var L = (om + s) / m; if (m === r.length || L <= r[m]) return L; } }
+
+  // ---------- svg helpers ----------
+  var NS = "http://www.w3.org/2000/svg", svg = document.getElementById("map");
+  function E(tag, attrs, parent, text) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; (parent || svg).appendChild(e); return e; }
+  var defs = E("defs", {}); var cp = E("clipPath", { id: "city" }, defs); E("rect", { x: 20, y: 30, width: 600, height: 600 }, cp);
+  var gStatic = E("g", {}), gLinks = E("g", {}), gZones = E("g", {}), gCars = E("g", {}), gPk = E("g", {}), gTags = E("g", {});
+
+  // roads every 200 m
+  E("rect", { x: OX, y: OY, width: 600, height: 600, fill: "#fbfcfd", stroke: "#d3d9e0" }, gStatic);
+  for (var r = 0; r <= 1200; r += 200) {
+    var a = px([r, 0]), b = px([r, 1200]); E("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: "#e3e7ec", "stroke-width": 7 }, gStatic);
+    a = px([0, r]); b = px([1200, r]); E("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: "#e3e7ec", "stroke-width": 7 }, gStatic);
+  }
+  E("text", { x: OX, y: OY - 10, "font-size": 13, fill: "#4a5260" }, gStatic, "VFC grid · 1200 m × 1200 m · roads every 200 m · zone radius 350 m");
+  // scale bar
+  E("line", { x1: OX + 500, y1: OY + 620, x2: OX + 600, y2: OY + 620, stroke: "#0b0d10", "stroke-width": 2 }, gStatic);
+  E("text", { x: OX + 550, y: OY + 638, "font-size": 12, "text-anchor": "middle", fill: "#4a5260" }, gStatic, "200 m");
+
+  // metro edge, router, broker, cloud, WAN
+  E("rect", { x: 700, y: 280, width: 230, height: 110, rx: 8, fill: "#f6f7f9", stroke: "#94a3b8" }, gStatic);
+  E("text", { x: 712, y: 300, "font-size": 13, "font-weight": 600, fill: "#0b0d10" }, gStatic, "Metro edge");
+  E("rect", { x: 755, y: 312, width: 70, height: 38, rx: 5, fill: "#fff", stroke: "#64748b" }, gStatic);
+  E("text", { x: 790, y: 336, "font-size": 12, "text-anchor": "middle", fill: "#0b0d10" }, gStatic, "EMQX broker");
+  E("rect", { x: 835, y: 312, width: 70, height: 38, rx: 5, fill: "#fff", stroke: "#64748b" }, gStatic);
+  E("text", { x: 870, y: 336, "font-size": 12, "text-anchor": "middle", fill: "#0b0d10" }, gStatic, "router");
+  E("text", { x: 712, y: 378, "font-size": 11.5, fill: "#4a5260" }, gStatic, "backhaul 1 Gbit/s · 1–5 ms per zone");
+  BROKER = { x: 790, y: 331 }; ROUTER = { x: 870, y: 331 };
+  var wanLine = E("line", { x1: 870, y1: 312, x2: 870, y2: 150, stroke: "#7c3aed", "stroke-width": 5, opacity: 0.55 }, gStatic);
+  var wanText = E("text", { x: 882, y: 236, "font-size": 12, fill: "#7c3aed" }, gStatic, "WAN 36 Mbit/s");
+  var wanText2 = E("text", { x: 882, y: 252, "font-size": 12, fill: "#7c3aed" }, gStatic, "25–100 ms one way");
+  var wanWait = E("text", { x: 882, y: 268, "font-size": 12, fill: "#7c3aed", "font-family": "IBM Plex Mono, monospace" }, gStatic, "Ŵ_WAN = 0 ms");
+  E("rect", { x: 790, y: 70, width: 160, height: 80, rx: 10, fill: "#f5f3ff", stroke: "#7c3aed" }, gStatic);
+  E("text", { x: 870, y: 92, "font-size": 14, "font-weight": 600, "text-anchor": "middle", fill: "#0b0d10" }, gStatic, "Cloud");
+  E("text", { x: 870, y: 110, "font-size": 11.5, "text-anchor": "middle", fill: "#4a5260" }, gStatic, "32 GPU + 32 CPU slots");
+  var cloudBusy = E("text", { x: 870, y: 128, "font-size": 11.5, "text-anchor": "middle", fill: "#7c3aed", "font-family": "IBM Plex Mono, monospace" }, gStatic, "busy 0/32");
+  CLOUD = { x: 870, y: 140 };
+
+  // zones
+  var Z = {};
+  Object.keys(ZONES).forEach(function (id) {
+    var c = px(ZONES[id]);
+    var g = E("g", {}, gZones);
+    var circ = E("circle", { cx: c.x, cy: c.y, r: R_M * SC, fill: "rgba(37,99,235,0.06)", stroke: "rgba(37,99,235,0.45)", "stroke-width": 1.5, "clip-path": "url(#city)" }, g);
+    var bh = E("line", { x1: c.x, y1: c.y, x2: BROKER.x - 35, y2: BROKER.y, stroke: "#cbd5e1", "stroke-width": 1.2, "stroke-dasharray": "4 4" }, gLinks);
+    var cab = E("rect", { x: c.x - 22, y: c.y - 16, width: 44, height: 32, rx: 4, fill: "#fff", stroke: "#0b0d10", "stroke-width": 1.5 }, g);
+    var lab = E("text", { x: c.x, y: c.y - 2, "font-size": 13, "font-weight": 600, "text-anchor": "middle" }, g, id);
+    var slots = [];
+    for (var i = 0; i < 4; i++) slots.push(E("rect", { x: c.x - 18 + i * 9.5, y: c.y + 4, width: 7.5, height: 7, fill: "#e5e7eb", stroke: i < 2 ? "#4338ca" : "#15803d", "stroke-width": 0.8 }, g));
+    var qtxt = E("text", { x: c.x + 26, y: c.y + 12, "font-size": 11, fill: "#4a5260", "font-family": "IBM Plex Mono, monospace" }, g, "");
+    var ring = E("circle", { cx: c.x, cy: c.y, r: 30, fill: "none", stroke: "none", "stroke-width": 3 }, g);
+    var ring2 = E("circle", { cx: c.x, cy: c.y, r: 36, fill: "none", stroke: "none", "stroke-width": 3, "stroke-dasharray": "5 3" }, g);
+    var ring3 = E("circle", { cx: c.x, cy: c.y, r: 42, fill: "none", stroke: "none", "stroke-width": 3 }, g);
+    var role = E("text", { x: c.x, y: c.y + 60, "font-size": 12, "font-weight": 600, "text-anchor": "middle", stroke: "#fff", "stroke-width": 3, "paint-order": "stroke" }, g, "");
+    Z[id] = { id: id, m: ZONES[id], p: c, g: g, circ: circ, bh: bh, cab: cab, slots: slots, qtxt: qtxt, ring: ring, ring2: ring2, ring3: ring3, role: role,
+      alive: id !== "z5", busy: [0, 0, 0, 0], queue: 0, roles: {} };
+  });
+
+  // ---------- cars ----------
+  var cars = [];
+  function addCar(id, road, along, dir, speed) {
+    var g = E("g", {}, gCars);
+    var body = E("rect", { x: -7, y: -4.5, width: 14, height: 9, rx: 2.5, fill: id === 7 ? "#f59e0b" : "#cbd5e1", stroke: id === 7 ? "#0b0d10" : "#94a3b8", "stroke-width": 1 }, g);
+    var label = id === 7 ? E("text", { x: 0, y: -10, "font-size": 12, "font-weight": 600, "text-anchor": "middle" }, g, "car 7") : null;
+    var car = { id: id, road: road, s: along, dir: dir, v: speed, v0: speed, g: g, body: body, label: label, serv: null };
+    cars.push(car); return car;
+  }
+  // road = {axis:'x'|'y', at: metres}; s = metres along the road (0..1200); v in m/s (illustration scale)
+  function carM(c) { return c.road.axis === "x" ? [c.s, c.road.at] : [c.road.at, c.s]; }
+  [[1, { axis: "x", at: 200 }, 100, 1, 40], [2, { axis: "y", at: 400 }, 900, -1, 35], [3, { axis: "x", at: 1000 }, 300, 1, 45], [4, { axis: "y", at: 1000 }, 200, 1, 30],
+   [5, { axis: "x", at: 800 }, 1000, -1, 38], [6, { axis: "y", at: 200 }, 600, 1, 42], [8, { axis: "x", at: 400 }, 700, -1, 33], [9, { axis: "y", at: 800 }, 500, -1, 36]]
+    .forEach(function (a) { addCar(a[0], a[1], a[2], a[3], a[4]); });
+  var hero = addCar(7, { axis: "x", at: 300 }, 120, 1, 0);
+
+  function dist(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }
+  function serving(c) {
+    var m = carM(c), best = null, bd = 1e9;
+    Object.keys(Z).forEach(function (id) { var z = Z[id]; if (!z.alive) return; var d = dist(m, z.m); if (d <= R_M && d < bd) { bd = d; best = id; } });
+    if (!best) return null;
+    var cur = c.serv && Z[c.serv].alive ? dist(m, Z[c.serv].m) : null;
+    if (cur != null && cur <= R_M && best !== c.serv && bd > cur - HYST_M) return c.serv;   // switch only when 20 m closer
+    return best;
+  }
+  function tExit(c) {
+    if (!c.serv) return null;
+    if (!c.v) return Infinity;
+    var m = carM(c), z = Z[c.serv].m, v = c.road.axis === "x" ? [c.dir * c.v, 0] : [0, c.dir * c.v];
+    var dx = m[0] - z[0], dy = m[1] - z[1], b = dx * v[0] + dy * v[1], vv = v[0] * v[0] + v[1] * v[1];
+    return (-b + Math.sqrt(b * b + vv * (R_M * R_M - dx * dx - dy * dy))) / vv;
+  }
+
+  // ---------- engine ----------
+  var S = { t: 0, speed: 1, paused: false, step: false, gateRes: null, timers: [], waiters: [], pk: [], tags: [], wanLoad: 0, wanHat: 0, cloudBusy: 0, ambient: true, ambT: 0, flow: null, token: null };
+  var CANCEL = {};
+  function wait(s) { return new Promise(function (res) { S.timers.push({ t: s, res: res }); }); }
+  function until(f) { return new Promise(function (res) { S.waiters.push({ f: f, res: res }); }); }
+  function nodePos(id) {
+    if (id === "broker") return BROKER; if (id === "router") return ROUTER; if (id === "cloud") return CLOUD;
+    if (id.indexOf("car") === 0) { var c = cars.filter(function (k) { return k.id === +id.split(":")[1]; })[0]; return px(carM(c)); }
+    return Z[id.split(":")[1]].p;
+  }
+  function segDur(a, b, type) {
+    var f = type === "state" || type === "gps" ? 0.7 : 1;
+    if ((a === "router" && b === "cloud") || (a === "cloud" && b === "router")) return 1.6 * (1 + S.wanLoad * 0.12);
+    if (a.indexOf("car") === 0 || b.indexOf("car") === 0) return 0.7 * f;
+    return 0.75 * f;
+  }
+  function send(type, ids, o) {
+    o = o || {};
+    return new Promise(function (res) {
+      var col = COL[type === "attach" || type === "status" ? "ctl" : type === "gps" ? "state" : type] || "#64748b";
+      var big = o.big ? 9 : type === "task" ? 6.5 : type === "state" || type === "gps" ? 3 : 5;
+      var dot = E("circle", { r: big, fill: col, stroke: "#fff", "stroke-width": type === "state" || type === "gps" ? 0 : 1.5, opacity: type === "state" || type === "gps" ? 0.7 : 1 }, gPk);
+      var p = { ids: ids.slice(), seg: 0, t: 0, type: type, dot: dot, res: res };
+      p.dur = segDur(p.ids[0], p.ids[1], type);
+      if (onWan(p)) S.wanLoad++;
+      S.pk.push(p);
+    });
+  }
+  function onWan(p) { var a = p.ids[p.seg], b = p.ids[p.seg + 1]; return (a === "router" && b === "cloud") || (a === "cloud" && b === "router"); }
+  function tag(id, text, color, ttl) {
+    var g = E("g", {}, gTags); var t = E("text", { "font-size": 12.5, "font-weight": 600, fill: color || "#0b0d10" }, g, text);
+    var bb = null; var bg = E("rect", { rx: 4, fill: "#fff", stroke: color || "#0b0d10", "stroke-width": 1 }, g); g.insertBefore(bg, t);
+    var o = { id: id, g: g, t: t, bg: bg, ttl: ttl || 3, dy: -60 - S.tags.filter(function (x) { return x.id === id && x.ttl > 0; }).length * 22 };
+    S.tags.push(o); return o;
+  }
+  function frame(dt) {
+    var sdt = S.paused ? 0 : dt * S.speed;
+    S.t += sdt;
+    cars.forEach(function (c) {
+      c.s += c.dir * c.v * sdt * 4;     // illustration speed: 4 x the m/s value per animation second
+      if (c !== hero) { if (c.s > 1200) c.s -= 1200; if (c.s < 0) c.s += 1200; }
+      if (sdt) c.serv = serving(c);
+    });
+    S.timers.slice().forEach(function (t) { t.t -= sdt; if (t.t <= 0) { S.timers.splice(S.timers.indexOf(t), 1); t.res(); } });
+    if (sdt) S.waiters.slice().forEach(function (w) { if (w.f()) { S.waiters.splice(S.waiters.indexOf(w), 1); w.res(); } });
+    S.pk.slice().forEach(function (p) {
+      p.t += sdt / p.dur;
+      if (p.t >= 1) {
+        if (onWan(p)) S.wanLoad--;
+        p.seg++; p.t = 0;
+        if (p.seg >= p.ids.length - 1) { p.dot.remove(); S.pk.splice(S.pk.indexOf(p), 1); p.res(true); return; }
+        p.dur = segDur(p.ids[p.seg], p.ids[p.seg + 1], p.type);
+        if (onWan(p)) S.wanLoad++;
+      }
+      var a = nodePos(p.ids[p.seg]), b = nodePos(p.ids[p.seg + 1]), k = Math.min(1, p.t);
+      p.dot.setAttribute("cx", a.x + (b.x - a.x) * k); p.dot.setAttribute("cy", a.y + (b.y - a.y) * k);
+    });
+    Object.keys(Z).forEach(function (id) {
+      var z = Z[id];
+      z.busy = z.busy.map(function (v) { return Math.max(0, v - sdt); });
+      z.slots.forEach(function (s, i) { s.setAttribute("fill", z.busy[i] > 0 ? (i < 2 ? "#4338ca" : "#15803d") : "#e5e7eb"); });
+      z.qtxt.textContent = z.queue ? "queue " + z.queue : "";
+      z.g.setAttribute("opacity", z.alive ? 1 : 0.28);
+      z.ring.setAttribute("stroke", z.roles.exec ? COL.exec : "none");
+      z.ring2.setAttribute("stroke", z.roles.anchor ? COL.anchor : "none");
+      z.ring3.setAttribute("stroke", hero.serv === id && S.flow ? COL.serving : "none");
+      var rl = []; if (z.roles.anchor) rl.push("anchor"); if (hero.serv === id && S.flow) rl.push("serving"); if (z.roles.exec) rl.push("executor");
+      z.role.textContent = rl.join(" · "); z.role.setAttribute("fill", "#0b0d10");
+    });
+    cars.forEach(function (c) { var p = px(carM(c)); c.g.setAttribute("transform", "translate(" + p.x + "," + p.y + ")" + (c.road.axis === "y" ? " rotate(90)" : "")); if (c.label) c.label.setAttribute("transform", c.road.axis === "y" ? "rotate(-90)" : ""); });
+    S.tags.slice().forEach(function (o) {
+      o.ttl -= sdt;
+      if (o.ttl <= 0) { o.g.remove(); S.tags.splice(S.tags.indexOf(o), 1); return; }
+      var p = nodePos(o.id), w = o.t.getComputedTextLength ? o.t.getComputedTextLength() : 100;
+      var x = Math.min(Math.max(p.x - w / 2, 8), 990 - w), y = Math.max(p.y + o.dy, 18);
+      o.t.setAttribute("x", x); o.t.setAttribute("y", y);
+      o.bg.setAttribute("x", x - 6); o.bg.setAttribute("y", y - 14); o.bg.setAttribute("width", w + 12); o.bg.setAttribute("height", 20);
+    });
+    var load = Math.min(1, S.wanLoad / 6);
+    wanLine.setAttribute("stroke-width", 5 + load * 6); wanLine.setAttribute("stroke", load > 0.6 ? "#b91c1c" : "#7c3aed");
+    wanWait.textContent = "Ŵ_WAN = " + S.wanHat.toFixed(0) + " ms";
+    cloudBusy.textContent = "busy " + S.cloudBusy + "/32";
+    // ambient state + GPS
+    if (S.ambient && sdt) {
+      S.ambT -= sdt;
+      if (S.ambT <= 0) {
+        S.ambT = 0.9;
+        var al = Object.keys(Z).filter(function (id) { return Z[id].alive; });
+        var src = al[Math.floor(Math.random() * al.length)];
+        send("state", ["fog:" + src, "broker"]).then(function () { NB[src].filter(function (n) { return Z[n].alive; }).slice(0, 2).forEach(function (n) { send("state", ["broker", "fog:" + n]); }); });
+        if (hero.serv) send("gps", ["car:7", "ap:" + hero.serv]);
+      }
+    }
+  }
+  var last = 0;
+  function loop(ts) { var dt = last ? Math.min(0.05, (ts - last) / 1000) : 0.016; last = ts; frame(dt); requestAnimationFrame(loop); }
+  requestAnimationFrame(loop);
+
+  // ---------- panels ----------
+  var $ = function (id) { return document.getElementById(id); };
+  var N = function (x, d) { return '<span class="n">' + (d == null ? x : Number(x).toFixed(d)) + "</span>"; };
+  var V = function (b, sub, sup) { return "<i>" + b + "</i>" + (sup ? "<sup>" + sup + "</sup>" : "") + (sub ? "<sub>" + sub + "</sub>" : ""); };
+  var HAT = function (b, sub, sup) { return "<i>" + b + "&#770;</i>" + (sup ? "<sup>" + sup + "</sup>" : "") + (sub ? "<sub>" + sub + "</sub>" : ""); };
+  var BAR = function (b, sub, sup) { return "<i>" + b + "&#772;</i>" + (sup ? "<sup>" + sup + "</sup>" : "") + (sub ? "<sub>" + sub + "</sub>" : ""); };
+  var logN = 0;
+  function say(html, kind) {
+    var li = document.createElement("li"); li.className = kind || "";
+    li.innerHTML = '<span class="k">' + (++logN) + '</span><span class="x">' + html + "</span>";
+    var ul = $("log"); if (logN === 1) ul.innerHTML = ""; ul.appendChild(li); ul.scrollTop = ul.scrollHeight;
+  }
+  function hot(t) { document.querySelectorAll("#topics tr").forEach(function (r) { r.classList.toggle("hot", r.getAttribute("data-t") === t); }); }
+  var line = function (lab, val, res) { return '<div class="lab' + (res ? " res" : "") + '">' + lab + '</div><div class="val' + (res ? " res" : "") + '">' + val + "</div>"; };
+  var D = null;
+  function renderDecision() {
+    if (!D) { $("decision").innerHTML = '<p class="empty" style="margin-top:8px">Pick a flow.</p>'; $("dzone").textContent = ""; return; }
+    $("dzone").textContent = "anchor " + D.zone + " · " + D.task;
+    var h = "";
+    if (D.deadline) h += '<div class="calc">' + D.deadline.join("") + "</div>";
+    if (D.tof) h += '<div class="calc">' + line("TOF-Broker", D.tof, true) + "</div>";
+    if (D.opts) {
+      var maxQ = Math.max.apply(null, D.opts.map(function (o) { return o.q || 0; }).concat([0.01]));
+      h += '<table class="dtab"><tr><th class="l">option <i>k</i></th><th>' + HAT("T", "in") + '</th><th>' + HAT("W", "", "queue") + '</th><th>' + BAR("T", "", "run") + '</th><th>' + HAT("T", "ret") + '</th><th>total</th><th class="l">mask / Q</th></tr>';
+      D.opts.forEach(function (o) {
+        var cls = o.mask ? "masked" : o.chosen ? "chosen" : "";
+        var tail = o.mask ? '<span class="why">' + o.mask + "</span>" : (o.q != null ? '<span class="qbar" style="width:' + Math.round(44 * o.q / maxQ) + 'px"></span>' + N(o.q, 2) + (o.chosen ? " ✓" : "") : "passes");
+        h += '<tr class="' + cls + '"><td class="l">' + o.label + "</td>" + (o.est ? "<td>" + N(o.est[0], 1) + "</td><td>" + N(o.est[1], 1) + "</td><td>" + N(o.est[2], 1) + "</td><td>" + N(o.est[3], 1) + "</td><td><b>" + N(o.est[0] + o.est[1] + o.est[2] + o.est[3], 1) + "</b></td>" : '<td colspan="5" class="l" style="color:var(--muted)">—</td>') + '<td class="l">' + tail + "</td></tr>";
+      });
+      h += "</table>";
+      if (D.limit) h += '<p class="note" style="margin-top:6px">ms. An option passes if total ≤ ' + D.limit + '. Q-values are example values; the agent takes the best unmasked one.</p>';
+    }
+    if (D.extra) h += '<div class="calc">' + D.extra.join("") + "</div>";
+    if (D.reward) h += '<div class="calc">' + D.reward.join("") + "</div>";
+    $("decision").innerHTML = h;
+  }
+
+  // ---------- flow toolkit ----------
+  function X(tok) {
+    var ck = function () { if (S.token !== tok) throw CANCEL; };
+    var x = {
+      wait: function (s) { return wait(s).then(ck); },
+      until: function (f) { return until(f).then(ck); },
+      send: function (t, ids, o) { return send(t, ids, o).then(function (r) { ck(); return r; }); },
+      say: function (html, kind, topic) {
+        var gate = S.step && tok.beats > 0 ? new Promise(function (r) { $("gate").hidden = false; S.gateRes = r; }) : Promise.resolve();
+        return gate.then(function () { ck(); $("gate").hidden = true; tok.beats++; say(html, kind); if (topic !== undefined) hot(topic); return wait(0.6); }).then(ck);
+      },
+      tag: function (id, t, c, ttl) { return tag(id, t, c, ttl); },
+      role: function (z, r, on) { Z[z].roles[r] = on !== false; },
+      exec: function (z, d, slot) { var i = slot == null ? Z[z].busy.findIndex(function (v) { return v <= 0; }) : slot; if (i < 0) i = 0; Z[z].busy[i] = d; return wait(d).then(ck); },
+      cloudRun: function (d) { S.cloudBusy++; return wait(d).then(function () { S.cloudBusy = Math.max(0, S.cloudBusy - 1); ck(); }); },
+      dec: function (o) { D = o; renderDecision(); },
+      upd: function () { renderDecision(); }
+    };
+    return x;
+  }
+  var CAR7 = "car:7";
+  function up(x, z, big) { return x.send("task", [CAR7, "ap:" + z], { big: big }).then(function () { return x.say("The upload is complete at " + z + ": " + z + " becomes the <b>anchor</b>, stores the input and replies task id + anchor id. It subscribes to <code>car/7/attach</code>, <code>gps</code>, <code>result</code>, <code>ack</code>.", "", "post"); }).then(function () { x.role(z, "anchor"); }); }
+  function publish(x, exec, anchor) {
+    var src = exec === "cloud" ? "cloud" : "fog:" + exec;
+    var first = exec === "cloud" ? x.send("result", ["cloud", "router", "broker"]) : x.send("result", [src, "broker"]);
+    return first.then(function () {
+      var s = hero.serv, list = [];
+      if (s) list.push(x.send("result", ["broker", "fog:" + s]));
+      if (anchor && anchor !== s && anchor !== exec) list.push(x.send("result", ["broker", "fog:" + anchor]));
+      return Promise.all(list);
+    });
+  }
+  function deliver(x) { var s = hero.serv; return x.send("result", ["fog:" + s, CAR7]); }
+  function ack(x, anchor) {
+    var s = hero.serv;
+    return x.send("ack", [CAR7, "ap:" + s]).then(function () { if (s !== anchor) return x.send("ack", ["fog:" + s, "broker", "fog:" + anchor]); });
+  }
+  function deadlineLines(o) {
+    // o: {dist (m), S (bits), D (ms), trx (ms), Wrad (ms)}
+    var sh = shannon(o.dist), push = o.S / sh.R * 1000, That = o.Wrad + push + 3, dA = o.trx + o.D - That;
+    return { push: push, That: That, dA: dA, tleft: dA - o.trx, R: sh.R, lines: [
+      line("radio rate", V("R", "car") + " = " + V("B", "radio") + " log<sub>2</sub>(1 + SNR) at " + V("ℓ") + " = " + N(o.dist.toFixed(0)) + " m: " + N((sh.R / 1e6).toFixed(0)) + " Mbit/s"),
+      line("upload estimate", HAT("T", "radio") + " = " + V("W", "radio") + " + " + V("S") + "/" + V("R", "car") + " + " + BAR("δ", "radio") + " = " + N(o.Wrad.toFixed(2)) + " + " + N(push.toFixed(2)) + " + 3.00 = " + N(That.toFixed(2)) + " ms"),
+      line("deadline", V("d", "A") + " = " + V("t", "rx") + " + " + V("T", "car", "bud") + " − " + HAT("T", "radio") + " = " + N(o.trx.toFixed(1)) + " + " + N(o.D) + " − " + N(That.toFixed(2)) + " = " + N(dA.toFixed(1)) + " ms"),
+      line("time left", V("t", "left") + " = " + V("d", "A") + " − " + V("t", "rx") + " = " + N((dA - o.trx).toFixed(1)) + " ms", true)
+    ] };
+  }
+  function rewardLines(L, Dms, E, Eref, late) {
+    var ct = L / Dms + (late ? Math.max(0, L - Dms) / Dms : 0), ce = Math.min(E / Eref, CENMAX), r = 1 - W_STAR * ct - (1 - W_STAR) * ce;
+    return [line("time cost", V("C", "", "time") + " = " + V("L") + "/" + V("D") + (late ? " + " + V("w", "3") + "(" + V("L") + " − " + V("D") + ")/" + V("D") : "") + " = " + N(L.toFixed(1)) + "/" + N(Dms) + (late ? " + " + N(((L - Dms) / Dms).toFixed(3)) : "") + " = " + N(ct.toFixed(3))),
+      line("energy cost", V("C", "", "en") + " = min(" + V("E") + "/" + V("E", "ref") + ", " + V("C", "max", "en") + ") = " + N(E.toFixed(3)) + "/" + N(Eref.toFixed(3)) + " = " + N(ce.toFixed(3))),
+      line("reward", V("r") + " = 1 − 0.414 · " + N(ct.toFixed(3)) + " − 0.586 · " + N(ce.toFixed(3)) + " = " + N(r.toFixed(3)), true)];
+  }
+  var DROP_R = 1 - W_STAR * 5 - (1 - W_STAR) * CENMAX;
+  function dropLines() { return [line("dropped", V("C", "", "time") + " = " + V("C", "drop") + " = 5,  " + V("C", "", "en") + " = " + V("C", "max", "en") + " = 9.197"), line("reward", V("r") + " = 1 − 0.414 · 5 − 0.586 · 9.197 = " + N(DROP_R.toFixed(3)), true)]; }
+  function opt(label, est, mask, q) { return { label: label, est: est, mask: mask || null, q: q }; }
+  var EST = { here: function (w) { return [0, w, 22.6, 10]; }, nb: function (wbh, w) { return [wbh + 0.61 + 3, w, 22.6, 10]; }, cloud: function (wbh, wwan, w) { return [wbh + 3 + wwan + 16.89 + 62.5, w, 9.1, 69.5]; } };
+
+  // ---------- flows ----------
+  var FLOWS = [
+    { n: 1, code: "C2", title: "Run here" }, { n: 2, code: "C4", title: "Busy here, neighbour" }, { n: 3, code: "C1", title: "Boulder to the cloud" },
+    { n: 4, code: "C3 · C7", title: "Car leaving" }, { n: 5, code: "C13", title: "Two zones, hysteresis" }, { n: 6, code: "C8", title: "Car stopped" },
+    { n: 7, code: "C12", title: "Coverage gap" }, { n: 8, code: "C14", title: "Executor dies" }, { n: 9, code: "C9 · 9.2", title: "Refusal and drop" },
+    { n: 10, code: "C5 · S3", title: "WAN congestion" }
+  ];
+  function placeHero(axis, at, s, v, dir) { hero.road = { axis: axis, at: at }; hero.s = s; hero.v = v; hero.dir = dir || 1; hero.serv = null; hero.serv = serving(hero); }
+
+  var F = {};
+  F[1] = function (x) {
+    placeHero("x", 300, 160, 2, 1);
+    var dl = deadlineLines({ dist: 140, S: S_T1, D: 100, trx: 1000, Wrad: 0 });
+    return x.say("Car 7 creates a T1 frame (YOLO detection): " + V("S") + " = 608 kbit, hard, " + V("D") + " = 100 ms. It sends " + V("T", "car", "bud") + " = " + V("D") + " − time since creation with the upload (HTTP POST /tasks) to its serving zone z1.", "task", "post")
+      .then(function () { return up(x, "z1"); })
+      .then(function () { x.dec({ zone: "z1", task: "T1 frame, hard", deadline: dl.lines }); return x.say("z1 sets the deadline on its own clock: " + V("d", "A") + " = " + V("t", "rx") + " + " + V("T", "car", "bud") + " − " + HAT("T", "radio") + " = " + N(dl.dA.toFixed(1)) + " ms, so " + V("t", "left") + " = " + N(dl.tleft.toFixed(1)) + " ms."); })
+      .then(function () { D.tof = BAR("T", "strong", "run") + " = 22.6 ms &lt; " + V("α", "TOF") + V("D") + " = 0.8 · 100 = 80 ms → <b>pebble</b>, the agent decides"; x.upd(); return x.say("TOF-Broker: 22.6 ms &lt; 80 ms, a pebble."); })
+      .then(function () {
+        D.limit = V("t", "left") + " = " + N(dl.tleft.toFixed(1)); D.opts = [opt("here · z1", EST.here(0), null, 0.82), opt("Nb1 · z2", EST.nb(0, 0), null, 0.61), opt("Nb2 · z3", EST.nb(0, 12.4), null, 0.55), opt("Nb3 · z4", EST.nb(0, 0), null, 0.52), opt("Nb4 · z5", null, "offline"), opt("cloud", EST.cloud(0, 0, 0), "cannot meet the deadline")]; x.upd();
+        return x.say("Masks: z5 is offline (not joined); the cloud needs " + N("161.0") + " ms &gt; " + N(dl.tleft.toFixed(1)) + " ms. Here: " + HAT("T", "in") + " + " + HAT("W", "", "queue") + " + " + BAR("T", "", "run") + " + " + HAT("T", "ret") + " = 0 + 0 + 22.6 + 10 = 32.6 ms.");
+      })
+      .then(function () { D.opts[0].chosen = true; x.upd(); x.role("z1", "exec"); return x.say("The agent picks <b>here · z1</b> (highest Q of the unmasked options). It runs on a free GPU slot."); })
+      .then(function () { return x.exec("z1", 2.2, 0); })
+      .then(function () { return x.say("z1 publishes the result once on <code>car/7/result</code> → broker → the serving zone (z1, also the anchor).", "result", "result"); })
+      .then(function () { return publish(x, "z1", "z1"); })
+      .then(function () { return x.say("z1 pushes the result to car 7 over its WebSocket.", "result", "ws"); })
+      .then(function () { return deliver(x); })
+      .then(function () { return x.say("Car 7 confirms with the latency it measured: " + V("L") + " = " + V("T", "radio") + " + " + V("T", "in") + " + " + V("W", "", "queue") + " + " + V("T", "", "run") + " + " + V("T", "ret") + " = 4.1 + 0 + 0 + 23.5 + 10.2 = 37.8 ms. The serving zone publishes <code>car/7/ack</code>.", "ack", "ack"); })
+      .then(function () { return ack(x, "z1"); })
+      .then(function () { D.reward = rewardLines(37.8, 100, 1.425, EREF_T1); x.upd(); x.role("z1", "exec", false); x.role("z1", "anchor", false); return x.say("z1 closes the task: reward " + V("r") + " = " + V("r", "ok") + " − " + V("w") + V("C", "", "time") + " − (1 − " + V("w") + ")" + V("C", "", "en") + " = " + N(rewardR(37.8, 100, 1.425, EREF_T1).toFixed(3)) + ". Input and result copy deleted.", "done", null); });
+  };
+  function rewardR(L, Dm, E, Er) { return 1 - W_STAR * L / Dm - (1 - W_STAR) * Math.min(E / Er, CENMAX); }
+
+  F[2] = function (x) {
+    placeHero("x", 300, 200, 1.5, 1);
+    Z.z1.busy = [30, 30, 0, 0]; Z.z1.queue = 4;
+    var dl = deadlineLines({ dist: 100, S: S_T1, D: 100, trx: 2000, Wrad: 0.4 });
+    var W = waterFill([18.0, 20.0], 90.4);
+    return x.say("Rush at z1: both GPU slots busy and 4 hard tasks queued. Car 7 uploads a T1 frame.", "task", "post")
+      .then(function () { return up(x, "z1"); })
+      .then(function () { x.dec({ zone: "z1", task: "T1 frame, hard", deadline: dl.lines }); D.tof = "22.6 &lt; 80 ms → <b>pebble</b>"; x.upd(); return x.say("Deadline: " + V("t", "left") + " = " + N(dl.tleft.toFixed(1)) + " ms. TOF-Broker: pebble."); })
+      .then(function () {
+        D.extra = [line("z1 GPU wait", V("T", "", "rem") + " = [18.0, 20.0], " + V("Ω", "", "hard") + " = 4 × 22.6 = 90.4 → water level (" + HAT("W") + " − 18) + (" + HAT("W") + " − 20) = 90.4 → " + HAT("W", "", "queue") + " = " + N(W.toFixed(1)) + " ms"),
+          line("z1 CPU wait", "both CPU slots free → " + HAT("W", "", "queue") + " = 0, but " + BAR("T", "", "run") + " = 69.5 ms; " + V("q") + "* = CPU: 0 + 69.5 &lt; " + N(W.toFixed(1)) + " + 22.6")];
+        D.limit = V("t", "left") + " = " + N(dl.tleft.toFixed(1));
+        D.opts = [opt("here · z1 (CPU)", [0, 0, 69.5, 10], null, 0.58), opt("Nb1 · z2", EST.nb(0, 0), null, 0.86), opt("Nb2 · z3", EST.nb(0, 22.6), null, 0.64), opt("Nb3 · z4", EST.nb(0, 0), null, 0.60), opt("Nb4 · z5", null, "offline"), opt("cloud", EST.cloud(0, 0, 0), "cannot meet the deadline")]; x.upd();
+        return x.say("Here the GPU queue gives " + HAT("W", "", "queue") + " = " + N(W.toFixed(1)) + " ms; the free CPU slot finishes earlier (" + V("q") + "* = CPU, 69.5 ms). Neighbour z2 is idle: " + HAT("T", "in") + " = " + HAT("W", "bh") + " + " + V("S") + "/" + V("B", "bh") + " + " + BAR("δ", "bh") + " = 0 + 0.61 + 3 = 3.61 ms.");
+      })
+      .then(function () { D.opts[1].chosen = true; x.upd(); x.role("z2", "exec"); return x.say("The agent picks <b>Nb1 · z2</b> (C4): it finishes earlier even after the transfer, and a GPU run costs a third of the CPU energy. The input goes by HTTP with the budget " + V("T", "k", "bud") + " = " + V("d", "A") + " − " + V("t", "send") + " − " + HAT("T", "in,<i>k</i>") + " − " + HAT("T", "ret,<i>k</i>") + " = " + N((dl.tleft - 3.61 - 10).toFixed(1)) + " ms.", "task", "post"); })
+      .then(function () { return x.send("task", ["fog:z1", "broker", "fog:z2"]); })
+      .then(function () { return x.say("z2 accepts (200: slot type GPU, wait 0 ms, its state snapshot) and runs the task. One task, one node."); })
+      .then(function () { return x.exec("z2", 2.2, 0); })
+      .then(function () { return x.say("z2 publishes <code>car/7/result</code> once → broker → serving zone z1 (which is also the anchor).", "result", "result"); })
+      .then(function () { return publish(x, "z2", "z1"); })
+      .then(function () { return deliver(x); })
+      .then(function () { return x.say("Car 7 confirms " + V("L") + " = 4.4 + 3.9 + 0 + 22.9 + 10.6 = 41.8 ms; ack to anchor z1.", "ack", "ack"); })
+      .then(function () { return ack(x, "z1"); })
+      .then(function () { D.reward = rewardLines(41.8, 100, 1.389, EREF_T1); x.upd(); x.role("z2", "exec", false); x.role("z1", "anchor", false); Z.z1.queue = 0; return x.say("Reward " + V("r") + " = " + N(rewardR(41.8, 100, 1.389, EREF_T1).toFixed(3)) + " (" + V("E") + " = forwarding 0.13 mJ + execution 1.388 J + return 0.11 mJ).", "done", null); });
+  };
+
+  F[3] = function (x) {
+    placeHero("x", 300, 160, 1.5, 1);
+    var dl = deadlineLines({ dist: 140, S: S_T2, D: 4256, trx: 3000, Wrad: 0 });
+    return x.say("Car 7 records a 60-frame clip (T2, 4572 KB = 36.6 Mbit, soft, tight deadline " + V("D") + " = 1.1 × 3869 = 4256 ms) and uploads it to z1.", "task", "post")
+      .then(function () { return x.send("task", [CAR7, "ap:z1"], { big: true }); })
+      .then(function () { x.role("z1", "anchor"); x.dec({ zone: "z1", task: "T2 clip, soft", deadline: dl.lines }); return x.say("z1 is the anchor. The upload alone takes " + V("S") + "/" + V("R", "car") + " = " + N(dl.push.toFixed(1)) + " ms; " + V("t", "left") + " = " + N(dl.tleft.toFixed(0)) + " ms.", "", "post"); })
+      .then(function () { D.tof = BAR("T", "strong", "run") + " = 3869 ms ≥ " + V("α", "TOF") + V("D") + " = 0.8 · 4256 = 3405 ms → <b>boulder</b>: cloud by rule, no masks, no agent"; x.upd(); return x.say("TOF-Broker: 3869 ms ≥ 3405 ms → <b>boulder</b>. Even the strongest fog GPU would use 91 % of the deadline.", "warn"); })
+      .then(function () {
+        D.extra = [line("cloud check", HAT("T", "in,cloud") + " + " + BAR("T", "cloud", "run") + " + " + HAT("T", "ret,cloud") + " = 1081.5 + 661 + 69.5 = 1812 ms ≤ " + V("t", "left") + " + " + V("L", "max") + " → sent"),
+          line("WAN push", V("S") + "/" + V("B", "WAN") + " = 36.58 Mbit / 36 Mbit/s = 1016 ms, the narrowest link")]; x.upd();
+        return x.say("The cloud can make it: 1081.5 + 661 + 69.5 = 1812 ms. The input crosses the backhaul and the WAN; " + V("S") + "/" + V("B", "WAN") + " = 1016 ms of WAN time.", "task", "post");
+      })
+      .then(function () { return x.send("task", ["fog:z1", "broker", "router", "cloud"], { big: true }); })
+      .then(function () { return x.say("The cloud runs it on an A100 GPU slot (mean 661 ms)."); })
+      .then(function () { return x.cloudRun(2.6); })
+      .then(function () { return x.say("The cloud publishes <code>car/7/result</code> (one WAN crossing) → broker → serving zone.", "result", "result"); })
+      .then(function () { return publish(x, "cloud", "z1"); })
+      .then(function () { return deliver(x); })
+      .then(function () { return ack(x, hero.serv === "z1" ? "z1" : "z1"); })
+      .then(function () { D.reward = rewardLines(1774.9, 4256, 90.83, EREF_T2); x.upd(); x.role("z1", "anchor", false); return x.say("Delivered: " + V("L") + " = 1774.9 ms. Energy " + V("E") + " = 90.8 J against " + V("E", "ref") + " = 338.3 J for the same clip on fog, so " + V("C", "", "en") + " = 0.269.", "done", "ack"); });
+  };
+
+  F[4] = function (x) {
+    placeHero("x", 400, 609, 0, 1);
+    Z.z1.busy = [40, 40, 40, 40]; Z.z1.queue = 18;
+    var dl = deadlineLines({ dist: 325, S: S_T1, D: 1000, trx: 4000, Wrad: 0 });
+    var te = tExitAt([609, 400], [16.67, 0], [300, 300]);
+    return x.say("Car 7 drives east at 60 km/h (16.7 m/s) on the road y = 400 m, near the edge of z1. z1 is overloaded: 4 busy slots, 18 queued. Car 7 uploads a T4 plate reading (soft, " + V("D") + " = 1000 ms).", "task", "post")
+      .then(function () { return up(x, "z1"); })
+      .then(function () {
+        x.dec({ zone: "z1", task: "T4 plate, soft", deadline: dl.lines }); D.tof = "97.8 &lt; 800 ms → <b>pebble</b>";
+        D.extra = [line("exit time", V("T", "exit") + " = (−" + V("b") + " + √(" + V("b") + "² + |" + V("v") + "|²(" + V("ℓ", "z") + "² − |" + V("x", "car") + " − " + V("x", "z") + "|²))) / |" + V("v") + "|², " + V("b") + " = (" + V("x", "car") + " − " + V("x", "z") + ")·" + V("v") + " = 309 · 16.7 → " + V("T", "exit") + " = " + N(te.toFixed(2)) + " s"),
+          line("next zone", "z2, straight on along the road"),
+          line("here, ready at", "CPU: " + HAT("W", "", "queue") + " + " + BAR("T", "", "run") + " + " + HAT("T", "ret") + " = 1500 + 382.3 + 10 = 1892 ms &gt; " + V("T", "exit") + " = " + N((te * 1000).toFixed(0)) + " ms: the car is gone first")];
+        D.limit = V("t", "left") + " + " + V("L", "max") + " = " + N((dl.tleft + 1000).toFixed(0));
+        D.opts = [opt("here · z1 (CPU)", [0, 1500, 382.3, 10], null, 0.31), opt("Nb1 · z2", [3.6, 0, 97.8, 10], null, 0.86), opt("Nb2 · z3", [3.6, 0, 97.8, 10], null, 0.52), opt("Nb3 · z4", [3.6, 0, 97.8, 10], null, 0.49), opt("Nb4 · z5", null, "offline"), opt("cloud", [82.4, 0, 88.3, 69.5], null, 0.40)];
+        x.upd();
+        return x.say("The predictor on z1: " + V("T", "exit") + " = " + N(te.toFixed(2)) + " s, next zone z2. Here the result would be ready after 1892 ms, after the car leaves. z2 is where the car is heading and finishes in 111.4 ms.");
+      })
+      .then(function () { D.opts[1].chosen = true; x.upd(); x.role("z2", "exec"); return x.say("The agent picks <b>Nb1 · z2</b> (C3): run the task in the zone the car is heading to.", "task", "post"); })
+      .then(function () { return x.send("task", ["fog:z1", "broker", "fog:z2"]); })
+      .then(function () { hero.v = 5; var job = x.exec("z2", 3, 0); return x.until(function () { return hero.serv === "z2"; }).then(function () { return job; }); })
+      .then(function () { x.tag("fog:z2", "PUBLISH car/7/attach", COL.ctl, 2.5); return x.say("Car 7 is now 20 m closer to z2's access point → it attaches to <b>z2</b>, which publishes <code>car/7/attach</code> and subscribes to <code>car/7/result</code> (C7). Anchor z1 sees the attach.", "", "attach"); })
+      .then(function () { return x.send("attach", ["fog:z2", "broker", "fog:z1"]); })
+      .then(function () { return x.say("z2 publishes the result once; the broker gives it to z2 (now serving) and a copy to anchor z1.", "result", "result"); })
+      .then(function () { return publish(x, "z2", "z1"); })
+      .then(function () { return deliver(x); })
+      .then(function () { return x.say("Car 7 confirms through z2; z2 publishes <code>car/7/ack</code> → anchor z1.", "ack", "ack"); })
+      .then(function () { return ack(x, "z1"); })
+      .then(function () { D.reward = rewardLines(118.6, 1000, 4.47, EREF_T4); x.upd(); x.role("z2", "exec", false); x.role("z1", "anchor", false); Z.z1.queue = 0; return x.say("Reward " + V("r") + " = " + N(rewardR(118.6, 1000, 4.47, EREF_T4).toFixed(3)) + ". z1 lowers its subscriptions " + V("G") + " = 500 ms after closing.", "done", null); });
+  };
+  function tExitAt(m, v, z) { var dx = m[0] - z[0], dy = m[1] - z[1], b = dx * v[0] + dy * v[1], vv = v[0] * v[0] + v[1] * v[1]; return (-b + Math.sqrt(b * b + vv * (R_M * R_M - dx * dx - dy * dy))) / vv; }
+
+  F[5] = function (x) {
+    placeHero("x", 300, 440, 6, 1);
+    x.dec({ zone: "—", task: "handover", extra: [] });
+    var info = x.tag(CAR7, "", COL.serving, 60);
+    var upd = setInterval(function () { var m = carM(hero); var d1 = dist(m, ZONES.z1), d2 = dist(m, ZONES.z2); info.t.textContent = "z1 " + d1.toFixed(0) + " m · z2 " + d2.toFixed(0) + " m → attached " + (hero.serv || "—"); }, 100);
+    return x.say("Car 7 drives along the road at y = 300 m from z1 (centre x = 300 m) to z2 (x = 900 m). Coverage overlaps between x = 550 m and x = 650 m.", "", "attach")
+      .then(function () { return x.until(function () { return carM(hero)[0] > 560; }); })
+      .then(function () { D.extra = [line("in range", "z1 and z2 both within " + V("ℓ", "z") + " = 350 m"), line("rule", "switch only when the new access point is at least 20 m closer than the current one")]; x.upd(); return x.say("Both access points are in range. The car stays on z1."); })
+      .then(function () { return x.until(function () { return carM(hero)[0] > 600; }); })
+      .then(function () { hero.v = 2; return x.say("At x = 600 m both are 300 m away: equal distance, no switch (it needs 20 m)."); })
+      .then(function () { hero.v = 6; return x.until(function () { return hero.serv === "z2"; }); })
+      .then(function () { var m = carM(hero); D.extra.push(line("switch", "at x = " + N(m[0].toFixed(0)) + " m: " + N(dist(m, ZONES.z1).toFixed(0)) + " − " + N(dist(m, ZONES.z2).toFixed(0)) + " ≥ 20 m → attach z2", true)); x.upd(); x.tag("fog:z2", "PUBLISH car/7/attach", COL.ctl, 2.5); return x.say("At x ≈ 610 m z2 is 20 m closer → one switch. z2 publishes <code>car/7/attach</code>; no ping-pong in the overlap (C13).", "", "attach"); })
+      .then(function () { return x.send("attach", ["fog:z2", "broker", "fog:z1"]); })
+      .then(function () { return x.wait(1.5); })
+      .then(function () { clearInterval(upd); info.ttl = 0; return x.say("One handover across the whole overlap.", "done"); });
+  };
+
+  F[6] = function (x) {
+    placeHero("x", 300, 560, 0, 1);
+    var dl = deadlineLines({ dist: 260, S: S_T1, D: 100, trx: 6000, Wrad: 0 });
+    return x.say("Car 7 waits at a red light 90 m from the edge of z1 (speed 0).", "", "gps")
+      .then(function () { x.tag(CAR7, "speed 0 → T_exit = ∞", COL.ctl, 5); return x.say("The anchor's predictor: with " + V("v") + " = 0 the exit equation has no root, so " + V("T", "exit") + " = ∞ (C8)."); })
+      .then(function () { return up(x, "z1"); })
+      .then(function () {
+        x.dec({ zone: "z1", task: "T1 frame, hard", deadline: dl.lines }); D.tof = "22.6 &lt; 80 ms → <b>pebble</b>";
+        D.extra = [line("exit time", V("v") + " = 0 → " + V("T", "exit") + " = ∞: the car cannot leave before the result")];
+        D.limit = V("t", "left") + " = " + N(dl.tleft.toFixed(1));
+        D.opts = [opt("here · z1", EST.here(0), null, 0.84), opt("Nb1 · z2", EST.nb(0, 0), null, 0.60), opt("Nb2 · z3", EST.nb(0, 0), null, 0.58), opt("Nb3 · z4", EST.nb(0, 0), null, 0.51), opt("Nb4 · z5", null, "offline"), opt("cloud", EST.cloud(0, 0, 0), "cannot meet the deadline")];
+        D.opts[0].chosen = true; x.upd(); x.role("z1", "exec");
+        return x.say("Running here is safe; the agent picks <b>here · z1</b> (32.6 ms).");
+      })
+      .then(function () { return x.exec("z1", 2, 0); })
+      .then(function () { return publish(x, "z1", "z1"); })
+      .then(function () { return deliver(x); })
+      .then(function () { return ack(x, "z1"); })
+      .then(function () { D.reward = rewardLines(39.4, 100, 1.39, EREF_T1); x.upd(); x.role("z1", "exec", false); x.role("z1", "anchor", false); return x.say("Result, ack, reward " + N(rewardR(39.4, 100, 1.39, EREF_T1).toFixed(3)) + ". The light turns green.", "done", "ack"); })
+      .then(function () { hero.v = 20; return x.wait(1.5); });
+  };
+
+  F[7] = function (x) {
+    placeHero("x", 600, 120, 14, 1);
+    var dl = deadlineLines({ dist: 330, S: 608000, D: 1000, trx: 7000, Wrad: 0 });
+    return x.say("Car 7 drives east along y = 600 m. Between x ≈ 465 m and 735 m no zone covers the road (z5 is off). It uploads a T4 plate reading (soft, 1000 ms) to z1 just before the gap.", "task", "post")
+      .then(function () { return up(x, "z1"); })
+      .then(function () {
+        x.dec({ zone: "z1", task: "T4 plate, soft", deadline: dl.lines }); D.tof = "97.8 &lt; 800 ms → <b>pebble</b>";
+        D.limit = V("t", "left") + " + " + V("L", "max") + " = " + N((dl.tleft + 1000).toFixed(0));
+        D.opts = [opt("here · z1", [0, 0, 97.8, 10], null, 0.74), opt("Nb1 · z2", [3.6, 0, 97.8, 10], null, 0.55), opt("Nb2 · z3", [3.6, 0, 97.8, 10], null, 0.66), opt("Nb3 · z4", [3.6, 0, 97.8, 10], null, 0.52), opt("Nb4 · z5", null, "offline"), opt("cloud", [82.4, 0, 88.3, 69.5], null, 0.31)];
+        D.opts[0].chosen = true; x.upd(); x.role("z1", "exec");
+        return x.say("z1 has free slots; the agent picks <b>here · z1</b>.");
+      })
+      .then(function () { var job = x.exec("z1", 2.5, 0); return x.until(function () { return hero.serv === null; }).then(function () { return job; }); })
+      .then(function () { return x.say("Car 7 is in the gap: no serving zone, no GPS, no result path.", "warn", null); })
+      .then(function () { return x.say("z1 publishes <code>car/7/result</code>; nobody serves car 7, so only the anchor's copy exists. No ack arrives within " + V("T", "ack") + " = 200 ms.", "warn", "result"); })
+      .then(function () { return x.send("result", ["fog:z1", "broker"]); })
+      .then(function () { x.tag("fog:z1", "holds result · waiting for attach", COL.anchor, 30); return x.until(function () { return hero.serv === "z4" || hero.serv === "z2"; }); })
+      .then(function () { var s = hero.serv; x.tag("fog:" + s, "PUBLISH car/7/attach", COL.ctl, 2.5); return x.say("Car 7 reaches " + s + " → " + s + " publishes <code>car/7/attach</code>.", "", "attach"); })
+      .then(function () { return x.send("attach", ["fog:" + hero.serv, "broker", "fog:z1"]); })
+      .then(function () { return x.say("Anchor z1 republishes its copy on the attach → broker → " + hero.serv + " → car 7 (C12).", "result", "result"); })
+      .then(function () { return x.send("result", ["fog:z1", "broker", "fog:" + hero.serv, CAR7]); })
+      .then(function () { return ack(x, "z1"); })
+      .then(function () { D.reward = rewardLines(1180, 1000, 4.45, EREF_T4, true); x.upd(); x.role("z1", "exec", false); x.role("z1", "anchor", false); S.tags.forEach(function (t) { if (t.id === "fog:z1") t.ttl = 0; }); return x.say("Delivered " + V("L") + " = 1180 ms: late but within " + V("D") + " + " + V("L", "max") + " = 2000 ms, so the reward includes the lateness term. A hard task would have been dropped at its deadline.", "done", "ack"); });
+  };
+
+  F[8] = function (x) {
+    placeHero("x", 300, 300, 1.5, 1);
+    var dl = deadlineLines({ dist: 5, S: S_T1, D: 100, trx: 8000, Wrad: 0 });
+    Z.z1.busy = [20, 20, 20, 20]; Z.z1.queue = 2;
+    return x.say("z1 is full. Car 7 uploads a T1 frame (hard, 100 ms) to z1.", "task", "post")
+      .then(function () { return up(x, "z1"); })
+      .then(function () {
+        x.dec({ zone: "z1", task: "T1 frame, hard", deadline: dl.lines }); D.tof = "22.6 &lt; 80 ms → <b>pebble</b>"; D.limit = V("t", "left") + " = " + N(dl.tleft.toFixed(1));
+        D.opts = [opt("here · z1", [0, 52.4, 22.6, 10], null, 0.51), opt("Nb1 · z2", EST.nb(0, 18.3), null, 0.62), opt("Nb2 · z3", EST.nb(0, 12.0), null, 0.58), opt("Nb3 · z4", EST.nb(0, 0), null, 0.79), opt("Nb4 · z5", null, "offline"), opt("cloud", EST.cloud(0, 0, 0), "cannot meet the deadline")];
+        D.opts[3].chosen = true; x.upd(); x.role("z4", "exec");
+        return x.say("The agent picks <b>Nb3 · z4</b> (idle). Attempt 1 is sent with the attempt key (task id, z1, 1).", "task", "post");
+      })
+      .then(function () { return x.send("task", ["fog:z1", "broker", "fog:z4"]); })
+      .then(function () { return x.say("z4 accepts. z1 starts the watchdog: " + V("t", "wd") + " = " + V("t", "acc") + " − " + BAR("δ", "reply") + " + " + HAT("W", "", "queue") + " + " + V("T", "", "run,hi") + " + " + BAR("δ", "pub") + " + " + V("m", "wd") + " = " + V("t", "acc") + " − 3 + 0 + 25.7 + 4 + 20."); })
+      .then(function () { Z.z4.busy[0] = 99; return x.wait(1.2); })
+      .then(function () { Z.z4.alive = false; Z.z4.busy = [0, 0, 0, 0]; x.role("z4", "exec", false); x.tag("fog:z4", "offline", COL.bad, 6); return x.say("z4 crashes. The broker publishes its last will: <code>zone/z4/status = offline</code> (retained).", "warn", "status"); })
+      .then(function () { return Promise.all([x.send("status", ["broker", "fog:z1"]), x.send("status", ["broker", "fog:z2"]), x.send("status", ["broker", "fog:z3"])]); })
+      .then(function () {
+        D.extra = [line("retry mask", "a hard task is retried only if some option passes the deadline test; " + V("t", "left") + " now ≈ 61 ms"), line("retries left", "hard: 1 (soft: 2)")];
+        D.opts = [opt("here · z1", [0, 25.4, 22.6, 10], null, 0.71), opt("Nb1 · z2", EST.nb(0, 18.3), null, 0.66), opt("Nb2 · z3", EST.nb(0, 12.0), null, 0.60), opt("Nb3 · z4", null, "offline"), opt("Nb4 · z5", null, "offline"), opt("cloud", EST.cloud(0, 0, 0), "cannot meet the deadline")];
+        D.limit = V("t", "left") + " ≈ " + N("61.0"); D.opts[0].chosen = true; x.upd(); x.role("z1", "exec");
+        return x.say("z1 handles the task at once (C14): attempt 2, a new decision with the normal masks. z4 is now masked offline; the agent picks <b>here · z1</b>: 0 + 25.4 + 22.6 + 10 = 58.0 ms ≤ 61 ms.", "task");
+      })
+      .then(function () { return x.exec("z1", 1.8, 0); })
+      .then(function () { return publish(x, "z1", "z1"); })
+      .then(function () { return deliver(x); })
+      .then(function () { return ack(x, "z1"); })
+      .then(function () {
+        D.reward = [line("attempt 1 (lost)", V("r") + " = −(" + V("w") + V("T", "waste") + "/" + V("D") + " + (1 − " + V("w") + ")min(" + V("E", "waste") + "/" + V("E", "ref") + ", " + V("C", "max", "en") + ")) = −(0.414 · 31/100 + 0.586 · 0.62) = " + N((-(0.414 * 0.31 + 0.586 * 0.62)).toFixed(3)))].concat(rewardLines(84.6, 100, 1.38, EREF_T1));
+        x.upd(); x.role("z1", "exec", false); x.role("z1", "anchor", false); Z.z1.queue = 0; return x.say("Delivered on the retry, " + V("L") + " = 84.6 ms. Each attempt gets its own reward: the lost one a waste penalty, the delivered one the normal reward.", "done", "ack");
+      })
+      .then(function () { return x.wait(2); }).then(function () { Z.z4.alive = true; return x.say("z4 restarts with a new epoch, publishes <code>online</code> and its state; neighbours unmask it.", "", "status"); });
+  };
+
+  F[9] = function (x) {
+    placeHero("x", 300, 260, 1.5, 1);
+    var dl = deadlineLines({ dist: 40, S: S_T1, D: 100, trx: 9000, Wrad: 1.2 });
+    Z.z1.busy = [25, 25, 25, 25]; Z.z1.queue = 5;
+    return x.say("Several anchors saw z2 idle 100 ms ago and sent it work at once (herding). Car 7 uploads a T1 frame to busy z1.", "task", "post")
+      .then(function () { return up(x, "z1"); })
+      .then(function () {
+        x.dec({ zone: "z1", task: "T1 frame, hard", deadline: dl.lines }); D.tof = "22.6 &lt; 80 ms → <b>pebble</b>"; D.limit = V("t", "left") + " = " + N(dl.tleft.toFixed(1));
+        D.opts = [opt("here · z1", [0, 74.1, 22.6, 10], "cannot meet the deadline"), opt("Nb1 · z2", EST.nb(0, 0), null, 0.88), opt("Nb2 · z3", EST.nb(0, 41.0), null, 0.52), opt("Nb3 · z4", EST.nb(0, 55.2), "cannot meet the deadline"), opt("Nb4 · z5", null, "offline"), opt("cloud", EST.cloud(0, 0, 0), "cannot meet the deadline")];
+        D.opts[1].chosen = true; x.upd(); x.role("z2", "exec");
+        return x.say("z1's view of z2 is 100 ms old: idle. The agent picks <b>Nb1 · z2</b>.", "task", "post");
+      })
+      .then(function () { return x.send("task", ["fog:z1", "broker", "fog:z2"]); })
+      .then(function () { x.role("z2", "exec", false); x.tag("fog:z2", "503 refused: late", COL.bad, 3); return x.say("z2 checks on arrival with its exact queue: best " + V("t") + " + " + V("F", "<i>q</i>*") + " misses " + V("d", "<i>k</i>") + " → <b>refused \"late\"</b> (HTTP 503 with its fresh snapshot, rule R1).", "warn", "post"); })
+      .then(function () { return x.send("ctl", ["fog:z2", "broker", "fog:z1"]); })
+      .then(function () {
+        D.opts = [opt("here · z1", [0, 61.9, 22.6, 10], "cannot meet the deadline"), opt("Nb1 · z2", [3.6, 70.2, 22.6, 10], "cannot meet the deadline"), opt("Nb2 · z3", EST.nb(0, 58.0), "cannot meet the deadline"), opt("Nb3 · z4", EST.nb(0, 66.1), "cannot meet the deadline"), opt("Nb4 · z5", null, "offline"), opt("cloud", EST.cloud(0, 0, 0), "cannot meet the deadline")];
+        D.limit = V("t", "left") + " ≈ " + N("78.0"); x.upd();
+        return x.say("One re-decision (9.2). With the time spent, every option now misses: all masked → the hard task is <b>dropped</b> at once.", "warn");
+      })
+      .then(function () {
+        D.reward = [line("attempt 1 (refused)", V("r") + " = −(" + V("w") + V("T", "waste") + "/" + V("D") + " + (1 − " + V("w") + ")min(" + V("E", "waste") + "/" + V("E", "ref") + ", " + V("C", "max", "en") + ")) = −(0.414 · 9.4/100 + 0.586 · 0.0001) = " + N((-(0.414 * 0.094 + 0.586 * 0.0001)).toFixed(3)))].concat(dropLines());
+        x.upd(); x.role("z1", "anchor", false); Z.z1.queue = 0;
+        return x.say("The refusal's waste penalty is what teaches the agent to avoid herding. The drop gets " + V("C", "", "time") + " = " + V("C", "drop") + " = 5 and " + V("C", "", "en") + " = " + V("C", "max", "en") + ", so " + V("r") + " = " + N(DROP_R.toFixed(3)) + ": worse than any delivery.", "done", null);
+      });
+  };
+
+  F[10] = function (x) {
+    placeHero("x", 300, 240, 1.5, 1);
+    var jobs = [], i = 0;
+    function burst() {
+      if (S.token !== x._tok || i >= 18) return;
+      i++;
+      var zs = ["z1", "z2", "z3", "z4"], z = zs[i % 4];
+      send("task", ["fog:" + z, "broker", "router", "cloud"], { big: true }).then(function () { S.cloudBusy++; return wait(3); }).then(function () { S.cloudBusy = Math.max(0, S.cloudBusy - 1); return send("result", ["cloud", "router", "broker"]); });
+      S.wanHat = 0.8 * S.wanHat + 0.2 * Math.min(600, i * 38);
+      setTimeout(burst, 260 / S.speed);
+    }
+    return x.say("Rush hour (S3): many clips are boulders and go to the cloud. They all share one WAN pipe of 36 Mbit/s; each T2 clip holds it for 1016 ms.", "warn", "post")
+      .then(function () { x._tok = S.token; burst(); return x.wait(4.5); })
+      .then(function () { return x.say("The pipe backs up: each anchor learns the WAN wait from its own transfers, " + HAT("W", "WAN") + " ← 0.8 · " + HAT("W", "WAN") + " + 0.2 · sample (" + V("η") + " = 0.2). Now " + HAT("W", "WAN") + " ≈ " + N(S.wanHat.toFixed(0)) + " ms.", "warn"); })
+      .then(function () { return up(x, "z1"); })
+      .then(function () {
+        var dl = deadlineLines({ dist: 60, S: 608000, D: 1000, trx: 10000, Wrad: 0 });
+        var cl = [S.wanHat > 0 ? 3 + S.wanHat + 16.9 + 62.5 : 82.4, 0, 88.3, 69.5];
+        x.dec({ zone: "z1", task: "T4 plate, soft", deadline: dl.lines }); D.tof = "97.8 &lt; 800 ms → <b>pebble</b>"; D.limit = V("t", "left") + " + " + V("L", "max") + " = " + N((dl.tleft + 1000).toFixed(0));
+        D.extra = [line("cloud forwarding", HAT("T", "in,cloud") + " = " + HAT("W", "bh") + " + " + BAR("δ", "bh") + " + " + HAT("W", "WAN") + " + " + V("S") + "/" + V("B", "WAN") + " + " + BAR("δ", "WAN") + " = 0 + 3 + " + N(S.wanHat.toFixed(0)) + " + 16.9 + 62.5 = " + N(cl[0].toFixed(0)) + " ms")];
+        D.opts = [opt("here · z1", [0, 0, 97.8, 10], null, 0.81), opt("Nb1 · z2", [3.6, 0, 97.8, 10], null, 0.66), opt("Nb2 · z3", [3.6, 0, 97.8, 10], null, 0.63), opt("Nb3 · z4", [3.6, 0, 97.8, 10], null, 0.58), opt("Nb4 · z5", null, "offline"), opt("cloud", cl, null, 0.12)];
+        D.opts[0].chosen = true; x.upd(); x.role("z1", "exec");
+        return x.say("Car 7 uploads a T4 to z1. The cloud's estimate now includes the WAN wait (" + N(cl[0].toFixed(0)) + " ms to get there), its Q-value is low; the agent keeps it at the edge: <b>here · z1</b>.");
+      })
+      .then(function () { return x.exec("z1", 2.2, 0); })
+      .then(function () { return publish(x, "z1", "z1"); })
+      .then(function () { return deliver(x); })
+      .then(function () { return ack(x, "z1"); })
+      .then(function () { D.reward = rewardLines(121.4, 1000, 4.71, EREF_T4); x.upd(); x.role("z1", "exec", false); x.role("z1", "anchor", false); return x.say("Delivered from the edge while the WAN is congested.", "done", "ack"); })
+      .then(function () { return x.until(function () { return S.wanLoad <= 0; }); })
+      .then(function () { S.wanHat = 0; return x.say("The WAN drains; " + HAT("W", "WAN") + " falls back as new samples come in.", "done"); });
+  };
+
+  // ---------- run ----------
+  function resetWorld() {
+    S.pk.forEach(function (p) { p.dot.remove(); }); S.pk = []; S.wanLoad = 0; S.wanHat = 0; S.cloudBusy = 0;
+    S.tags.forEach(function (t) { t.g.remove(); }); S.tags = [];
+    S.timers = []; S.waiters = [];
+    Object.keys(Z).forEach(function (id) { var z = Z[id]; z.roles = {}; z.busy = [0, 0, 0, 0]; z.queue = 0; z.alive = id !== "z5"; });
+    D = null; renderDecision(); hot(null);
+    $("log").innerHTML = ""; logN = 0;
+  }
+  function play(n) {
+    resetWorld();
+    var tok = { beats: 0 }; S.token = tok; S.flow = n;
+    var f = FLOWS.filter(function (k) { return k.n === n; })[0];
+    $("ftitle").textContent = "flow " + n + " · " + f.code + " · " + f.title;
+    document.querySelectorAll("#flows button").forEach(function (b) { b.setAttribute("aria-pressed", String(+b.dataset.n === n)); });
+    var x = X(tok);
+    F[n](x).then(function () { if (S.token === tok) { say("Flow complete.", "done"); } }).catch(function (e) { if (e !== CANCEL) console.error(e); });
+  }
+  FLOWS.forEach(function (f) {
+    var b = document.createElement("button"); b.type = "button"; b.dataset.n = f.n; b.setAttribute("aria-pressed", "false");
+    b.innerHTML = "<b>" + f.n + "</b><span>" + f.title + "<small>" + f.code + "</small></span>";
+    b.addEventListener("click", function () { play(f.n); }); $("flows").appendChild(b);
+  });
+  $("pause").addEventListener("click", function () { S.paused = !S.paused; $("pause").textContent = S.paused ? "Play" : "Pause"; });
+  $("step").addEventListener("click", function () { S.step = !S.step; $("step").textContent = "Step mode: " + (S.step ? "on" : "off"); if (!S.step && S.gateRes) { var r = S.gateRes; S.gateRes = null; r(); } });
+  $("next").addEventListener("click", function () { if (S.gateRes) { var r = S.gateRes; S.gateRes = null; r(); } });
+  $("speed").addEventListener("change", function () { S.speed = parseFloat(this.value); });
+  $("ambient").addEventListener("change", function () { S.ambient = this.checked; });
+  play(1);
+})();
+</script>
