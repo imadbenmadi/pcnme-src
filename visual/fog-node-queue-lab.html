@@ -1,0 +1,725 @@
+<title>Fog Node Queue Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+/* Layout: controls on top; one wide stage (arrivals | GPU lane, CPU lane: queue + slots | outcomes); under it the latest decision worked out in math, the event log, and the rules with their formulas. */
+:root {
+  --bg: #ffffff; --ink: #0b0d10; --muted: #4a5260; --line: #cfd5dd; --soft: #f3f5f8; --pick: #eaf1fe;
+  --hard: #c2410c; --soft-t: #0f766e; --gpu: #4338ca; --cpu: #15803d;
+  --ok: #15803d; --warn: #a16207; --bad: #b91c1c; --reserve: #fde7dc;
+  --f-text: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --f-math: "STIX Two Text", "Cambria Math", "Times New Roman", serif;
+  --f-num: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--ink); }
+body { margin: 0; font: 16px/1.55 var(--f-text); }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 20px; }
+h1 { font-size: 30px; line-height: 1.2; margin: 0; font-weight: 600; text-wrap: balance; }
+h2 { font-size: 19px; margin: 0 0 10px; font-weight: 600; }
+h3 { font-size: 16px; margin: 0 0 4px; font-weight: 600; }
+p { margin: 0; }
+.lead { color: var(--muted); font-size: 17px; max-width: 86ch; }
+.m { font-family: var(--f-math); font-size: 1.12em; white-space: nowrap; }
+.m i { font-style: italic; }
+.m sub, .m sup { font-size: 0.7em; font-style: normal; }
+.n { font-family: var(--f-num); font-variant-numeric: tabular-nums; font-size: 0.86em; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.controls label { font-size: 14.5px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+select, button { font: 500 15px var(--f-text); color: var(--ink); background: var(--bg); border: 1.5px solid var(--line); border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+button:hover, select:hover { border-color: var(--muted); }
+button:focus-visible, select:focus-visible { outline: 3px solid var(--gpu); outline-offset: 2px; }
+button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); min-width: 92px; font-weight: 600; }
+.adds { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 14.5px; color: var(--muted); }
+.adds button { font-size: 14px; padding: 5px 10px; }
+.adds button[data-cls="hard"] { border-left: 5px solid var(--hard); }
+.adds button[data-cls="soft"] { border-left: 5px solid var(--soft-t); }
+
+.stage-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+.stage { position: relative; width: 1200px; height: 560px; }
+.col-title { position: absolute; font: 600 12px var(--f-text); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.clock { position: absolute; right: 16px; top: 10px; font: 600 16px var(--f-num); }
+.lane { position: absolute; left: 140px; width: 760px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.lane.gpu { border-top: 4px solid var(--gpu); }
+.lane.cpu { border-top: 4px solid var(--cpu); }
+.lane-title { position: absolute; left: 14px; top: 8px; font-weight: 600; font-size: 16px; }
+.lane-state { position: absolute; left: 14px; right: 14px; top: 34px; font-family: var(--f-math); font-size: 16px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lane-state sub, .lane-state sup { font-size: 0.7em; }
+.lane-state .n { font-size: 0.86em; }
+.place { position: absolute; width: 50px; height: 38px; border: 1px dashed var(--line); border-radius: 5px; }
+.qnote { position: absolute; font-size: 12.5px; color: var(--muted); }
+.more { position: absolute; font: 600 13px var(--f-num); color: var(--muted); }
+.meter { position: absolute; height: 10px; border: 1px solid var(--line); border-radius: 2px; background: var(--bg); overflow: hidden; }
+.meter .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ink); opacity: 0.75; }
+.meter .res { position: absolute; top: 0; bottom: 0; right: 0; background: repeating-linear-gradient(135deg, var(--reserve) 0 4px, #f8c9b3 4px 8px); }
+.meter-label { position: absolute; font-size: 12.5px; color: var(--muted); }
+.slot { position: absolute; width: 200px; height: 58px; border: 2px solid var(--line); border-radius: 7px; background: var(--bg); }
+.slot .sl-label { position: absolute; left: 0; top: -19px; font: 600 12.5px var(--f-text); color: var(--muted); white-space: nowrap; }
+.slot .sl-state { position: absolute; left: 62px; top: 6px; right: 6px; font-size: 12.5px; line-height: 1.35; color: var(--ink); }
+.slot .sl-state .m { font-size: 1em; }
+.slot .bar { position: absolute; left: 0; bottom: 0; height: 5px; width: 0; border-radius: 0 0 5px 5px; }
+.slot.aborting { background: repeating-linear-gradient(135deg, #fde2e2 0 6px, #fff 6px 12px); border-color: var(--bad); }
+.none-note { position: absolute; font-size: 14px; color: var(--muted); width: 220px; }
+.bin { position: absolute; left: 920px; width: 266px; height: 96px; border-top: 1px solid var(--line); }
+.bin .bh { display: flex; justify-content: space-between; font-size: 14px; padding-top: 4px; font-weight: 600; }
+.bin.ok .bh b { color: var(--ok); } .bin.late .bh b { color: var(--warn); } .bin.bad .bh b { color: var(--bad); }
+.bin .count { font: 600 14px var(--f-num); }
+.arrival { position: absolute; left: 12px; top: 40px; width: 116px; height: 506px; border-right: 1px dashed var(--line); }
+.arrival p { position: absolute; left: 0; right: 8px; bottom: 0; font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+
+.chip { position: absolute; left: 0; top: 0; width: 50px; height: 38px; border-radius: 5px; color: #fff;
+  font: 500 11.5px/1 var(--f-num); padding: 5px 5px 8px; overflow: hidden; display: grid; grid-template-rows: 1fr 1fr;
+  transition: transform 450ms cubic-bezier(.2,.8,.2,1), opacity 300ms; box-shadow: 0 1px 2px rgba(0,0,0,.18); }
+.chip.hard { background: var(--hard); } .chip.soft { background: var(--soft-t); }
+.chip .top { display: flex; justify-content: space-between; font-weight: 600; }
+.chip .tag { font-size: 10px; opacity: 0.95; white-space: nowrap; }
+.chip .slack { position: absolute; left: 0; bottom: 0; height: 4px; background: rgba(255,255,255,.9); }
+.chip .slack.warn { background: #fde047; } .chip .slack.bad { background: #111; }
+.chip.promoted { outline: 3px solid var(--warn); outline-offset: 1px; }
+.chip.stolen { outline: 2px dashed var(--ink); outline-offset: 1px; }
+.chip.flash { box-shadow: 0 0 0 3px var(--gpu); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; color: var(--muted); }
+.sw { display: inline-block; width: 16px; height: 11px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+
+.below { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 18px; }
+.below > * { min-width: 0; }
+.rules p .m, .rules li .m, .foot .m { white-space: normal; }
+.rules li { line-height: 1.7; }
+@media (max-width: 900px) { .below { grid-template-columns: minmax(0, 1fr); } }
+.box { border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; min-width: 0; }
+.calc { display: grid; grid-template-columns: minmax(150px, 210px) 1fr; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.calc > div { padding: 8px 12px; border-bottom: 1px solid var(--line); min-width: 0; }
+.calc > .lab { background: var(--soft); font-size: 14.5px; }
+.calc > .val { font-family: var(--f-math); font-size: 17.5px; overflow-x: auto; }
+.calc > .val sub, .calc > .val sup { font-size: 0.7em; }
+.calc > .res { background: var(--pick); font-weight: 600; }
+.calc > div:nth-last-child(-n+2) { border-bottom: 0; }
+@media (max-width: 640px) { .calc { grid-template-columns: 1fr; } .calc > .lab { border-bottom: 0; } }
+.empty { color: var(--muted); font-size: 15px; }
+.counters { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px 14px; margin-bottom: 14px; }
+.counter .k { display: block; font-size: 13px; color: var(--muted); }
+.counter .v { font: 600 20px var(--f-num); }
+.log { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; max-height: 360px; overflow-y: auto; }
+.log li { display: grid; grid-template-columns: 76px 54px minmax(0, 1fr); gap: 10px; font-size: 14.5px; align-items: baseline; }
+.log .lt { font: 13px var(--f-num); color: var(--muted); }
+.log .lp { font: 600 12px var(--f-num); border: 1px solid var(--line); border-radius: 4px; text-align: center; padding: 1px 0; color: var(--muted); }
+.log li.drop .lx { color: var(--bad); } .log li.good .lx { color: var(--ok); } .log li.note .lx { color: var(--warn); }
+.rules { display: grid; gap: 16px; }
+.rules ol { margin: 4px 0 0; padding-left: 22px; display: grid; gap: 4px; }
+.eq { font-family: var(--f-math); font-size: 18px; line-height: 1.9; padding: 10px 14px; background: var(--soft); border-radius: 6px; overflow-x: auto; white-space: nowrap; margin: 8px 0; max-width: 100%; }
+.eq sub, .eq sup { font-size: 0.7em; }
+.foot { font-size: 14px; color: var(--muted); max-width: 110ch; }
+@media (prefers-reduced-motion: reduce) { .chip { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:8px">
+    <h1>Fog Node Queue Lab</h1>
+    <p class="lead">One PCNME fog node (GTX 1070 class) running in slow motion: how a task picks its slot type, waits in the GPU or CPU queue, is refused, skipped, promoted, stolen or aborted, and how a free slot picks its next task. Rules of final design section 8, run times of the calibrated time table.</p>
+  </header>
+
+  <div class="controls" role="group" aria-label="Simulation controls">
+    <button id="play" class="primary" type="button">Play</button>
+    <button id="stepBtn" type="button">Step +5 ms</button>
+    <button id="eventBtn" type="button">Next event</button>
+    <label for="scenario">Scenario
+      <select id="scenario">
+        <option value="r05">Light load, ρ_fog = 0.5 (S1)</option>
+        <option value="r09" selected>Critical load, ρ_fog = 0.9 (S2)</option>
+        <option value="r15">Overload, ρ_fog = 1.5 (S3)</option>
+        <option value="fcpu">Node without a GPU (F-CPU, S6)</option>
+        <option value="age">Old soft task vs a stream of hard tasks</option>
+      </select>
+    </label>
+    <label for="deadlines">Deadlines
+      <select id="deadlines"><option value="loose" selected>loose</option><option value="tight">tight</option></select>
+    </label>
+    <label for="speed">Speed
+      <select id="speed">
+        <option value="0.02">50× slower</option>
+        <option value="0.05" selected>20× slower</option>
+        <option value="0.1">10× slower</option>
+        <option value="0.25">4× slower</option>
+      </select>
+    </label>
+    <button id="reset" type="button">New arrivals</button>
+  </div>
+  <div class="adds" role="group" aria-label="Add a task by hand">
+    <span>Add a task:</span>
+    <button type="button" data-type="T1" data-cls="hard">T1 detection (hard)</button>
+    <button type="button" data-type="T3" data-cls="hard">T3 segmentation (hard)</button>
+    <button type="button" data-type="T4" data-cls="soft">T4 plate reading (soft)</button>
+    <button type="button" data-type="T2" data-cls="soft">T2 clip, GPU only (soft)</button>
+  </div>
+
+  <div class="stage-scroll">
+    <div class="stage" id="stage" aria-label="Fog node: arrivals, GPU and CPU queues and slots, outcomes">
+      <div class="col-title" style="left:14px;top:14px">Arrivals</div>
+      <div class="col-title" style="left:142px;top:14px">Queues and slots</div>
+      <div class="col-title" style="left:922px;top:14px">Outcomes</div>
+      <div class="clock" id="clock">t = 0 ms</div>
+      <div class="arrival"><p>A new task appears here, then joins the slot type with the smallest estimated finish <span class="m"><i>F</i><sub><i>q</i></sub></span> (8.3).</p></div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span><i class="sw" style="background:var(--hard)"></i>hard task (T1, T3)</span>
+    <span><i class="sw" style="background:var(--soft-t)"></i>soft task (T4, T2)</span>
+    <span>bottom bar of a task = time left to its deadline</span>
+    <span><i class="sw" style="outline:3px solid var(--warn)"></i>promoted soft task</span>
+    <span><i class="sw" style="outline:2px dashed var(--ink)"></i>stolen by the other slot type</span>
+    <span><i class="sw" style="background:repeating-linear-gradient(135deg,#fde7dc 0 4px,#f8c9b3 4px 8px)"></i>last <span class="m">&nbsp;<i>n</i><sub>res</sub></span>&nbsp;places, hard only</span>
+  </div>
+
+  <div class="below">
+    <section class="box" aria-labelledby="h-dec">
+      <h2 id="h-dec">Latest arrival, worked out (8.3)</h2>
+      <div id="decision"><p class="empty">Waiting for the first arrival.</p></div>
+      <h2 style="margin-top:22px">Latest slot choice, worked out (8.4)</h2>
+      <div id="pickbox"><p class="empty">Waiting for a slot to free up.</p></div>
+    </section>
+    <section class="box" aria-labelledby="h-log">
+      <h2 id="h-log">What happened</h2>
+      <div class="counters" id="counters"></div>
+      <ul class="log" id="log" aria-live="polite"></ul>
+    </section>
+  </div>
+
+  <section class="box rules" aria-labelledby="h-rules">
+    <h2 id="h-rules">The rules being animated</h2>
+    <div class="below" style="gap:24px">
+      <div style="display:grid;gap:16px">
+        <div>
+          <h3>What the node publishes, per slot type <span class="m"><i>q</i></span> (8.5)</h3>
+          <p>Remaining mean time on each slot, and the backlog of each class:</p>
+          <div class="eq"><i>T</i><sup>rem</sup><sub><i>q</i>,<i>j</i></sub> = max(0, <i>t</i><sub>start</sub> + <i>T̄</i><sup>run</sup> − <i>t</i>)   (0 if slot <i>j</i> is free)<br><i>Ω</i><sup>hard</sup><sub><i>q</i></sub> = Σ<sub>queued hard tasks</sub> <i>T̄</i><sup>run</sup><br><i>Ω</i><sup>soft</sup><sub><i>q</i></sub> = Σ<sub>queued soft tasks</sub> <i>T̄</i><sup>run</sup></div>
+          <p>The wait of a new task is 0 while a slot is free (<span class="m"><i>n</i><sup>busy</sup><sub><i>q</i></sub> &lt; <i>c</i><sub><i>q</i></sub></span>); otherwise the water level:</p>
+          <div class="eq">Σ<sub><i>j</i> = 1…<i>c</i><sub><i>q</i></sub></sub> max(0, <i>Ŵ</i><sup>queue</sup><sub><i>q</i></sub> − <i>T</i><sup>rem</sup><sub><i>q</i>,<i>j</i></sub>) = <i>Ω</i><br><i>Ω</i> = <i>Ω</i><sup>hard</sup><sub><i>q</i></sub>   (new hard task)<br><i>Ω</i> = <i>Ω</i><sup>hard</sup><sub><i>q</i></sub> + <i>Ω</i><sup>soft</sup><sub><i>q</i></sub>   (new soft task)</div>
+        </div>
+        <div>
+          <h3>A task arrives (8.3)</h3>
+          <div class="eq"><i>F</i><sub><i>q</i></sub> = <i>Ŵ</i><sup>queue</sup><sub><i>q</i></sub> + <i>T̄</i><sup>run</sup><sub><i>q</i></sub><br><i>q</i>* = argmin<sub><i>q</i></sub> <i>F</i><sub><i>q</i></sub></div>
+          <p>Refused <b>"full"</b> if no usable queue has a place for its class (a soft task needs fewer than <span class="m"><i>n</i><sup>max</sup><sub><i>q</i></sub> − <i>n</i><sub>res</sub></span> queued). Refused <b>"late"</b> if <span class="m"><i>t</i> + <i>F</i><sub><i>q</i>*</sub> &gt; <i>d</i></span> (hard) or <span class="m">&gt; <i>d</i> + <i>L</i><sub>max</sub></span> (soft), or if no slot type here can run it.</p>
+        </div>
+      </div>
+      <div style="display:grid;gap:16px">
+        <div>
+          <h3>A slot becomes free (8.4)</h3>
+          <ol>
+            <li><b>Skip</b> hopeless heads: hard if <span class="m"><i>t</i> + <i>T</i><sup>run,lo</sup> &gt; <i>d</i></span>, soft if <span class="m"><i>t</i> + <i>T</i><sup>run,lo</sup> &gt; <i>d</i> + <i>L</i><sub>max</sub></span>.</li>
+            <li><b>Promote</b> the first soft task if it waited <span class="m">≥ <i>T</i><sub>age</sub></span> and every queued hard task still meets its deadline with it on this slot for <span class="m"><i>T</i><sup>run,hi</sup></span>.</li>
+            <li>Otherwise the first <b>hard</b> task (earliest deadline first).</li>
+            <li>Otherwise the first <b>soft</b> task.</li>
+            <li><b>Steal</b> from the other queue a task that would finish earlier here: <span class="m"><i>t</i> + <i>T̄</i><sup>run</sup><sub><i>q</i></sub> &lt;</span> its estimated finish there.</li>
+          </ol>
+        </div>
+        <div>
+          <h3>Aborts (8.6)</h3>
+          <p>A running hard task is aborted when <span class="m"><i>t</i> &gt; <i>d</i></span>, a soft one when <span class="m"><i>t</i> &gt; <i>d</i> + <i>L</i><sub>max</sub></span>. The worker stops at the end of its current step, so the slot stays busy for <span class="m">min(remaining, <i>T</i><sub>abort</sub>)</span> (striped).</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot" id="foot"></p>
+</div>
+
+<script>
+var PCNMEQ = (function () {
+  "use strict";
+  // Time table (GTX 1070, ms): mean, p5 (lo), p95 (hi), T_abort. Config time_table_placeholder.
+  var ROWS = {
+    T1: { GPU: [22.6, 20.2, 25.7, 13.0], CPU: [69.5, 63.6, 78.5, 59.9] },
+    T3: { GPU: [26.5, 23.5, 29.9, 15.6], CPU: [93.3, 80.0, 111.8, 76.5] },
+    T4: { GPU: [97.8, 24.5, 142.7, 75.1], CPU: [382.3, 110.0, 672.5, 318.1] },
+    T2: { GPU: [3869, 3829, 3909, 65.5] }
+  };
+  var CLS = { T1: "hard", T3: "hard", T4: "soft", T2: "soft" };
+  var SHARE = { T1: 0.742, T3: 0.152, T4: 0.102, T2: 0.004 };
+  var DEAD = { loose: { T1: 100, T3: 100, T4: 1000, T2: 6000 }, tight: { T1: 50, T3: 70, T4: 500, T2: 1.1 * 3869 } };
+  var NMAX = { GPU: 32, CPU: 16 }, NRES = 4, T_AGE = 200;
+  var MIX_GPU = 0; for (var k in SHARE) MIX_GPU += SHARE[k] * ROWS[k].GPU[0];
+  var KINDS = ["GPU", "CPU"];
+
+  function scenario(name, dl) {
+    var s = { name: name, dl: dl, cGPU: 2, cCPU: 2, rho: 0.9 };
+    if (name === "r05") s.rho = 0.5;
+    if (name === "r15") s.rho = 1.5;
+    if (name === "fcpu") { s.cGPU = 0; s.rho = 0.9; }
+    s.lambda = s.rho * 2 / MIX_GPU;               // tasks per ms, from rho_fog = lambda * T_mix / c_GPU
+    if (name === "fcpu") s.lambda = 0.9 * 2 / (SHARE.T1 * 69.5 + SHARE.T3 * 93.3 + SHARE.T4 * 382.3);
+    if (name === "age") {
+      s.cGPU = 2; s.cCPU = 0; s.script = [{ at: 0, type: "T4" }, { at: 2, type: "T4" }, { at: 4, type: "T4" }];
+      for (var at = 6; at <= 2400; at += 12) s.script.push({ at: at, type: "T1" });
+    }
+    return s;
+  }
+
+  function rng(seed) {
+    var x = (seed >>> 0) || 1;
+    return function () { x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; };
+  }
+  function gauss(r) { var u = 1 - r(), v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+  function lognormalParams(m, p95) {
+    var a = Math.log(p95 / m), s = 1.645 - Math.sqrt(Math.max(1.645 * 1.645 - 2 * a, 0));
+    return { mu: Math.log(m) - s * s / 2, s: s };
+  }
+  function waterFill(rem, omega) {
+    var r = rem.slice().sort(function (a, b) { return a - b; });
+    for (var m = 1; m <= r.length; m++) {
+      var sum = 0; for (var i = 0; i < m; i++) sum += r[i];
+      var level = (omega + sum) / m;
+      if (m === r.length || level <= r[m]) return { W: level, m: m, sorted: r };
+    }
+  }
+
+  function create(cfg, seed) {
+    var R = rng(seed);
+    var S = { t: 0, cfg: cfg, tasks: {}, queues: { GPU: [], CPU: [] }, slots: [], log: [], outcomes: [], decision: null, pick: null,
+      n: { arrived: 0, onTime: 0, late: 0, refFull: 0, refLate: 0, skipped: 0, aborted: 0, promoted: 0, stolen: 0 },
+      nextId: 1, nextAt: 3, si: 0, events: 0 };
+    var i;
+    for (i = 0; i < cfg.cGPU; i++) S.slots.push({ q: "GPU", j: i + 1, task: null, aborting: false, busyUntil: 0 });
+    for (i = 0; i < cfg.cCPU; i++) S.slots.push({ q: "CPU", j: i + 1, task: null, aborting: false, busyUntil: 0 });
+    function slotsOf(q) { return S.slots.filter(function (s) { return s.q === q; }); }
+    function row(T, q) { return ROWS[T.type][q]; }
+    function mean(T, q) { return row(T, q)[0]; }
+    function nm(T) { return T.type + " #" + T.id + " (" + T.cls + ")"; }
+    function f1(x) { return (Math.round(x * 10) / 10).toFixed(1) + " ms"; }
+    function log(kind, part, text) { S.log.unshift({ t: S.t, kind: kind, part: part, text: text }); if (S.log.length > 80) S.log.pop(); S.events++; }
+    function outcome(T, bin) { T.bin = bin; S.outcomes.unshift({ id: T.id, bin: bin }); if (S.outcomes.length > 80) S.outcomes.pop(); }
+    function cmp(a, b) {
+      var ca = a.cls === "hard" ? 0 : 1, cb = b.cls === "hard" ? 0 : 1;
+      if (ca !== cb) return ca - cb;
+      if (a.d !== b.d) return a.d - b.d;
+      if (a.arr !== b.arr) return a.arr - b.arr;
+      return a.id - b.id;
+    }
+    function sortQ(q) { S.queues[q].sort(function (x, y) { return cmp(S.tasks[x], S.tasks[y]); }); }
+    function unqueue(T) { var Q = S.queues[T.q], k = Q.indexOf(T.id); if (k >= 0) Q.splice(k, 1); }
+
+    // published state (8.5)
+    function state(q) {
+      var sl = slotsOf(q); if (!sl.length) return null;
+      var rem = sl.map(function (s) {
+        if (s.aborting) return Math.max(0, s.busyUntil - S.t);
+        if (s.task) { var X = S.tasks[s.task]; return Math.max(0, X.start + mean(X, q) - S.t); }
+        return 0;
+      });
+      var busy = sl.filter(function (s) { return s.task || s.aborting; }).length;
+      var oh = 0, os = 0, nh = 0, ns = 0;
+      S.queues[q].forEach(function (id) { var X = S.tasks[id]; if (X.cls === "hard") { oh += mean(X, q); nh++; } else { os += mean(X, q); ns++; } });
+      var free = busy < sl.length;
+      var wh = free ? { W: 0 } : waterFill(rem, oh), ws = free ? { W: 0 } : waterFill(rem, oh + os);
+      return { c: sl.length, busy: busy, rem: rem, oh: oh, os: os, nh: nh, ns: ns, free: free, Wh: wh.W, Ws: ws.W, fillH: wh, fillS: ws };
+    }
+
+    function refuse(T, reason, why) {
+      T.state = "refused"; T.reason = reason;
+      if (reason === "full") S.n.refFull++; else S.n.refLate++;
+      outcome(T, "refused");
+      log("drop", "8.3", nm(T) + " refused \"" + reason + "\": " + why + ".");
+    }
+
+    function add(spec) {
+      var type = spec.type, T = { id: S.nextId++, type: type, cls: CLS[type], arr: S.t, D: DEAD[cfg.dl][type], state: "new", q: null };
+      T.d = S.t + T.D; T.Lmax = T.cls === "soft" ? T.D : 0;
+      S.tasks[T.id] = T; S.n.arrived++;
+      var dec = { id: T.id, type: type, cls: T.cls, t: S.t, D: T.D, d: T.d, Lmax: T.Lmax, cands: [], result: null };
+      var usable = KINDS.filter(function (q) { return slotsOf(q).length && ROWS[type][q]; });
+      if (!usable.length) {
+        dec.result = { refused: "late", why: "no slot type on this node can run " + type };
+        S.decision = dec;
+        refuse(T, "late", "no slot type here can run it (the anchor masks such a node)");
+        return T;
+      }
+      usable.forEach(function (q) {
+        var st = state(q), len = S.queues[q].length;
+        var cap = T.cls === "hard" ? NMAX[q] : NMAX[q] - NRES;
+        var c = { q: q, len: len, cap: cap, room: len < cap, st: st };
+        if (c.room) { c.W = T.cls === "hard" ? st.Wh : st.Ws; c.Tbar = mean(T, q); c.F = c.W + c.Tbar; }
+        dec.cands.push(c);
+      });
+      var ok = dec.cands.filter(function (c) { return c.room; });
+      if (!ok.length) {
+        dec.result = { refused: "full" }; S.decision = dec;
+        refuse(T, "full", "no place for a " + T.cls + " task in the " + usable.join(" or ") + " queue");
+        return T;
+      }
+      ok.sort(function (a, b) { return a.F - b.F; });
+      var best = ok[0], limit = T.d + T.Lmax;
+      dec.best = best.q; dec.limit = limit;
+      if (S.t + best.F > limit) {
+        dec.result = { refused: "late" }; S.decision = dec;
+        refuse(T, "late", "best finish t + F = " + f1(S.t + best.F) + " is after " + (T.cls === "hard" ? "d = " : "d + L_max = ") + f1(limit));
+        return T;
+      }
+      dec.result = { q: best.q }; S.decision = dec;
+      T.q = best.q; T.state = "queued"; T.enq = S.t;
+      S.queues[best.q].push(T.id); sortQ(best.q);
+      var alt = ok.length > 1 ? "; " + ok[1].q + " would give F = " + f1(ok[1].F) : "";
+      log("note", "8.3", nm(T) + " joins the " + best.q + " queue: F = Ŵ + T̄ = " + f1(best.W) + " + " + f1(best.Tbar) + " = " + f1(best.F) + alt + ".");
+      return T;
+    }
+
+    function skip(T, q, why) {
+      unqueue(T); T.state = "skipped"; S.n.skipped++; outcome(T, "skipped");
+      log("drop", "8.4", nm(T) + " skipped at the head of the " + q + " queue: " + why + ". Reported to the anchor.");
+    }
+    function skipHeads(q, pk) {
+      var again = true;
+      while (again) {
+        again = false;
+        var Q = S.queues[q].map(function (id) { return S.tasks[id]; });
+        var H = Q.find(function (X) { return X.cls === "hard"; });
+        if (H && S.t + row(H, q)[1] > H.d) { pk.skipped.push({ T: H, lo: row(H, q)[1], lim: H.d }); skip(H, q, "t + T^run,lo = " + f1(S.t + row(H, q)[1]) + " > d = " + f1(H.d)); again = true; continue; }
+        var So = Q.find(function (X) { return X.cls === "soft"; });
+        if (So && S.t + row(So, q)[1] > So.d + So.Lmax) { pk.skipped.push({ T: So, lo: row(So, q)[1], lim: So.d + So.Lmax }); skip(So, q, "t + T^run,lo > d + L_max"); again = true; }
+      }
+    }
+    function promotionSafe(sl, So, pk) {
+      var q = sl.q;
+      var free = slotsOf(q).map(function (s) {
+        if (s === sl) return S.t + row(So, q)[2];
+        if (s.aborting) return s.busyUntil;
+        if (s.task) { var X = S.tasks[s.task]; return Math.max(S.t, X.start + row(X, q)[2]); }
+        return S.t;
+      });
+      var Q = S.queues[q], worst = null;
+      for (var k = 0; k < Q.length; k++) {
+        var H = S.tasks[Q[k]];
+        if (H.cls !== "hard") continue;
+        free.sort(function (a, b) { return a - b; });
+        var fin = free[0] + row(H, q)[2];
+        if (fin > H.d) { pk.check = { ok: false, H: H, fin: fin }; return false; }
+        free[0] = fin; worst = { H: H, fin: fin };
+      }
+      pk.check = { ok: true, last: worst };
+      return true;
+    }
+    function finishInQueue(q, T) {
+      var free = slotsOf(q).map(function (s) {
+        if (s.aborting) return s.busyUntil;
+        if (s.task) { var X = S.tasks[s.task]; return Math.max(S.t, X.start + mean(X, q)); }
+        return S.t;
+      });
+      var Q = S.queues[q];
+      for (var k = 0; k < Q.length && Q[k] !== T.id; k++) { free.sort(function (a, b) { return a - b; }); free[0] += mean(S.tasks[Q[k]], q); }
+      free.sort(function (a, b) { return a - b; });
+      return free[0] + mean(T, q);
+    }
+    function start(sl, T, how, pk) {
+      var from = T.q; unqueue(T);
+      T.q = sl.q; T.state = "running"; T.start = S.t; T.slot = sl;
+      var r = row(T, sl.q), p = lognormalParams(r[0], r[2]);
+      T.exec = Math.exp(p.mu + p.s * gauss(R)); T.end = S.t + T.exec; T.Tabort = r[3];
+      sl.task = T.id;
+      pk.task = T; pk.how = how; pk.waited = S.t - T.enq;
+      if (how === "promoted") { T.promoted = true; S.n.promoted++; log("note", "8.4", nm(T) + " promoted on " + sl.q + " slot " + sl.j + ": waited " + f1(S.t - T.enq) + " ≥ T_age = 200 ms, and every queued hard task still meets its deadline."); }
+      else if (how === "stolen") { T.stolen = true; S.n.stolen++; log("note", "8.4", nm(T) + " stolen by the free " + sl.q + " slot from the " + from + " queue: it finishes earlier here."); }
+      else log("run", "8.4", nm(T) + " starts on " + sl.q + " slot " + sl.j + " after waiting " + f1(S.t - T.enq) + " (mean run " + f1(r[0]) + ").");
+    }
+    function pick(sl) {
+      var q = sl.q, pk = { t: S.t, q: q, j: sl.j, skipped: [], how: null, check: null, steal: null };
+      skipHeads(q, pk);
+      var Q = S.queues[q].map(function (id) { return S.tasks[id]; });
+      var H = Q.find(function (X) { return X.cls === "hard"; }), So = Q.find(function (X) { return X.cls === "soft"; });
+      pk.H = H || null; pk.So = So || null;
+      if (So && H && S.t - So.enq >= T_AGE) {
+        pk.ageOf = So; pk.aged = S.t - So.enq;
+        if (promotionSafe(sl, So, pk)) { start(sl, So, "promoted", pk); S.pick = pk; return true; }
+      }
+      if (H) { start(sl, H, "hard", pk); S.pick = pk; return true; }
+      if (So) { start(sl, So, "soft", pk); S.pick = pk; return true; }
+      var o = q === "GPU" ? "CPU" : "GPU", other = S.queues[o].slice();
+      for (var k = 0; k < other.length; k++) {
+        var X = S.tasks[other[k]], r = ROWS[X.type][q];
+        if (!r) continue;
+        if (S.t + r[1] > X.d + X.Lmax) continue;
+        var there = finishInQueue(o, X);
+        if (S.t + r[0] < there) { pk.steal = { X: X, here: S.t + r[0], there: there, from: o }; start(sl, X, "stolen", pk); S.pick = pk; return true; }
+      }
+      if (pk.skipped.length) S.pick = pk;
+      return false;
+    }
+    function dispatch() {
+      var changed = true;
+      while (changed) {
+        changed = false;
+        for (var k = 0; k < S.slots.length; k++) { var sl = S.slots[k]; if (!sl.task && !sl.aborting && pick(sl)) changed = true; }
+      }
+    }
+    function finish(sl, T) {
+      T.state = "done"; T.fin = T.end; sl.task = null;
+      var L = T.end - T.arr;
+      if (T.end > T.d) { S.n.late++; outcome(T, "late"); log("good", "8.6", nm(T) + " done " + f1(T.end - T.d) + " after its deadline, within L_max = " + f1(T.Lmax) + ": late."); }
+      else { S.n.onTime++; outcome(T, "ontime"); log("good", "8.4", nm(T) + " done on time: queue " + f1(T.start - T.enq) + " + run " + f1(T.exec) + ", " + f1(T.d - T.end) + " to spare."); }
+    }
+    function abort(sl, T) {
+      T.state = "aborted"; sl.aborting = true; sl.busyUntil = S.t + Math.min(T.end - S.t, T.Tabort);
+      S.n.aborted++; outcome(T, "aborted");
+      log("drop", "8.6", nm(T) + " aborted on " + sl.q + " slot " + sl.j + ": t > " + (T.cls === "hard" ? "d" : "d + L_max") + ". The slot stays busy min(remaining, T_abort) = " + f1(sl.busyUntil - S.t) + ".");
+    }
+    function gen() {
+      var u = R(), acc = 0, type = "T1";
+      for (var k in SHARE) { acc += SHARE[k]; if (u <= acc) { type = k; break; } }
+      if (cfg.cGPU === 0 && type === "T2") type = "T1";
+      return { type: type };
+    }
+    function tick(dt) {
+      S.t += dt;
+      S.slots.forEach(function (sl) {
+        if (sl.aborting) { if (S.t >= sl.busyUntil) { sl.aborting = false; sl.task = null; } return; }
+        if (!sl.task) return;
+        var T = S.tasks[sl.task];
+        if (S.t >= T.end) { finish(sl, T); return; }
+        if (S.t > T.d + T.Lmax) abort(sl, T);
+      });
+      if (cfg.script) { while (S.si < cfg.script.length && cfg.script[S.si].at <= S.t) add(cfg.script[S.si++]); }
+      else { while (S.t >= S.nextAt) { add(gen()); S.nextAt += -Math.log(1 - R()) / cfg.lambda; } }
+      dispatch();
+    }
+    S.step = function (ms) { var n = Math.max(1, Math.round(ms / 0.25)); for (var k = 0; k < n; k++) tick(ms / n); };
+    S.toNextEvent = function () { var e = S.events, lim = 0; while (S.events === e && lim < 40000) { tick(0.25); lim++; } };
+    S.add = function (spec) { var T = add(spec); dispatch(); return T; };
+    S.state = state; S.slotsOf = slotsOf; S.row = row;
+    return S;
+  }
+  return { create: create, scenario: scenario, ROWS: ROWS, NMAX: NMAX, NRES: NRES, T_AGE: T_AGE, MIX_GPU: MIX_GPU };
+})();
+</script>
+
+<script>
+(function () {
+  "use strict";
+  var E = PCNMEQ;
+  var stage = document.getElementById("stage");
+  var $ = function (id) { return document.getElementById(id); };
+  var CW = 50, GAP = 6, SHOW = 9;
+  var LANE = { GPU: { top: 42, h: 250 }, CPU: { top: 302, h: 250 } };
+  var QX = 156, SLOT_X = 680;
+  var BINS = [
+    { key: "ontime", label: "Done on time", cls: "ok", c: "onTime" },
+    { key: "late", label: "Done late (soft)", cls: "late", c: "late" },
+    { key: "refused", label: "Refused on arrival", cls: "bad", c: null },
+    { key: "skipped", label: "Skipped in the queue", cls: "bad", c: "skipped" },
+    { key: "aborted", label: "Aborted while running", cls: "bad", c: "aborted" }
+  ];
+  var BIN_TOP = 40, BIN_H = 102;
+  var sim, playing = false, lastTs = 0, seed = 7, chips = {}, statics = [], slotEls = [], heads = {}, binCounts = {}, more = {}, meters = {};
+
+  var ms1 = function (x) { return '<span class="n">' + (Math.round(x * 10) / 10).toFixed(1) + "</span>"; };
+  var V = function (b, sub, sup) { return "<i>" + b + "</i>" + (sup ? "<sup>" + sup + "</sup>" : "") + (sub ? "<sub>" + sub + "</sub>" : ""); };
+  var Wq = function (cls, q) { return "<i>Ŵ</i><sup>queue," + cls + "</sup><sub>" + q + "</sub>"; };
+
+  function el(tag, cls, parent, style) {
+    var d = document.createElement(tag); if (cls) d.className = cls; if (style) d.setAttribute("style", style);
+    (parent || stage).appendChild(d); statics.push(d); return d;
+  }
+  function build() {
+    statics.forEach(function (d) { d.remove(); }); statics = []; slotEls = []; heads = {}; binCounts = {}; more = {}; meters = {};
+    Object.keys(chips).forEach(function (id) { chips[id].remove(); }); chips = {};
+    ["GPU", "CPU"].forEach(function (q) {
+      var L = LANE[q];
+      var lane = el("div", "lane " + q.toLowerCase(), stage, "top:" + L.top + "px;height:" + L.h + "px");
+      var title = el("div", "lane-title", lane), st = el("div", "lane-state", lane);
+      heads[q] = { title: title, st: st };
+      var rowY = L.top + 108;
+      el("div", "qnote", stage, "left:" + QX + "px;top:" + (rowY - 22) + "px").textContent = "queue: hard first, then soft; earliest deadline first in each class →";
+      for (var k = 0; k < SHOW; k++) el("div", "place", stage, "left:" + (QX + k * (CW + GAP)) + "px;top:" + rowY + "px");
+      more[q] = el("div", "more", stage, "left:" + (QX + SHOW * (CW + GAP) - 2) + "px;top:" + (rowY + 12) + "px");
+      var mw = SHOW * (CW + GAP) - GAP, my = rowY + 58;
+      var m = el("div", "meter", stage, "left:" + QX + "px;top:" + my + "px;width:" + mw + "px");
+      var fill = document.createElement("div"); fill.className = "fill"; m.appendChild(fill);
+      var res = document.createElement("div"); res.className = "res"; res.style.width = (E.NRES / E.NMAX[q] * 100) + "%"; m.appendChild(res);
+      var ml = el("div", "meter-label", stage, "left:" + QX + "px;top:" + (my + 14) + "px;width:" + mw + "px");
+      meters[q] = { fill: fill, label: ml };
+      var sls = sim.slotsOf(q);
+      if (!sls.length) el("div", "none-note", stage, "left:" + SLOT_X + "px;top:" + (L.top + 96) + "px").innerHTML = "No " + q + " slots on this node (<span class='m'><i>c</i><sub>" + q + "</sub> = 0</span>).";
+      sls.forEach(function (s, k) {
+        var y = L.top + 86 + k * 80;
+        var box = el("div", "slot", stage, "left:" + SLOT_X + "px;top:" + y + "px;border-color:" + (q === "GPU" ? "var(--gpu)" : "var(--cpu)"));
+        var lab = document.createElement("div"); lab.className = "sl-label"; lab.textContent = q + " slot j = " + (k + 1); box.appendChild(lab);
+        var sst = document.createElement("div"); sst.className = "sl-state"; box.appendChild(sst);
+        var bar = document.createElement("div"); bar.className = "bar"; box.appendChild(bar);
+        slotEls.push({ slot: s, box: box, st: sst, bar: bar, x: SLOT_X + 6, y: y + 9 });
+      });
+    });
+    BINS.forEach(function (b, k) {
+      var bin = el("div", "bin " + b.cls, stage, "top:" + (BIN_TOP + k * BIN_H) + "px");
+      var hd = document.createElement("div"); hd.className = "bh";
+      var t = document.createElement("b"); t.textContent = b.label; hd.appendChild(t);
+      var c = document.createElement("span"); c.className = "count"; hd.appendChild(c);
+      bin.appendChild(hd); binCounts[b.key] = c;
+    });
+    var cfg = sim.cfg;
+    $("foot").innerHTML = "This node: <span class='m'><i>c</i><sub>GPU</sub> = " + cfg.cGPU + ", <i>c</i><sub>CPU</sub> = " + cfg.cCPU + ", <i>n</i><sup>max</sup><sub>GPU</sub> = 32, <i>n</i><sup>max</sup><sub>CPU</sub> = 16, <i>n</i><sub>res</sub> = 4, <i>T</i><sub>age</sub> = 200 ms, <i>L</i><sub>max</sub> = <i>D</i></span> (soft). "
+      + (cfg.script ? "Scripted arrivals on a GPU-only node: three T4 tasks, then a T1 every 12 ms, enough to keep the soft tasks waiting until one is promoted. " : "Arrivals: Poisson, <span class='m'><i>λ</i></span> = " + (cfg.lambda * 1000).toFixed(1) + " tasks/s, task mix 74.2 % T1, 15.2 % T3, 10.2 % T4, 0.4 % T2. ")
+      + "Run times are drawn from the lognormal fitted to each time-table row (mean and 95 % value); <span class='m'><i>T</i><sup>run,lo</sup></span> and <span class='m'><i>T</i><sup>run,hi</sup></span> are its 5 % and 95 % values. Deadlines (" + cfg.dl + "): T1 " + (cfg.dl === "loose" ? "100" : "50") + " ms, T3 " + (cfg.dl === "loose" ? "100" : "70") + " ms, T4 " + (cfg.dl === "loose" ? "1000" : "500") + " ms, T2 " + (cfg.dl === "loose" ? "6000" : "4256") + " ms.";
+  }
+
+  function newSim() {
+    var cfg = E.scenario($("scenario").value, $("deadlines").value);
+    sim = E.create(cfg, seed);
+    build(); lastLog = null;
+    sim.step(cfg.script ? 0.5 : 250);
+    render();
+  }
+
+  function chipFor(T) {
+    var c = chips[T.id]; if (c) return c;
+    c = document.createElement("div"); c.className = "chip " + T.cls;
+    c.innerHTML = '<div class="top"><span>' + T.type + '</span><span>#' + T.id + '</span></div><div class="tag"></div><div class="slack"></div>';
+    c.title = T.type + " #" + T.id + ", " + T.cls + ", deadline D = " + Math.round(T.D) + " ms";
+    c.style.transform = "translate(36px," + (LANE.GPU.top + 220) + "px)";
+    stage.appendChild(c); c.getBoundingClientRect();
+    c._tag = c.querySelector(".tag"); c._slack = c.querySelector(".slack"); chips[T.id] = c; return c;
+  }
+  function place(c, x, y) { var tr = "translate(" + x + "px," + y + "px)"; if (c._tr !== tr) { c.style.transform = tr; c._tr = tr; } }
+  function slack(c, T, t) {
+    var left = T.d - t, f = Math.max(0, Math.min(1, left / T.D));
+    c._slack.style.width = (left < 0 ? 100 : f * 100) + "%";
+    c._slack.className = "slack" + (left < 0 ? " bad" : f < 0.3 ? " warn" : "");
+  }
+
+  function stateLine(q) {
+    var s = sim.state(q); if (!s) return "<span class='m'><i>c</i><sub>" + q + "</sub> = 0</span>: no slots of this type";
+    var rem = s.rem.map(function (x) { return ms1(x); }).join(", ");
+    return "<i>n</i><sup>busy</sup> = <span class='n'>" + s.busy + "/" + s.c + "</span>,  <i>T</i><sup>rem</sup> = [" + rem + "],  <i>Ω</i><sup>hard</sup> = " + ms1(s.oh) + ",  <i>Ω</i><sup>soft</sup> = " + ms1(s.os)
+      + "  →  " + Wq("hard", "") + " = " + ms1(s.Wh) + ",  " + Wq("soft", "") + " = " + ms1(s.Ws) + " ms";
+  }
+
+  function render() {
+    var t = sim.t, want = {};
+    $("clock").textContent = "t = " + t.toFixed(1) + " ms";
+    ["GPU", "CPU"].forEach(function (q) {
+      var Q = sim.queues[q], h = heads[q];
+      h.title.textContent = q + " lane";
+      h.st.innerHTML = stateLine(q);
+      var rowY = LANE[q].top + 108;
+      Q.forEach(function (id, k) {
+        var T = sim.tasks[id];
+        if (k >= SHOW) { if (chips[id]) { chips[id].remove(); delete chips[id]; } return; }
+        var c = chipFor(T); want[id] = true;
+        place(c, QX + k * (CW + GAP), rowY);
+        c._tag.textContent = "wait " + Math.round(t - T.enq);
+        slack(c, T, t);
+      });
+      more[q].textContent = Q.length > SHOW ? "+" + (Q.length - SHOW) : "";
+      var hard = Q.filter(function (id) { return sim.tasks[id].cls === "hard"; }).length;
+      meters[q].fill.style.width = (Q.length / E.NMAX[q] * 100) + "%";
+      meters[q].label.innerHTML = "queue " + Q.length + " / <span class='m'><i>n</i><sup>max</sup> = " + E.NMAX[q] + "</span> (" + hard + " hard, " + (Q.length - hard) + " soft); soft tasks admitted while fewer than " + (E.NMAX[q] - E.NRES) + " are queued";
+    });
+    slotEls.forEach(function (S) {
+      var s = S.slot, q = s.q;
+      S.box.classList.toggle("aborting", s.aborting);
+      if (s.task) {
+        var T = sim.tasks[s.task], c = chipFor(T); want[T.id] = true;
+        place(c, S.x, S.y);
+        c.classList.toggle("promoted", !!T.promoted); c.classList.toggle("stolen", !!T.stolen);
+        if (s.aborting) {
+          S.st.innerHTML = "<b style='color:var(--bad)'>aborting</b><br>frees in " + ms1(Math.max(0, s.busyUntil - t)) + " ms";
+          S.bar.style.width = "100%"; S.bar.style.background = "var(--bad)"; c._tag.textContent = "abort";
+        } else {
+          var mean = sim.row(T, q)[0], p = Math.min(1, (t - T.start) / T.exec);
+          S.st.innerHTML = "ran " + ms1(t - T.start) + " of <span class='m'><i>T̄</i><sup>run</sup></span> " + ms1(mean) + "<br><span class='m'><i>T</i><sup>rem</sup></span> = " + ms1(Math.max(0, T.start + mean - t)) + " ms";
+          S.bar.style.width = (p * 100) + "%"; S.bar.style.background = q === "GPU" ? "var(--gpu)" : "var(--cpu)";
+          c._tag.textContent = "run"; slack(c, T, t);
+        }
+      } else { S.st.innerHTML = "<span style='color:var(--muted)'>free</span><br><span class='m'><i>T</i><sup>rem</sup></span> = 0"; S.bar.style.width = "0"; }
+    });
+    var per = {};
+    sim.outcomes.forEach(function (o) { var a = per[o.bin] || (per[o.bin] = []); if (a.length < 4 && !want[o.id]) a.push(o.id); });
+    BINS.forEach(function (b, bi) {
+      (per[b.key] || []).forEach(function (id, k) {
+        var T = sim.tasks[id], c = chipFor(T); want[id] = true;
+        place(c, 922 + k * (CW + GAP + 6), BIN_TOP + bi * BIN_H + 34);
+        c._tag.textContent = b.key === "refused" ? T.reason : b.key === "ontime" ? "+" + Math.round(T.d - T.fin) : b.key === "late" ? "late" : b.key === "skipped" ? "skip" : "abort";
+        c._slack.style.width = "0";
+      });
+      var n = b.c ? sim.n[b.c] : sim.n.refFull + sim.n.refLate;
+      binCounts[b.key].textContent = b.key === "refused" ? sim.n.refFull + " full · " + sim.n.refLate + " late" : String(n);
+    });
+    Object.keys(chips).forEach(function (id) { if (!want[id]) { chips[id].remove(); delete chips[id]; } });
+    renderCounters(); renderLog(); renderDecision(); renderPick();
+  }
+
+  var line = function (lab, val, res) { return '<div class="lab' + (res ? " res" : "") + '">' + lab + '</div><div class="val' + (res ? " res" : "") + '">' + val + "</div>"; };
+  var lastDec = null;
+  function renderDecision() {
+    var d = sim.decision; if (!d || d === lastDec) return; lastDec = d;
+    var L = [line("task", d.type + " #" + d.id + ", " + d.cls + ", arrived at <span class='m'><i>t</i></span> = " + ms1(d.t) + " ms"),
+      line("deadline", "<i>d</i> = <i>t</i> + <i>D</i> = " + ms1(d.t) + " + " + ms1(d.D) + " = " + ms1(d.d) + " ms" + (d.cls === "soft" ? ",  <i>L</i><sub>max</sub> = <i>D</i> = " + ms1(d.Lmax) + " ms" : ""))];
+    d.cands.forEach(function (c) {
+      var st = c.st;
+      if (!c.room) { L.push(line(c.q + " queue", "full for a " + d.cls + " task: " + c.len + " queued, admitted only below " + c.cap)); return; }
+      var how = st.free ? "a slot is free (<i>n</i><sup>busy</sup> = " + st.busy + " &lt; <i>c</i> = " + st.c + "), so " + Wq(d.cls, c.q) + " = 0"
+        : "all " + st.c + " slots busy; <i>T</i><sup>rem</sup> = [" + st.rem.map(function (x) { return ms1(x); }).join(", ") + "], <i>Ω</i> = " + (d.cls === "hard" ? ms1(st.oh) : ms1(st.oh) + " + " + ms1(st.os)) + " → water level " + Wq(d.cls, c.q) + " = " + ms1(c.W);
+      L.push(line(c.q + " wait", how));
+      L.push(line(c.q + " finish", "<i>F</i><sub>" + c.q + "</sub> = " + Wq(d.cls, c.q) + " + <i>T̄</i><sup>run</sup><sub>" + c.q + "</sub> = " + ms1(c.W) + " + " + ms1(c.Tbar) + " = <b>" + ms1(c.F) + "</b> ms"));
+    });
+    var r = d.result;
+    if (r.q) L.push(line("result", "<i>q</i>* = " + r.q + ";  <i>t</i> + <i>F</i><sub><i>q</i>*</sub> = " + ms1(d.t + d.cands.filter(function (c) { return c.q === r.q; })[0].F) + " ≤ " + (d.cls === "hard" ? "<i>d</i>" : "<i>d</i> + <i>L</i><sub>max</sub>") + " = " + ms1(d.limit) + " → joins the " + r.q + " queue", true));
+    else if (r.refused === "late" && r.why) L.push(line("result", "refused \"late\": " + r.why, true));
+    else if (r.refused === "late") { var b = d.cands.filter(function (c) { return c.q === d.best; })[0]; L.push(line("result", "refused \"late\": <i>t</i> + <i>F</i><sub><i>q</i>*</sub> = " + ms1(d.t + b.F) + " &gt; " + ms1(d.limit), true)); }
+    else L.push(line("result", "refused \"full\"", true));
+    $("decision").innerHTML = '<div class="calc">' + L.join("") + "</div>";
+  }
+  var lastPick = null;
+  function renderPick() {
+    var p = sim.pick; if (!p || p === lastPick) return; lastPick = p;
+    var L = [line("slot", p.q + " slot <i>j</i> = " + p.j + " free at <i>t</i> = " + ms1(p.t) + " ms")];
+    if (p.skipped.length) p.skipped.forEach(function (s) { L.push(line("step 1: skip", s.T.type + " #" + s.T.id + ": <i>t</i> + <i>T</i><sup>run,lo</sup> = " + ms1(p.t) + " + " + ms1(s.lo) + " = " + ms1(p.t + s.lo) + " &gt; " + ms1(s.lim))); });
+    else L.push(line("step 1: skip", "no hopeless task at the head"));
+    if (p.ageOf) {
+      L.push(line("step 2: promote?", "first soft task " + p.ageOf.type + " #" + p.ageOf.id + " waited " + ms1(p.aged) + " ≥ <i>T</i><sub>age</sub> = 200 ms; check with it here for <i>T</i><sup>run,hi</sup>: "
+        + (p.check && p.check.ok ? "every queued hard task still meets its deadline" + (p.check.last ? " (last one ends at " + ms1(p.check.last.fin) + " ≤ <i>d</i> = " + ms1(p.check.last.H.d) + ")" : "") : "hard " + p.check.H.type + " #" + p.check.H.id + " would end at " + ms1(p.check.fin) + " &gt; <i>d</i> = " + ms1(p.check.H.d) + ", so no promotion")));
+    } else L.push(line("step 2: promote?", p.So && p.H ? "first soft task waited only " + ms1(p.t - p.So.enq) + " &lt; <i>T</i><sub>age</sub> = 200 ms" : "not needed (" + (p.H ? "no soft task waiting" : "no hard task waiting") + ")"));
+    var T = p.task;
+    if (!T) L.push(line("result", "nothing to run: the slot stays free", true));
+    else if (p.how === "promoted") L.push(line("result", "runs the promoted soft task " + T.type + " #" + T.id, true));
+    else if (p.how === "hard") L.push(line("step 3: hard", "first hard task (earliest deadline): " + T.type + " #" + T.id + ", <i>d</i> = " + ms1(T.d)), line("result", T.type + " #" + T.id + " starts; it waited " + ms1(p.waited) + " ms", true));
+    else if (p.how === "soft") L.push(line("step 4: soft", "no hard task waiting; first soft task " + T.type + " #" + T.id), line("result", T.type + " #" + T.id + " starts; it waited " + ms1(p.waited) + " ms", true));
+    else if (p.how === "stolen") L.push(line("step 5: steal", "queue empty; " + T.type + " #" + T.id + " from the " + p.steal.from + " queue would finish here at <i>t</i> + <i>T̄</i><sup>run</sup> = " + ms1(p.steal.here) + " &lt; " + ms1(p.steal.there) + " there"), line("result", "stolen: " + T.type + " #" + T.id + " starts here", true));
+    $("pickbox").innerHTML = '<div class="calc">' + L.join("") + "</div>";
+  }
+
+  var CNT = [["Arrived", "arrived"], ["On time", "onTime"], ["Late (soft)", "late"], ["Refused full", "refFull"], ["Refused late", "refLate"], ["Skipped", "skipped"], ["Aborted", "aborted"], ["Promoted", "promoted"], ["Stolen", "stolen"]];
+  var cv = null;
+  function renderCounters() {
+    if (!cv) { cv = {}; CNT.forEach(function (c) { var d = document.createElement("div"); d.className = "counter"; d.innerHTML = '<span class="k">' + c[0] + '</span><span class="v">0</span>'; $("counters").appendChild(d); cv[c[1]] = d.querySelector(".v"); }); }
+    CNT.forEach(function (c) { cv[c[1]].textContent = sim.n[c[1]]; });
+  }
+  var lastLog = null;
+  function renderLog() {
+    var top = sim.log[0]; if (top === lastLog) return; lastLog = top;
+    var frag = document.createDocumentFragment();
+    sim.log.slice(0, 50).forEach(function (e) {
+      var li = document.createElement("li"); li.className = e.kind;
+      li.innerHTML = '<span class="lt">' + e.t.toFixed(1) + ' ms</span><span class="lp">' + e.part + '</span><span class="lx"></span>';
+      li.querySelector(".lx").textContent = e.text; frag.appendChild(li);
+    });
+    $("log").replaceChildren(frag);
+  }
+
+  function frame(ts) {
+    if (!playing) return;
+    var dt = lastTs ? Math.min(100, ts - lastTs) : 16; lastTs = ts;
+    sim.step(dt * parseFloat($("speed").value)); render(); requestAnimationFrame(frame);
+  }
+  function setPlaying(on) { playing = on; $("play").textContent = on ? "Pause" : "Play"; if (on) { lastTs = 0; requestAnimationFrame(frame); } }
+  $("play").addEventListener("click", function () { setPlaying(!playing); });
+  $("stepBtn").addEventListener("click", function () { setPlaying(false); sim.step(5); render(); });
+  $("eventBtn").addEventListener("click", function () { setPlaying(false); sim.toNextEvent(); render(); });
+  $("reset").addEventListener("click", function () { seed = (seed * 48271 + 11) % 2147483647; newSim(); });
+  $("scenario").addEventListener("change", newSim);
+  $("deadlines").addEventListener("change", newSim);
+  document.querySelectorAll(".adds button").forEach(function (b) { b.addEventListener("click", function () { sim.add({ type: b.getAttribute("data-type") }); render(); }); });
+  newSim();
+})();
+</script>
