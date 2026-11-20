@@ -1,9 +1,29 @@
 name: CI
 
+# Files no test, lint or type check reads: a change to them alone starts no run.
+# data/ stays in: calibration and map overrides feed the config.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "visual/**"
+      - "excalidraw/**"
+      - "reference/**"
+      - "**.md"
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "visual/**"
+      - "excalidraw/**"
+      - "reference/**"
+      - "**.md"
+  workflow_dispatch:
+
+# A new push to the same branch or PR cancels the run still going on the old commit.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   PYTHONUTF8: "1"   # Greek letters in output; Windows consoles default to cp1252
@@ -12,6 +32,7 @@ jobs:
   test:
     name: tests (${{ matrix.os }}, py${{ matrix.python }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20   # the fast suite takes about 5 min; a hang must not burn the 6 h default
     strategy:
       fail-fast: false
       matrix:
@@ -40,7 +61,8 @@ jobs:
   slow:
     name: statistical tests (slow)
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    timeout-minutes: 30   # about 3 min today
+    if: github.event_name != 'pull_request'
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
