@@ -6,11 +6,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import torch
 
-from pcnme.methods.learners import d3qn_session, run_session
-from pcnme.pipeline import checkpoint, runinfo
-from tests.zone.harness import fixed_delay_config
+torch = pytest.importorskip("torch")  # extra ml; Windows CI has no torch (ci.yml)
+
+from pcnme.methods.learners import d3qn_session, run_session  # noqa: E402
+from pcnme.pipeline import checkpoint, runinfo  # noqa: E402
+from tests.zone.harness import fixed_delay_config  # noqa: E402
 
 
 class Stop(Exception):
