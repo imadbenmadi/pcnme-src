@@ -1,0 +1,9 @@
+The PCNME dataset (results, trained models, logs, NSGA-II plans, demonstrations, traces and calibration
+measurements) by Imed-eddin Benmadi is licensed under the Creative Commons Attribution 4.0 International
+licence (CC BY 4.0): https://creativecommons.org/licenses/by/4.0/
+
+You may share and adapt it for any purpose, provided you give appropriate credit (cite the Zenodo record),
+link to the licence and indicate if changes were made.
+
+Third-party material: the LuST traces are derived from the LuST SUMO scenario (Codeca et al., 2015, MIT
+licence). The code that produced this data is under the MIT licence (LICENSE in the repository).
