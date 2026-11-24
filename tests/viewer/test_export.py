@@ -5,7 +5,11 @@ from __future__ import annotations
 import gzip
 import importlib.util
 import json
+import os
+import subprocess
+import sys
 import threading
+import time
 import urllib.request
 from pathlib import Path
 
@@ -55,3 +59,21 @@ def test_a_run_rerun_under_its_id_replaces_its_exported_replay(tmp_path: Path) -
     src.version, src.written = 2, time.time() + 60  # type: ignore[attr-defined]  # the run is rerun
     export(out, {3000}, reg, log=False)
     assert json.loads(gzip.decompress(replay.read_bytes()))["meta"]["version"] == 2
+
+
+def test_the_export_starts_and_stops_with_its_launchers(tmp_path: Path) -> None:
+    out = tmp_path / "viewer"
+    export(out, {3000}, registry(), log=False)
+    assert {"start.bat", "stop.bat", "start.sh", "stop.sh"} <= {f.name for f in out.iterdir()}
+    port = 8000 + os.getpid() % 900
+    proc = subprocess.Popen([sys.executable, "serve.py", "--port", str(port), "--no-browser"], cwd=out)
+    try:
+        deadline = time.monotonic() + 15
+        while not (out / "serve.pid").exists() and time.monotonic() < deadline:
+            time.sleep(0.1)
+        assert (out / "serve.pid").read_text(encoding="utf-8").strip().isdigit()  # the server, not a launcher
+        subprocess.run([sys.executable, "serve.py", "--stop"], cwd=out, check=True, capture_output=True)
+        assert proc.wait(timeout=15) is not None
+    finally:
+        if proc.poll() is None:
+            proc.kill()
