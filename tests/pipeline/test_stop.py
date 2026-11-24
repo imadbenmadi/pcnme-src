@@ -107,3 +107,17 @@ def test_a_running_entry_point_is_found_and_stopped(tmp_path: Path) -> None:
     finally:
         if child.poll() is None:
             child.kill()
+
+
+def test_a_holder_whose_command_line_is_hidden_gets_a_hint(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    hidden = Proc(20764, 1, "python.exe", "")  # an administrator window's process: no command line visible
+    monkeypatch.setattr(stop, "list_procs", lambda: {hidden.pid: hidden})
+    monkeypatch.setattr(stop, "port_holders", lambda ports: {8765: {hidden.pid}})
+    assert stop.report() == 1
+    assert stop.HIDDEN in capsys.readouterr().out
+
+
+def test_start_py_is_an_entry_point() -> None:
+    assert stop.is_entry_point("uv run python start.py --live")
