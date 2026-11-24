@@ -7,7 +7,7 @@ every zone places the rest, pretrained (DQfD) on NSGA-II knee-point plans and th
 
 - **Code:** https://github.com/imadbenmadi/pcnme-src (tag `results-v1`), MIT licence. Every file here can be
   regenerated from the code, the config (`config/default.yaml`) and the seeds below.
-- **Data licence:** CC BY 4.0 (LICENSE-DATA.txt). Cite the record's DOI.
+- **Data licence:** CC BY 4.0 (LICENSE-DATA.txt). Cite the dataset as doi:10.5281/zenodo.24500522 (https://doi.org/10.5281/zenodo.24500522).
 - **Design:** `docs/final-design.md` in the repository (the specification); symbols in `docs/NOTATION.md`.
 - **Log schema:** METRICS.md (copied here): every Parquet table and column, with units.
 

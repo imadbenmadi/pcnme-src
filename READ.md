@@ -1,5 +1,7 @@
 # Reading guide
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24500522.svg)](https://doi.org/10.5281/zenodo.24500522) The results, trained agents and logs: Zenodo, doi:10.5281/zenodo.24500522 (docs/DATASHEET.md; reserved, published with the paper). Code: MIT; data: CC BY 4.0.
+
 How to understand this code base. Every path below exists; click it from the repository root.
 
 ## 1. The big picture
