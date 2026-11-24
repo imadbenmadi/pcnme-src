@@ -14,7 +14,9 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import os
 import re
+import signal
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -24,6 +26,7 @@ from urllib.parse import parse_qs, urlsplit
 
 HERE = Path(__file__).resolve().parent
 STATIC, DATA = HERE / "static", HERE / "data"
+PID = HERE / "serve.pid"  # the running server, for --stop (stop.bat, stop.sh)
 TYPES = {".js": "text/javascript", ".css": "text/css", ".html": "text/html", ".svg": "image/svg+xml"}
 SAFE = re.compile(r"^[A-Za-z0-9_.-]+$")  # source and run ids: never a path
 
@@ -72,19 +75,50 @@ class Handler(BaseHTTPRequestHandler):
         self.send(f.read_bytes(), ctype + ("; charset=utf-8" if ctype.startswith("text") else ""))
 
 
-def main() -> None:
+def stop() -> int:
+    """Stop the server this folder started (its pid is in serve.pid)."""
+    try:
+        pid = int(PID.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        print("PCNME viewer: not running")
+        return 0
+    with contextlib.suppress(OSError):
+        os.kill(pid, signal.SIGTERM)
+    with contextlib.suppress(OSError):
+        PID.unlink()
+    print(f"PCNME viewer stopped (pid {pid})")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="PCNME viewer (exported runs)")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--no-browser", action="store_true")
-    a = ap.parse_args()
-    httpd = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
+    ap.add_argument("--stop", action="store_true", help="stop the running viewer")
+    a = ap.parse_args(argv)
+    if a.stop:
+        return stop()
+    url = f"http://127.0.0.1:{a.port}/"
+    try:
+        httpd = ThreadingHTTPServer(("127.0.0.1", a.port), Handler)
+    except OSError:  # already running (or the port is taken): open what is there
+        print(f"PCNME viewer: port {a.port} is in use, opening {url} (stop.bat stops a running viewer)")
+        if not a.no_browser:
+            webbrowser.open(url)
+        return 0
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
-    print(f"PCNME viewer: {url}   (Ctrl+C to stop)")
+    PID.write_text(str(os.getpid()), encoding="utf-8")
+    print(f"PCNME viewer: {url}   (Ctrl+C or stop.bat to stop)")
     if not a.no_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
-    with contextlib.suppress(KeyboardInterrupt):
-        httpd.serve_forever()
+    try:
+        with contextlib.suppress(KeyboardInterrupt):
+            httpd.serve_forever()
+    finally:
+        with contextlib.suppress(OSError):
+            PID.unlink()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
