@@ -141,6 +141,9 @@ S3, PCNME next to Greedy on seed 3000). How it is built and how to extend it: [`
 For another machine: `uv run python -m pcnme.viewer.export` writes `../pcnme-history-viewer` (about 190 MB with
 the testbed and LuST runs; a rerun replaces its replay), which runs with `python serve.py` and nothing else installed.
 
+To open the website in one step: `uv run python start.py` (or double-click `start.bat`): VFC, LuST, the testbed runs
+and the training, no live run. `uv run python start.py --live` also starts a live testbed run (Docker Desktop on).
+
 To stop everything (containers, networks, the scripts, the ports; it prints the plan first): `uv run python stop_all.py`.
 
 The full list, with times and outputs, is in [`RUN_TRAINING.md`](RUN_TRAINING.md).
