@@ -29,13 +29,23 @@ README = """# PCNME history viewer (exported {date})
 
 Replays of the PCNME runs: every scenario and method, seeds {seeds}, and the testbed runs.
 
-    python serve.py          (any Python 3.9+, nothing to install; Windows: double-click start.bat)
+    python serve.py          (any Python 3.9+, nothing to install)
+
+Windows: double-click start.bat to open it, stop.bat to stop it. Linux / macOS: ./start.sh and ./stop.sh.
 
 The browser opens http://127.0.0.1:8765. Try #vfc/S3/pcnme/3000/fast/greedy for PCNME next to Greedy.
 Keys: Space play/pause, arrow keys step, [ ] speed, H hide the bar, F full screen, Esc close the panel.
 
 Made with `uv run python -m pcnme.viewer.export` in the pcnme-src repo; export again to update it.
 """
+
+
+LAUNCHERS = {  # double-click on Windows; ./start.sh elsewhere
+    "start.bat": '@echo off\r\ncd /d "%~dp0"\r\npython serve.py\r\npause\r\n',
+    "stop.bat": '@echo off\r\ncd /d "%~dp0"\r\npython serve.py --stop\r\npause\r\n',
+    "start.sh": '#!/bin/sh\ncd "$(dirname "$0")" && exec python3 serve.py "$@"\n',
+    "stop.sh": '#!/bin/sh\ncd "$(dirname "$0")" && exec python3 serve.py --stop\n',
+}
 
 
 def export(out: Path, seeds: set[int] | None, registry: Registry | None = None, log: bool = True) -> int:
@@ -45,7 +55,8 @@ def export(out: Path, seeds: set[int] | None, registry: Registry | None = None, 
         shutil.rmtree(out / "static")
     shutil.copytree(HERE / "static", out / "static")
     shutil.copy2(HERE / "standalone.py", out / "serve.py")
-    (out / "start.bat").write_bytes(b"@echo off\r\npython serve.py\r\npause\r\n")
+    for name, text in LAUNCHERS.items():
+        (out / name).write_bytes(text.encode())
     registry = registry or default_registry()
     sources = [s for s in registry.describe() if s["kind"] == "replay"]  # live kinds need the repo
     data = out / "data"
