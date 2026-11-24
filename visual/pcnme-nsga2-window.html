@@ -1,0 +1,172 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PCNME NSGA-II Window</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+:root{--bg:#fff;--fg:#111;--mut:#555;--line:#d9d9d9;--soft:#f5f5f3;--blue:#1f5fbf;--green:#12875c;--orange:#d2521d;--gray:#a8a6a0;
+--f-text:"IBM Plex Sans",system-ui,sans-serif;--f-num:"IBM Plex Mono",ui-monospace,monospace;--f-math:"STIX Two Text","Times New Roman",serif;color-scheme:light}
+body{background:var(--bg);color:var(--fg);font:16px/1.6 var(--f-text)}
+.wrap{max-width:980px;margin:0 auto;padding-block:28px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font-size:28px;margin:0 0 4px;font-weight:600;text-wrap:balance}
+h2{font-size:20px;margin:36px 0 10px;font-weight:600;border-bottom:1px solid var(--line);padding-bottom:6px}
+.sub{color:var(--mut);margin:0 0 18px}
+.m{font-family:var(--f-math);font-style:italic}
+.n{font-family:var(--f-num);font-size:.92em}
+p,li{max-width:72ch}
+.note{background:var(--soft);border-left:3px solid var(--orange);padding:10px 14px;margin:14px 0}
+.ctrl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
+button{font:14px var(--f-text);padding:7px 14px;border:1px solid #888;background:#fff;color:var(--fg);border-radius:6px;cursor:pointer}
+button:hover{background:var(--soft)}
+input[type=range]{flex:1;min-width:150px}
+.legend{display:flex;flex-wrap:wrap;gap:18px;font-size:13px;color:var(--mut);margin:6px 0}
+.legend span{display:flex;align-items:center;gap:6px}
+.dot{width:11px;height:11px;border-radius:50%;display:inline-block}
+.plot{position:relative;width:100%;height:440px;border:1px solid var(--line);border-radius:8px}
+canvas{width:100%;height:100%;display:block}
+.grid2{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:18px;margin-top:12px}
+@media(max-width:760px){.grid2{grid-template-columns:minmax(0,1fr)}.plot{height:340px}}
+.panel{border:1px solid var(--line);border-radius:8px;padding:12px 16px;min-width:0}
+.panel h3{margin:0 0 6px;font-size:15px;font-weight:600}
+.stat{display:flex;justify-content:space-between;border-bottom:1px dashed var(--line);padding:3px 0;font-size:14px}
+.stat b{font-family:var(--f-num);font-weight:600}
+ol li{margin:5px 0}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;font-size:14px;margin:8px 0;min-width:520px}
+th,td{border:1px solid var(--line);padding:6px 10px;text-align:left}
+th{background:var(--soft);font-weight:600}
+td.r{text-align:right;font-family:var(--f-num)}
+.plan{font-family:var(--f-num);font-size:13px;background:var(--soft);padding:8px 12px;border-radius:6px;overflow-x:auto;white-space:nowrap}
+.foot{color:var(--mut);font-size:13px;margin-top:30px}
+</style>
+
+</head><body><div class="wrap">
+<h1>NSGA-II on one PCNME window</h1>
+<p class="sub">How 40 placement plans improve over 20 generations, and how the knee plan, <span class="m">w</span> and the demonstrations come out of it. Example: grid map, scenario S2, window 0, seed 1100, 294 tasks.</p>
+
+<div class="note"><b>Key point.</b> NSGA-II does not move plans toward the knee. It pushes all 40 plans toward the lower-left edge (the Pareto front) and spreads them along it. The knee is picked only <i>after</i> generation 20, from the plans on that edge.</div>
+
+<h2>1. One dot = one plan</h2>
+<p>A plan gives a placement to every task in the window. With 294 tasks, a plan is a list of 294 choices out of {here, Nb1, Nb2, Nb3, Nb4, cloud}:</p>
+<div class="plan">task 1 → here &nbsp;|&nbsp; task 2 → Nb3 &nbsp;|&nbsp; task 3 → cloud &nbsp;|&nbsp; … &nbsp;|&nbsp; task 294 → here</div>
+<p>To place the dot, the simulator replays the 2 s window from the frozen state at <span class="n">t = 5 s</span> with exactly these 294 placements, then computes two numbers (lower is better on both):</p>
+<ul>
+<li><span class="m">f</span><sub>1</sub> = mean time cost <span class="m">C</span><sup>time</sup> of the 294 tasks → x-axis</li>
+<li><span class="m">f</span><sub>2</sub> = mean energy cost <span class="m">C</span><sup>en</sup> of the 294 tasks → y-axis</li>
+</ul>
+
+<h2>2. The population moving, generation by generation</h2>
+<div class="ctrl">
+<button id="play">▶ Play</button><button id="step">Next generation</button><button id="reset">Reset</button>
+<input type="range" id="gen" min="1" max="20" step="1" value="1" aria-label="Generation">
+<span id="glab" class="n" style="min-width:120px;font-weight:600">Generation 1</span>
+</div>
+<div class="legend">
+<span><i class="dot" style="background:var(--gray)"></i>plan</span>
+<span><i class="dot" style="background:var(--green)"></i>rank 1 (no plan beats it on both costs)</span>
+<span><i class="dot" style="background:transparent;border:2px solid var(--blue);border-radius:2px"></i>greedy plan (start)</span>
+<span><i class="dot" style="background:var(--orange);border-radius:0;transform:rotate(45deg);width:9px;height:9px"></i>knee (picked at the end)</span>
+</div>
+<div class="grid2">
+<div class="plot"><canvas id="c" role="img" aria-label="40 plans on f1 versus f2 moving toward the lower-left edge over 20 generations"></canvas></div>
+<div class="panel">
+<h3 id="ph">Generation 1 of 20</h3>
+<div class="stat"><span>plans kept</span><b>40</b></div>
+<div class="stat"><span>children made this generation</span><b id="sc">0</b></div>
+<div class="stat"><span>pool before selection</span><b id="sp">40</b></div>
+<div class="stat"><span>rank-1 plans now</span><b id="sr">–</b></div>
+<div class="stat"><span>evaluations so far</span><b id="se">40</b></div>
+<p id="msg" style="font-size:14px;margin:10px 0 0"></p>
+</div>
+</div>
+<p style="font-size:13px;color:var(--mut)">The dots are an illustration: the real S2 front spans only about 0.398–0.41 on <span class="m">f</span><sub>1</sub>, so it is drawn wider here to make the motion visible. The real numbers are in section 5.</p>
+
+<h2>3. What happens in one generation</h2>
+<ol>
+<li><b>Start of a generation:</b> 40 plans, already scored (40 dots).</li>
+<li><b>Pick parents:</b> draw two plans at random, keep the better one (lower rank; if the ranks tie, the more spread-out one). Do it again for the second parent.</li>
+<li><b>Crossover</b> (probability 0.9): the child takes some of its 294 placements from parent A and the rest from parent B.</li>
+<li><b>Mutation</b> (each placement with probability 1/294): about one task in the child moves to another allowed option, e.g. Nb2 → here.</li>
+<li>Repeat steps 2–4 until there are <b>40 children</b>.</li>
+<li><b>Score the children:</b> 40 simulations → 40 new dots.</li>
+<li><b>Pool:</b> 40 old + 40 new = <b>80 plans</b>.</li>
+<li><b>Rank:</b> rank 1 = plans no other plan beats on both <span class="m">f</span><sub>1</sub> and <span class="m">f</span><sub>2</sub>. Remove them; the plans now unbeaten are rank 2; and so on.</li>
+<li><b>Keep 40:</b> fill by rank (rank 1 first, then rank 2, …). If a rank does not fit completely, keep its most spread-out plans (crowding distance). This is why the dots end up along the whole edge, not in one clump.</li>
+</ol>
+<p><b>Counting:</b> generation 1 is the starting population (40 evaluations); each of generations 2–20 adds 40 children, so 40 + 19 × 40 = <b>800 evaluations</b>.</p>
+<p>The first population starts with sensible plans: copies of the latency-greedy plan and of the energy-greedy plan with small mutations; the rest are random. Dots move down-left only because worse plans are discarded and better children replace them. No plan "walks" anywhere.</p>
+
+<h2>4. After generation 20</h2>
+<ol>
+<li><b>Pareto front</b> = the rank-1 plans. S2 window 0: 28 plans, 25 of them different.</li>
+<li><b>Knee:</b> rescale the front's <span class="m">f</span><sub>1</sub> and <span class="m">f</span><sub>2</sub> to 0–1 (written <span class="m">f̃</span><sub>1</sub>, <span class="m">f̃</span><sub>2</sub>) and take the plan with the smallest <span class="m">f̃</span><sub>1</sub> + <span class="m">f̃</span><sub>2</sub>.</li>
+<li><b><span class="m">w</span> of this window:</b> from the slope of the front at the knee, the weight at which the knee is the best plan. S2 window 0: <span class="n">w = 0.414</span>.</li>
+<li><b><span class="m">w</span>*:</b> median of the knee weights over all windows that have a knee (27 of 36 on the grid, 22 of 36 on LuST). Grid <span class="n">w* = 0.414</span>, LuST <span class="n">w* = 0.344</span>.</li>
+<li><b>Demonstrations:</b> the knee plan is replayed in the simulator and each of its 294 decisions is recorded as (state, action, reward, next state, Δ<span class="m">t</span>) for DQfD pretraining.</li>
+</ol>
+
+<h2>5. Real numbers, grid S2 window 0</h2>
+<div class="tw"><table>
+<tr><th></th><th><span class="m">f</span><sub>1</sub> time</th><th><span class="m">f</span><sub>2</sub> energy</th><th>dropped tasks</th></tr>
+<tr><td>Greedy plan (start)</td><td class="r">0.3981</td><td class="r">1.0401</td><td class="r">1</td></tr>
+<tr><td>Knee plan (picked)</td><td class="r">0.4002</td><td class="r">0.9991</td><td class="r">–</td></tr>
+<tr><td>Change</td><td class="r">+0.5%</td><td class="r">−3.9%</td><td></td></tr>
+</table></div>
+<div class="tw"><table>
+<tr><th>Setting</th><th>Value</th></tr>
+<tr><td>Population</td><td class="r">40</td></tr>
+<tr><td>Generations</td><td class="r">20</td></tr>
+<tr><td>Evaluations per window</td><td class="r">800</td></tr>
+<tr><td>Tasks (genes) in this window</td><td class="r">294</td></tr>
+<tr><td>Front points / distinct</td><td class="r">28 / 25</td></tr>
+<tr><td>Computing time for this window</td><td class="r">2 811 s (47 min)</td></tr>
+<tr><td>Windows per scenario</td><td class="r">6</td></tr>
+</table></div>
+<p class="foot">Source: data/vfc/nsga/fronts.csv and data/vfc/w_star.json in the PCNME repository.</p>
+</div>
+
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+let s=7;const rnd=()=>{s=(s*16807)%2147483647;return s/2147483647};
+const front=x=>0.12+0.55*Math.pow(1-x,2.2);
+const N=40,G=20,M=G-1,P=[];
+for(let i=0;i<N;i++){let t,dx,dy;
+ if(i<10){t=0.07+rnd()*0.08;dx=0.01+rnd()*0.06;dy=0.08+rnd()*0.12}
+ else if(i<20){t=0.78+rnd()*0.14;dx=0.01+rnd()*0.05;dy=0.06+rnd()*0.12}
+ else{t=0.1+rnd()*0.6;dx=0.1+rnd()*0.22;dy=0.18+rnd()*0.22}
+ P.push({t0:t,t1:0.03+0.94*(i/(N-1)),dx,dy,nx:[],ny:[]});
+ for(let g=0;g<=M;g++){P[i].nx.push((rnd()-0.5)*0.03);P[i].ny.push((rnd()-0.5)*0.03)}}
+function pos(i,gg){const g=gg-1,p=P[i],k=Math.pow(0.78,g),m=g/M,t=p.t0*(1-m)+p.t1*m;
+ return {x:Math.min(0.98,t+p.dx*k+Math.abs(p.nx[g])*k),y:Math.min(0.98,front(t)+p.dy*k+Math.abs(p.ny[g])*k+0.004)}}
+function rank1(pts){return pts.map((a,i)=>!pts.some((b,j)=>j!==i&&b.x<=a.x&&b.y<=a.y&&(b.x<a.x||b.y<a.y)))}
+const greedy={x:0.10,y:front(0.10)+0.10};
+let g=1,timer=null;
+function draw(){const r=cv.getBoundingClientRect(),d=devicePixelRatio||1;cv.width=r.width*d;cv.height=r.height*d;ctx.setTransform(d,0,0,d,0,0);
+ const W=r.width,H=r.height,L=50,B=44,T=14,R=14,X=v=>L+v*(W-L-R),Y=v=>H-B-v*(H-B-T);
+ ctx.clearRect(0,0,W,H);ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(L,T);ctx.lineTo(L,H-B);ctx.lineTo(W-R,H-B);ctx.stroke();
+ ctx.fillStyle='#111';ctx.font='italic 15px "STIX Two Text",serif';ctx.textAlign='center';ctx.fillText('f₁ = mean time cost   (→ worse)',(L+W)/2,H-14);
+ ctx.save();ctx.translate(18,(T+H-B)/2);ctx.rotate(-Math.PI/2);ctx.fillText('f₂ = mean energy cost   (→ worse)',0,0);ctx.restore();
+ ctx.setLineDash([5,5]);ctx.strokeStyle='#bbb';ctx.beginPath();for(let x=0;x<=1.001;x+=0.01){const y=front(x);x?ctx.lineTo(X(x),Y(y)):ctx.moveTo(X(x),Y(y))}ctx.stroke();ctx.setLineDash([]);
+ ctx.fillStyle='#777';ctx.font='12px "IBM Plex Sans",sans-serif';ctx.textAlign='left';ctx.fillText('best possible edge (unknown to NSGA-II)',X(0.55),Y(front(0.55))+46);
+ const pts=P.map((_,i)=>pos(i,g)),r1=rank1(pts),nr=r1.filter(Boolean).length;
+ pts.forEach((p,i)=>{ctx.beginPath();ctx.arc(X(p.x),Y(p.y),r1[i]?6:5,0,7);ctx.fillStyle=r1[i]?'#12875c':'#a8a6a0';ctx.fill()});
+ ctx.strokeStyle='#1f5fbf';ctx.lineWidth=2;ctx.strokeRect(X(greedy.x)-7,Y(greedy.y)-7,14,14);ctx.fillStyle='#1f5fbf';ctx.font='13px "IBM Plex Sans",sans-serif';ctx.fillText('greedy plan',X(greedy.x)+12,Y(greedy.y)+4);
+ let msg;
+ if(g===G){const f=pts.filter((_,i)=>r1[i]),xs=f.map(p=>p.x),ys=f.map(p=>p.y),x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  let best=null,bv=9;f.forEach(p=>{const v=(p.x-x0)/(x1-x0)+(p.y-y0)/(y1-y0);if(v<bv){bv=v;best=p}});
+  ctx.save();ctx.translate(X(best.x),Y(best.y));ctx.rotate(Math.PI/4);ctx.fillStyle='#d2521d';ctx.fillRect(-8,-8,16,16);ctx.restore();
+  ctx.fillStyle='#d2521d';ctx.font='italic 15px "STIX Two Text",serif';ctx.fillText('knee: min f̃₁ + f̃₂ = '+bv.toFixed(2),X(best.x)+14,Y(best.y)-12);
+  msg='Done: 40 × 20 = 800 evaluations. The green plans are the Pareto front. Only now is the knee picked: rescale both axes of the front to 0–1 and take the plan with the smallest sum. Its slope gives w for this window.';}
+ else if(g===1)msg='Generation 1 (start): 40 plans. 10 are mutated copies of the latency-greedy plan (top-left), 10 of the energy-greedy plan (bottom-right), 20 are random. Each was scored by simulating the 2 s window with its 294 placements.';
+ else msg='Made 40 children by crossover and mutation, scored them, pooled 40 + 40 = 80, kept the best 40 by rank, then by spread. Green = rank 1 at this moment.';
+ document.getElementById('msg').textContent=msg;document.getElementById('glab').textContent='Generation '+g;document.getElementById('ph').textContent='Generation '+g+' of '+G;document.getElementById('gen').value=g;
+ document.getElementById('sc').textContent=g>1?40:0;document.getElementById('sp').textContent=g>1?80:40;document.getElementById('sr').textContent=nr;document.getElementById('se').textContent=40*g;}
+function set(v){g=Math.max(1,Math.min(G,v));draw()}
+function stop(){if(timer){clearInterval(timer);timer=null;document.getElementById('play').textContent='▶ Play'}}
+document.getElementById('gen').oninput=e=>{stop();set(+e.target.value)};
+document.getElementById('step').onclick=()=>{stop();set(g+1)};
+document.getElementById('reset').onclick=()=>{stop();set(1)};
+document.getElementById('play').onclick=()=>{if(timer){stop();return}if(g===G)set(1);document.getElementById('play').textContent='❚❚ Pause';
+ timer=setInterval(()=>{if(g>=G){stop();return}set(g+1)},700)};
+addEventListener('resize',draw);document.fonts&&document.fonts.ready.then(draw);draw();
+</script>
+</body></html>
