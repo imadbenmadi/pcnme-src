@@ -3,9 +3,10 @@
     uv run python stop_all.py [--images] [--volumes] [--dry-run]
 
 It stops the project's containers (`docker compose down` over every profile in docker/compose.yaml),
-removes the project's networks, stops the entry points (view.py, run_live.py, run_testbed.py, train.py,
-evaluate.py) and frees the ports PCNME uses. `--images` also deletes the pcnme images, `--volumes` the
-InfluxDB and Grafana volumes. It prints the plan first. It deletes no file: data/ is never touched (the
+removes the project's networks, stops the entry points (start.py, view.py, run_live.py, run_testbed.py,
+train.py, evaluate.py) and frees the ports PCNME uses.
+`--images` also deletes the pcnme images, `--volumes` the InfluxDB and Grafana volumes. It prints the plan
+first. It deletes no file: data/ is never touched (the
 testbed's data/ is a bind mount, not a volume). Docker's own processes are never killed: a port they hold
 is freed by stopping its container.
 
@@ -30,7 +31,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
 COMPOSE_FILE = ROOT / "docker" / "compose.yaml"
-SCRIPTS = ("view.py", "run_live.py", "run_testbed.py", "train.py", "evaluate.py")
+SCRIPTS = ("start.py", "view.py", "run_live.py", "run_testbed.py", "train.py", "evaluate.py")
 PORTS = (8765, 3000, 8086, 1883, 18083, 8000)
 VOLUMES = ("influx-data", "grafana-data")  # compose volume keys; docker names them <project>_<key>
 IMAGE = "pcnme"  # pcnme:dev and compose-built pcnme-<service> images
@@ -342,6 +343,12 @@ def execute(plan: Plan, docker_ok: bool) -> None:
     kill({pid for pid in rest if not is_protected(table.get(pid, Proc(pid, 0, "?", "")).name)})
 
 
+HIDDEN = (
+    "its command line is hidden: probably started from an administrator window. Close that window, "
+    "or run stop.bat as administrator."
+)
+
+
 def report() -> int:
     held = port_holders(PORTS)
     table = list_procs()
@@ -349,6 +356,8 @@ def report() -> int:
     for port, pids in sorted(busy.items()):
         names = ", ".join(f"{p} {table[p].name}" if p in table else str(p) for p in pids) or "unknown owner"
         print(f"  port {port} still in use: {names}")
+        if any(p in table and not table[p].cmd and not is_protected(table[p].name) for p in pids):
+            print(f"    {HIDDEN}")
     print("done" if not busy else "done, but some ports are still in use (see above)")
     return 0 if not busy else 1
 
