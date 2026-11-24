@@ -1,0 +1,513 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PCNME NSGA-II Explained</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&family=STIX+Two+Text:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+:root{--bg:#fff;--fg:#111;--mut:#555;--line:#d9d9d9;--soft:#f5f5f3;--blue:#1f5fbf;--green:#12875c;--orange:#d2521d;--gray:#a8a6a0;--red:#b3261e;
+--o0:#1b7f5a;--o1:#2a6fd6;--o2:#6d9be6;--o3:#7c5cc9;--o4:#b09be8;--o5:#d2521d;
+--f-text:"IBM Plex Sans",system-ui,sans-serif;--f-num:"IBM Plex Mono",ui-monospace,monospace;--f-math:"STIX Two Text","Times New Roman",serif;color-scheme:light}
+body{background:var(--bg);color:var(--fg);font:16px/1.6 var(--f-text)}
+.wrap{max-width:1000px;margin:0 auto;padding-block:28px 70px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1{font-size:30px;margin:0 0 4px;font-weight:600;text-wrap:balance}
+h2{font-size:21px;margin:44px 0 10px;font-weight:600;border-bottom:1px solid var(--line);padding-bottom:6px;text-wrap:balance}
+h3{font-size:16px;margin:18px 0 6px;font-weight:600}
+.sub{color:var(--mut);margin:0 0 14px}
+.m{font-family:var(--f-math);font-style:italic;font-size:1.06em}
+.n{font-family:var(--f-num);font-size:.9em}
+p,li{max-width:76ch}
+.note{background:var(--soft);border-left:3px solid var(--blue);padding:10px 14px;margin:14px 0;border-radius:0}
+.eq{font-family:var(--f-math);font-size:19px;background:var(--soft);padding:10px 16px;margin:10px 0;border-radius:6px;overflow-x:auto;white-space:nowrap}
+.eq i{font-style:italic}
+.ctrl{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
+button{font:14px var(--f-text);padding:7px 14px;border:1px solid #888;background:#fff;color:var(--fg);border-radius:6px;cursor:pointer}
+button:hover{background:var(--soft)}
+button.on{background:#111;color:#fff;border-color:#111}
+input[type=range]{flex:1;min-width:150px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--mut);margin:6px 0}
+.legend span{display:flex;align-items:center;gap:6px}
+.sw{width:12px;height:12px;border-radius:2px;display:inline-block}
+.dot{width:11px;height:11px;border-radius:50%;display:inline-block}
+.box{border:1px solid var(--line);border-radius:8px;padding:12px 16px;min-width:0;margin:10px 0}
+.grid2{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+@media(max-width:760px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.plot{position:relative;width:100%;height:420px;border:1px solid var(--line);border-radius:8px}
+.plot.s{height:340px}
+canvas{width:100%;height:100%;display:block}
+.tw{overflow-x:auto;margin:8px 0}
+table{border-collapse:collapse;font-size:14px;min-width:520px}
+th,td{border:1px solid var(--line);padding:5px 9px;text-align:left;vertical-align:top}
+th{background:var(--soft);font-weight:600}
+td.r,th.r{text-align:right;font-family:var(--f-num)}
+tr.hl td{background:#eef4fc}
+.strip{display:flex;gap:1px;margin:3px 0;flex-wrap:nowrap;overflow:hidden}
+.strip i{flex:1 1 0;min-width:0;height:16px;border-radius:1px}
+.strip.big i{height:26px}
+.strip i.mark{outline:2px solid #111;outline-offset:-2px}
+.rowlab{font-family:var(--f-num);font-size:12px;color:var(--mut);width:118px;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prow{display:flex;align-items:center;gap:8px;min-width:0}
+.prow .strip{flex:1;min-width:0}
+.pill{display:inline-block;font-family:var(--f-num);font-size:12px;padding:1px 7px;border-radius:10px;border:1px solid var(--line);background:var(--soft)}
+.stat{display:flex;justify-content:space-between;border-bottom:1px dashed var(--line);padding:3px 0;font-size:14px;gap:10px}
+.stat b{font-family:var(--f-num);font-weight:600}
+.flow{display:flex;flex-wrap:wrap;gap:6px;align-items:stretch;margin:12px 0}
+.flow div{border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;flex:1 1 120px;background:#fff;min-width:0}
+.flow div b{display:block;font-size:14px}
+.flow div.act{border-color:#111;background:var(--soft)}
+.opt{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin:8px 0}
+.opt button{padding:8px 4px;font-size:13px;line-height:1.3}
+.opt button small{display:block;font-family:var(--f-num);color:var(--mut)}
+.opt button.on small{color:#ddd}
+.timeline{position:relative;height:120px;border:1px solid var(--line);border-radius:8px;margin:10px 0;overflow:hidden}
+.foot{color:var(--mut);font-size:13px;margin-top:34px}
+.toc{columns:2;column-gap:28px;font-size:14px;padding-left:18px}
+@media(max-width:600px){.toc{columns:1}.opt{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.cap{font-size:13px;color:var(--mut);margin:4px 0 0}
+</style>
+
+</head><body><div class="wrap">
+<h1>NSGA-II in PCNME, explained in full</h1>
+<p class="sub">From one gene to one plan, to 40 plans, to 20 generations, to the knee, to <span class="m">w</span>*, to the demonstrations the agent learns from. Real numbers come from the grid map (VFC) runs: <span class="n">data/vfc/nsga/fronts.csv</span>, <span class="n">w_star.json</span>, <span class="n">demos/demos.csv</span>.</p>
+
+<ol class="toc">
+<li><a href="#s1">The whole stage on one line</a></li>
+<li><a href="#s2">Seeds: what a seed fixes</a></li>
+<li><a href="#s3">The window: warm-up, 2 s, settle</a></li>
+<li><a href="#s4">One gene = one task's placement</a></li>
+<li><a href="#s5">One plan = all genes of the window</a></li>
+<li><a href="#s6">Scoring a plan: f₁ and f₂</a></li>
+<li><a href="#s7">The first 40 plans</a></li>
+<li><a href="#s8">Making children: tournament, crossover, mutation</a></li>
+<li><a href="#s9">Keeping 40 of 80: ranks and crowding</a></li>
+<li><a href="#s10">20 generations: the population moving</a></li>
+<li><a href="#s11">The knee and the weight w</a></li>
+<li><a href="#s12">All 36 windows and w*</a></li>
+<li><a href="#s13">From plans to demonstrations</a></li>
+<li><a href="#s14">The budget</a></li>
+</ol>
+
+<!-- 1 -->
+<h2 id="s1">1. The whole stage on one line</h2>
+<p>NSGA-II is the <b>expert</b>. It runs offline, before the agent learns anything. For short pieces of city traffic it searches for very good placement plans, and those plans become the agent's teacher.</p>
+<div class="flow">
+<div><b>Seed</b>1000–1999, one per window</div>
+<div><b>Warm-up</b>5 s of greedy</div>
+<div><b>Window</b>2 s of tasks = genes</div>
+<div><b>NSGA-II</b>40 plans × 20 generations</div>
+<div><b>Pareto front</b>the unbeaten plans</div>
+<div><b>Knee → w</b>one weight per window</div>
+<div><b>w*</b>median over windows</div>
+<div><b>Demonstrations</b>replay every front plan</div>
+<div><b>DQfD</b>pretrain the agent</div>
+</div>
+<p>It answers two questions for the agent: <b>which placements are good</b> (the demonstrations) and <b>how much time should weigh against energy</b> (<span class="m">w</span>*). The agent's reward uses the same two costs, so the expert and the agent chase the same goal.</p>
+
+<!-- 2 -->
+<h2 id="s2">2. Seeds: what a seed fixes</h2>
+<p>A <b>scenario</b> is a recipe (load, task mix, deadlines, zones on or off). A <b>seed</b> is one random draw of that recipe: which cars, which tasks, when, how long each runs, every link delay. Same scenario + same seed = exactly the same traffic, bit for bit.</p>
+<h3>Three separate seed ranges</h3>
+<div style="display:flex;height:42px;border-radius:6px;overflow:hidden;border:1px solid var(--line);font-size:13px">
+<div style="flex:1;background:#fdeee6;display:flex;align-items:center;justify-content:center;border-right:1px solid var(--line)"><b>1000–1999</b>&nbsp;NSGA-II + demos</div>
+<div style="flex:1;background:#e8f0fb;display:flex;align-items:center;justify-content:center;border-right:1px solid var(--line)"><b>2000–2999</b>&nbsp;training</div>
+<div style="flex:1;background:#e6f4ee;display:flex;align-items:center;justify-content:center"><b>3000–3999</b>&nbsp;evaluation</div>
+</div>
+<p class="cap">The ranges never overlap, so the agent is never tested on traffic it learned from or that the expert planned.</p>
+<h3>The seed of each window</h3>
+<div class="eq">seed = 1000 + 100 · (<i>s</i> − 1) + <i>k</i> &nbsp;&nbsp;&nbsp; <span style="font-size:15px;font-family:var(--f-text)">for scenario S<i>s</i>, window <i>k</i> = 0 … 5</span></div>
+<div class="tw"><table id="seedtab"></table></div>
+<p class="cap">Click a cell to see what it means. Highlighted: S2 window 0, the example used through this page.</p>
+<div class="box" id="seedinfo"></div>
+<h3>What the seed fixes, and the "same luck" rule</h3>
+<p>Every random draw has its own stream, all derived from the seed: arrivals, run times, link delays, mobility, and NSGA-II's own choices (the "nsga" stream). Inside a window, a task's luck is keyed <b>by the task, not by the order of events</b>:</p>
+<div class="eq">run-time draw <i>u</i> = draw(seed, task id, attempt) &nbsp;&nbsp;→&nbsp;&nbsp; <i>T</i><sup>run</sup> = <i>F</i><sup>−1</sup><sub>row</sub>(<i>u</i>)</div>
+<p>So task 57 gets the same <span class="m">u</span> in every plan. If plan A runs it on a fog GPU and plan B on the cloud, both use the same <span class="m">u</span>, mapped through the time-table row of where it actually runs. Delays work the same way, keyed by (seed, task id, attempt, hop). This is called <b>common random numbers</b>: when two plans score differently, the only reason is the placement, never luck.</p>
+
+<!-- 3 -->
+<h2 id="s3">3. The window: warm-up, 2 s, settle</h2>
+<div class="timeline"><canvas id="tl"></canvas></div>
+<div class="ctrl"><button id="tlplay">▶ Play the timeline</button><span id="tltxt" class="n"></span></div>
+<ol>
+<li><b>0 → 5 s, warm-up</b> (<span class="m">T</span><sub>warmup</sub> = 5 s): the greedy rule places every task. At time 0 the city is empty; after 5 s the queues, slots and pipes are loaded like in a normal run. This part is the same in every plan.</li>
+<li><b>5 → 7 s, the window</b> (<span class="m">T</span><sub>win</sub> = 2 s): every <b>pebble</b> (a task a fog node can run) whose upload arrives in this interval, anywhere in the city, is a window task. Each one becomes one gene. Boulders are not genes: the TOF-Broker always sends them to the cloud.</li>
+<li><b>After 7 s, settle:</b> new tasks are placed by greedy again, so the last window tasks still see realistic load. The run stops once every window task has finished, been dropped or timed out. Nothing later affects the score.</li>
+</ol>
+<div class="tw"><table>
+<tr><th>Scenario</th><th class="r">Window tasks (genes), 6 windows</th></tr>
+<tr><td>S1 light (ρ = 0.5)</td><td class="r">163 – 191</td></tr>
+<tr class="hl"><td>S2 critical (ρ = 0.9)</td><td class="r">294 – 341</td></tr>
+<tr><td>S3 overload (ρ = 1.5)</td><td class="r">507 – 534</td></tr>
+<tr><td>S4 tight deadlines</td><td class="r">277 – 344</td></tr>
+<tr><td>S5 tight + high mobility</td><td class="r">260 – 342</td></tr>
+<tr><td>S6 CPU fog at z2, z4</td><td class="r">276 – 335</td></tr>
+</table></div>
+
+<!-- 4 -->
+<h2 id="s4">4. One gene = one task's placement</h2>
+<p>A gene is a number: the index of the option chosen for one task, out of the options of the zone the task arrived in (its <b>anchor</b>):</p>
+<div class="legend">
+<span><i class="sw" style="background:var(--o0)"></i>0 here</span>
+<span><i class="sw" style="background:var(--o1)"></i>1 Nb1</span>
+<span><i class="sw" style="background:var(--o2)"></i>2 Nb2</span>
+<span><i class="sw" style="background:var(--o3)"></i>3 Nb3</span>
+<span><i class="sw" style="background:var(--o4)"></i>4 Nb4</span>
+<span><i class="sw" style="background:var(--o5)"></i>5 cloud</span>
+</div>
+<p>These are the same 6 actions the agent has. "Nb1" means the anchor's nearest neighbour zone, not a fixed zone, so a gene only has meaning together with its task's anchor.</p>
+<div class="box">
+<div style="display:flex;flex-wrap:wrap;gap:8px 20px;font-size:14px">
+<span>Task <b class="n">57</b></span><span>type <b>T1</b> (object detection)</span><span>anchor <b>z2</b></span><span>deadline <b class="m">D</b> = <b class="n">100 ms</b></span><span>arrived at <b class="n">5.412 s</b></span>
+</div>
+<div class="opt" id="optbtns"></div>
+<p id="optinfo" style="margin:4px 0 0;font-size:14px"></p>
+</div>
+<p><b>Empty positions are not options.</b> If the anchor has fewer neighbours online (for example z5 still offline), the missing positions are left out of that task's gene. A gene can only take values that exist for its task, so it can never point at an empty position. This is the design's repair rule ("a gene pointing at an empty position is repaired to here"), done once, by construction.</p>
+<p><b>Masked at run time:</b> if a planned option turns out to be masked when the decision happens (for example the node is full or the car will leave the zone too soon), that one decision is made by greedy instead.</p>
+
+<!-- 5 -->
+<h2 id="s5">5. One plan = all genes of the window</h2>
+<p>A plan (also called a chromosome or genome) has one gene per window task, in a fixed task order. S2 window 0 has 294 tasks, so a plan is 294 numbers. Below, the first 60 genes of three plans:</p>
+<div class="prow"><span class="rowlab">greedy</span><div class="strip big" id="pg"></div></div>
+<div class="prow"><span class="rowlab">energy-greedy</span><div class="strip big" id="pe"></div></div>
+<div class="prow"><span class="rowlab">random</span><div class="strip big" id="pr"></div></div>
+<p class="cap">Each cell is one task; its colour is the option it is sent to. Illustration: these are not the real genes of window 0.</p>
+<ul>
+<li><b>Greedy plan:</b> each task goes where the estimated finish time is lowest (fastest). Mostly here, sometimes a neighbour.</li>
+<li><b>Energy-greedy plan:</b> each task goes to the open option with the lowest estimated energy <span class="m">Ê</span> that still meets its deadline (cheapest).</li>
+<li><b>Random plan:</b> each gene drawn uniformly from its task's valid options.</li>
+</ul>
+<p>How many plans exist? With up to 6 options per task and 294 tasks, up to 6<sup>294</sup> ≈ 10<sup>229</sup>. Trying them all is impossible; NSGA-II tries 800.</p>
+
+<!-- 6 -->
+<h2 id="s6">6. Scoring a plan: f₁ and f₂</h2>
+<p>Evaluating a plan = <b>one fast-mode simulation</b> of the window with the plan's genes as the window tasks' first decisions. Queues, refusals, retries, aborts and drops all happen as in a real run, so putting many tasks on one node really makes them wait. Each task <span class="m">i</span> gets two costs:</p>
+<div class="tw"><table>
+<tr><th>Task outcome</th><th>time cost <span class="m">C</span><sup>time</sup><sub>i</sub></th><th>energy cost <span class="m">C</span><sup>en</sup><sub>i</sub></th></tr>
+<tr><td>delivered, latency <span class="m">L</span></td><td><span class="m">L/D</span> + <span class="m">w</span><sub>3</sub> · max(0, <span class="m">L − D</span>)/<span class="m">D</span>, with <span class="m">w</span><sub>3</sub> = 1</td><td>min(<span class="m">E/E</span><sub>ref</sub>, 9.197), <span class="m">E</span> over all attempts</td></tr>
+<tr><td>dropped</td><td><span class="m">C</span><sub>drop</sub> = 1 + (1 + <span class="m">w</span><sub>3</sub>) · 1 + <span class="m">C</span><sub>pen</sub> = 1 + 2 + 2 = <b>5</b></td><td><span class="m">C</span><sup>en</sup><sub>max</sub> = <b>9.197</b></td></tr>
+</table></div>
+<div class="eq"><i>f</i><sub>1</sub> = (1/<i>N</i>) Σ<sub><i>i</i></sub> <i>C</i><sup>time</sup><sub><i>i</i></sub> &nbsp;&nbsp;&nbsp;&nbsp; <i>f</i><sub>2</sub> = (1/<i>N</i>) Σ<sub><i>i</i></sub> <i>C</i><sup>en</sup><sub><i>i</i></sub> &nbsp;&nbsp;&nbsp;&nbsp; <span style="font-family:var(--f-text);font-size:15px">both minimised, <i>N</i> = window tasks</span></div>
+<h3>Worked mini-example: 5 tasks</h3>
+<div class="tw"><table id="mini"></table></div>
+<p>A drop is worse than any delivery in both costs, so the search can never "win" by letting tasks fail cheaply. There is no hard constraint on drops: under overload some drops can't be avoided, and a constraint would squeeze the front onto only the fewest-drop plans.</p>
+<p><b>The problem in one line:</b> find the plan <span class="m">a</span> = (<span class="m">a</span><sub>1</sub>, …, <span class="m">a</span><sub>N</sub>) that minimises (<span class="m">f</span><sub>1</sub>(<span class="m">a</span>), <span class="m">f</span><sub>2</sub>(<span class="m">a</span>)). Fast plans cost energy, cheap plans are slower, so there is no single best plan, only a set of best trade-offs: the <b>Pareto front</b>.</p>
+
+<!-- 7 -->
+<h2 id="s7">7. The first 40 plans</h2>
+<p>NSGA-II doesn't start from pure chance. Half the first population is built from the two sensible plans:</p>
+<div class="grid2">
+<div class="box" style="margin:0"><div id="pop0"></div></div>
+<div class="box" style="margin:0">
+<div class="stat"><span>row 1</span><b>greedy plan</b></div>
+<div class="stat"><span>row 2</span><b>energy-greedy plan</b></div>
+<div class="stat"><span>rows 3–20</span><b>mutated copies, alternating</b></div>
+<div class="stat"><span>rows 21–40</span><b>random valid plans</b></div>
+<div class="stat"><span>duplicates</span><b>not allowed</b></div>
+<p style="font-size:14px;margin:10px 0 0">A mutated copy = the greedy (or energy-greedy) plan with about 1 gene in 294 moved to another option (black outline). Because NSGA-II is elitist (it never throws away a plan unless a better one replaces it), no plan on the final front is dominated by the greedy plan: the expert is never worse than greedy on both costs at once.</p>
+</div>
+</div>
+
+<!-- 8 -->
+<h2 id="s8">8. Making children: tournament, crossover, mutation</h2>
+<p>Each generation makes 40 children from the current 40 plans. Press <b>Next step</b> to make one child.</p>
+<div class="ctrl"><button id="opnext">Next step</button><button id="opreset">New child</button><span id="opstage" class="pill">step 0 / 4</span></div>
+<div class="box">
+<div id="tour" style="font-size:14px;margin-bottom:8px"></div>
+<div class="prow"><span class="rowlab">parent A</span><div class="strip big" id="sa"></div></div>
+<div class="prow"><span class="rowlab">parent B</span><div class="strip big" id="sb"></div></div>
+<div class="prow"><span class="rowlab">coin: A or B</span><div class="strip" id="sm"></div></div>
+<div class="prow"><span class="rowlab">child</span><div class="strip big" id="sc"></div></div>
+<div class="prow"><span class="rowlab">child mutated</span><div class="strip big" id="sx"></div></div>
+<p id="opinfo" style="font-size:14px;margin:10px 0 0"></p>
+</div>
+<div class="tw"><table>
+<tr><th>Operator</th><th>What it does</th><th>Setting</th></tr>
+<tr><td>Binary tournament</td><td>Draw 2 plans at random; keep the one with the lower rank; if the ranks tie, the one with the larger crowding distance (more alone on the front). Twice → parents A and B.</td><td>pymoo NSGA2 default</td></tr>
+<tr><td>Uniform crossover</td><td>For each gene, a coin decides whether the child takes A's or B's value. With probability 0.1 no crossover happens and the child is a copy.</td><td class="r">0.9</td></tr>
+<tr><td>Valid-option mutation</td><td>Each gene, with probability 1/<span class="m">N</span>, moves to another of its task's valid options, chosen uniformly; never the same option.</td><td class="r">1/294 at S2 w0</td></tr>
+<tr><td>Duplicate removal</td><td>A child identical to an existing plan is discarded.</td><td>pymoo default</td></tr>
+</table></div>
+<p><b>Why not the DE mutation of the VFC paper?</b> DE builds a new gene by arithmetic, <span class="m">V = X</span><sub>1</sub> + <span class="m">F</span> · (<span class="m">X</span><sub>2</sub> − <span class="m">X</span><sub>3</sub>). PCNME genes are categories relative to each task's anchor: "Nb3 − Nb1" means nothing. So the mutation just moves a task to another valid place.</p>
+
+<!-- 9 -->
+<h2 id="s9">9. Keeping 40 of 80: ranks and crowding</h2>
+<p>After the 40 children are scored, there are 40 + 40 = 80 plans. NSGA-II keeps 40:</p>
+<div class="grid2">
+<div class="plot s"><canvas id="rk" role="img" aria-label="80 plans coloured by rank, kept and dropped plans"></canvas></div>
+<div class="box" style="margin:0">
+<div class="ctrl" style="margin-top:0"><button id="rkstep">Next step</button><button id="rknew">New pool</button></div>
+<div id="rkinfo" style="font-size:14px"></div>
+</div>
+</div>
+<ol>
+<li><b>Dominates:</b> plan A dominates B if A is no worse on both <span class="m">f</span><sub>1</sub> and <span class="m">f</span><sub>2</sub>, and better on at least one.</li>
+<li><b>Rank 1</b> = plans nobody dominates. Remove them; the plans now undominated are <b>rank 2</b>; and so on (non-dominated sorting).</li>
+<li>Fill the 40 places rank by rank.</li>
+<li>The rank that doesn't fit completely is cut by <b>crowding distance</b>: for each plan, the gap between its two neighbours on that rank, summed over both objectives (normalised). End points get infinite distance. The plans with the biggest gaps are kept, so the front stays spread out instead of bunching up.</li>
+</ol>
+
+<!-- 10 -->
+<h2 id="s10">10. 20 generations: the population moving</h2>
+<div class="ctrl">
+<button id="play">▶ Play</button><button id="step">Next generation</button><button id="reset">Reset</button>
+<input type="range" id="gen" min="1" max="20" step="1" value="1" aria-label="Generation">
+<span id="glab" class="n" style="min-width:120px;font-weight:600">Generation 1</span>
+</div>
+<div class="legend">
+<span><i class="dot" style="background:var(--gray)"></i>plan</span>
+<span><i class="dot" style="background:var(--green)"></i>rank 1 now</span>
+<span><i class="dot" style="border:2px solid var(--blue);border-radius:2px"></i>greedy plan</span>
+<span><i class="dot" style="background:var(--orange);border-radius:0;transform:rotate(45deg);width:9px;height:9px"></i>knee (picked at the end)</span>
+</div>
+<div class="grid2">
+<div class="plot"><canvas id="c" role="img" aria-label="40 plans moving toward the lower-left edge over 20 generations"></canvas></div>
+<div class="box" style="margin:0">
+<h3 id="ph" style="margin-top:0">Generation 1 of 20</h3>
+<div class="stat"><span>plans kept</span><b>40</b></div>
+<div class="stat"><span>children this generation</span><b id="gsc">0</b></div>
+<div class="stat"><span>pool before selection</span><b id="gsp">40</b></div>
+<div class="stat"><span>rank-1 plans now</span><b id="gsr">–</b></div>
+<div class="stat"><span>evaluations so far</span><b id="gse">40</b></div>
+<p id="gmsg" style="font-size:14px;margin:10px 0 0"></p>
+</div>
+</div>
+<p class="cap">Illustration of the motion. Counting: generation 1 is the starting population (40 evaluations); generations 2–20 each add 40 children: 40 + 19 × 40 = 800 evaluations.</p>
+<div class="note"><b>Key point.</b> NSGA-II does not move toward the knee. It pushes the population to the lower-left edge and spreads it along the edge. The knee is chosen after generation 20.</div>
+
+<!-- 11 -->
+<h2 id="s11">11. The knee and the weight w</h2>
+<p>The final front's points have different scales (time costs near 0.4, energy costs near 1.0), so first both axes are rescaled to 0–1:</p>
+<div class="eq"><i>f̃</i><sub><i>j</i></sub> = (<i>f</i><sub><i>j</i></sub> − <i>f</i><sub><i>j</i></sub><sup>min</sup>) / Δ<i>f</i><sub><i>j</i></sub>, &nbsp;&nbsp; Δ<i>f</i><sub><i>j</i></sub> = <i>f</i><sub><i>j</i></sub><sup>max</sup> − <i>f</i><sub><i>j</i></sub><sup>min</sup></div>
+<p><b>Knee</b> = the point farthest from the straight line between the two end points. On 0–1 axes that line is <span class="m">f̃</span><sub>1</sub> + <span class="m">f̃</span><sub>2</sub> = 1, so the knee is the point with the <b>smallest</b> <span class="m">f̃</span><sub>1</sub> + <span class="m">f̃</span><sub>2</sub> (ties go to the faster plan). It is where you stop getting a big energy saving for a small time loss.</p>
+<p><b>Slope at the knee</b>, from its left neighbour <span class="m">p</span><sup>−</sup> and right neighbour <span class="m">p</span><sup>+</sup> (one-sided at an end):</p>
+<div class="eq"><i>σ</i> = (<i>f̃</i><sub>2</sub>(<i>p</i><sup>−</sup>) − <i>f̃</i><sub>2</sub>(<i>p</i><sup>+</sup>)) / (<i>f̃</i><sub>1</sub>(<i>p</i><sup>+</sup>) − <i>f̃</i><sub>1</sub>(<i>p</i><sup>−</sup>)), &nbsp;&nbsp; <i>w̃</i> = <i>σ</i> / (1 + <i>σ</i>)</div>
+<p><span class="m">σ</span> is the exchange rate at the knee: how much normalised energy the front gives back for one unit of normalised time. A weighted sum <span class="m">w̃ f̃</span><sub>1</sub> + (1 − <span class="m">w̃</span>) <span class="m">f̃</span><sub>2</sub> is lowest where the slope equals <span class="m">w̃</span>/(1 − <span class="m">w̃</span>); setting that equal to <span class="m">σ</span> gives <span class="m">w̃</span> = <span class="m">σ</span>/(1 + <span class="m">σ</span>). The reward uses the raw costs, not the 0–1 ones, so the weight is taken back through the ranges:</p>
+<div class="eq"><i>w</i> = (<i>w̃</i> / Δ<i>f</i><sub>1</sub>) / ( <i>w̃</i> / Δ<i>f</i><sub>1</sub> + (1 − <i>w̃</i>) / Δ<i>f</i><sub>2</sub> )</div>
+<h3>Worked example (invented 6-point front in the range of S2 window 0; numbers computed with the repo's <span class="n">knee.py</span>)</h3>
+<div class="grid2">
+<div class="plot s"><canvas id="kn" role="img" aria-label="Normalised front with the line between the extremes and the knee"></canvas></div>
+<div class="box" style="margin:0" id="knsteps"></div>
+</div>
+<div class="tw"><table id="kntab"></table></div>
+<ul>
+<li><b>No knee</b> if the front has fewer than 2 distinct points: there is no range to rescale. That happened in 9 of 36 grid windows (S4 and S5), and 14 of 36 on LuST.</li>
+<li><b>Every front point</b> gets its own <span class="m">w</span><sub>p</sub> by the same formulas (last column). These are used for the demonstrations.</li>
+<li><b>Limit:</b> if the front isn't convex around the knee, no weighted sum picks exactly that point. The reward then asks for the nearest trade-off, while the margin loss still teaches the knee's actions.</li>
+</ul>
+
+<!-- 12 -->
+<h2 id="s12">12. All 36 windows and w*</h2>
+<div class="plot s" style="height:300px"><canvas id="wbar" role="img" aria-label="Knee weight w per window for S1 to S6, with the median w* line"></canvas></div>
+<p class="cap">Knee weight per window, from <span class="n">fronts.csv</span>. Empty slot = no knee (1 distinct point). Dashed line: <span class="m">w</span>* = 0.414.</p>
+<div class="eq"><i>w</i>* = median of the knee weights = <b>0.41389</b> (grid, 27 knees) &nbsp;&nbsp;&nbsp; <b>0.34394</b> (LuST, 22 knees)</div>
+<p>The median happens to be S2 window 0's own knee weight. The weights spread widely: quartiles near 0.0005 and 0.72. In S1 every knee weight is near 0: at light load the front is almost flat in energy, so time decides. One median for the whole map is a simplification.</p>
+<p><b>Note on S6:</b> S6 was first run with tight deadlines, then re-run alone with loose deadlines (QUESTIONS Q60). The S6 rows below are from the re-run. The re-run keeps <span class="m">w</span>* = 0.414 by design: the 27 knees in <span class="n">w_star.json</span> are S1–S5's 26 plus the first S6 run's one knee (0.6016).</p>
+<div class="tw"><table id="wintab"></table></div>
+
+<!-- 13 -->
+<h2 id="s13">13. From plans to demonstrations</h2>
+<p>Each plan on a window's front is <b>replayed</b> in the real simulator with the agent's input builder switched on. At every decision of a window task the replay records one transition:</p>
+<div class="eq">( <i>s</i>, <i>a</i>, <i>r</i>, <i>s′</i>, Δ<i>t</i> ) &nbsp;&nbsp; <span style="font-family:var(--f-text);font-size:15px"><i>s</i> = the 48 inputs with <i>w</i> = the plan's own <i>w<sub>p</sub></i>, &nbsp; <i>a</i> = the plan's gene, &nbsp; <i>r</i> = the online reward</span></div>
+<ul>
+<li>The replay is the real simulator, so <span class="m">s</span> is exactly what the agent would see: stale state, pending sends, masks.</li>
+<li><b>Expert flag:</b> a transition whose action is the plan's gene is an expert transition; DQfD's margin loss pushes the agent toward these actions.</li>
+<li>A gene masked at replay is replaced by greedy, and every greedy re-decision is stored <b>without</b> the flag (no margin loss).</li>
+<li>Boulders make no transitions.</li>
+<li>Besides the front plans, each window's greedy plan is also replayed (with <span class="m">w</span> = <span class="m">w</span>*).</li>
+</ul>
+<div class="tw"><table>
+<tr><th>Grid map, all 36 windows</th><th class="r">plans</th><th class="r">transitions</th><th class="r">expert-flagged</th></tr>
+<tr><td>Front plans (every distinct point of every front)</td><td class="r">340</td><td class="r">100 372</td><td class="r">94 687</td></tr>
+<tr><td>Greedy plans (one per window)</td><td class="r">36</td><td class="r">11 568</td><td class="r">11 394</td></tr>
+<tr class="hl"><td>S2 window 0 only</td><td class="r">25 + 1</td><td class="r">7 350 + 294</td><td class="r">7 292 + 294</td></tr>
+</table></div>
+<p class="cap">S2 window 0: 25 distinct front plans × 294 tasks = 7 350 transitions. Windows with 1 distinct point give no front plans. Source: <span class="n">data/vfc/demos/demos.csv</span>.</p>
+<p>These transitions fill the demonstration buffer. DQfD pretrains the D3QN on them (TD loss + n-step loss + margin loss + L2), then the agent learns online with <span class="m">w</span> = <span class="m">w</span>*.</p>
+
+<!-- 14 -->
+<h2 id="s14">14. The budget</h2>
+<div class="tw"><table>
+<tr><th>Setting</th><th class="r">Design (config)</th><th class="r">Your runs</th></tr>
+<tr><td>Population</td><td class="r">100</td><td class="r">40</td></tr>
+<tr><td>Generations</td><td class="r">100</td><td class="r">20</td></tr>
+<tr><td>Evaluations per window</td><td class="r">10 000</td><td class="r">800</td></tr>
+<tr><td>Windows per scenario</td><td class="r">20</td><td class="r">6</td></tr>
+<tr><td>Windows in total (6 scenarios)</td><td class="r">120</td><td class="r">36</td></tr>
+<tr><td>Time per window, grid / LuST</td><td class="r">–</td><td class="r">42.5 / 68.2 min</td></tr>
+<tr><td>Total time, grid / LuST</td><td class="r">≈ 40× more</td><td class="r">25.5 / 40.9 h</td></tr>
+</table></div>
+<p>Every evaluation is a full simulation of the whole city through the window and the settling (the 5 s warm-up is the same in every plan, so it is computed once per window and reused). That is why one window takes from about 26 min (S6 window 2: 1 536 s) to about 2 h (S3 window 4: 7 577 s). The cut from the design's setting is a stated limitation of the thesis.</p>
+
+<p class="foot">Sources: PCNME final design §13.2–13.4; code <span class="n">src/pcnme/expert/</span> (window.py, nsga.py, knee.py, demos.py); data <span class="n">data/vfc/nsga/fronts.csv</span>, <span class="n">data/vfc/w_star.json</span>, <span class="n">data/vfc/demos/demos.csv</span>; Deb et al. 2002 (NSGA-II), pymoo; Das 1999 and KnEA (knee); Branke et al. 2004.</p>
+</div>
+
+<script>
+const OC=['#1b7f5a','#2a6fd6','#6d9be6','#7c5cc9','#b09be8','#d2521d'],ON=['here','Nb1','Nb2','Nb3','Nb4','cloud'];
+let S=11;const rnd=()=>{S=(S*16807)%2147483647;return S/2147483647};const ri=n=>Math.floor(rnd()*n);
+function fit(cv){const r=cv.getBoundingClientRect(),d=devicePixelRatio||1;cv.width=r.width*d;cv.height=r.height*d;const x=cv.getContext('2d');x.setTransform(d,0,0,d,0,0);return [x,r.width,r.height]}
+function strip(el,g,marks){el.innerHTML=g.map((v,i)=>'<i style="background:'+(v<0?'#eee':OC[v])+'"'+(marks&&marks.has(i)?' class="mark"':'')+' title="task '+(i+1)+': '+(v<0?'–':ON[v])+'"></i>').join('')}
+
+/* 2 seeds */
+const SC=['S1','S2','S3','S4','S5','S6'],SD={S1:'light, ρ = 0.5',S2:'critical, ρ = 0.9',S3:'overload, ρ = 1.5',S4:'ρ = 0.9, tight deadlines',S5:'ρ = 0.9, tight deadlines, high mobility',S6:'ρ = 0.9, CPU fog nodes at z2 and z4, loose deadlines'};
+const WIN=[['S1',0,163,40,26,0.001910666493916899,1807.3],['S1',1,176,16,15,0.00035842077987359433,2057.8],['S1',2,182,19,16,0.0010515045018884657,1687.8],['S1',3,190,9,9,0.00011261411233768884,1753.8],['S1',4,191,34,30,0.0003587850827122635,1769.9],['S1',5,179,26,18,0.000693069382562721,1650.4],['S2',0,294,28,25,0.41389148056905384,2810.7],['S2',1,326,29,24,0.643811928744739,2328.8],['S2',2,341,13,13,0.0002764704261236905,2296.9],['S2',3,297,9,9,0.21969038608315422,2409.9],['S2',4,333,29,28,0.0005118603401541374,3280.3],['S2',5,321,7,7,0.00015541569232882402,2646.9],['S3',0,513,6,6,0.5226659316321853,4272.5],['S3',1,519,2,2,0.4765627283130959,3491.0],['S3',2,510,2,2,0.32450564015923417,3361.1],['S3',3,507,10,9,0.573434914740711,4072.5],['S3',4,534,18,16,0.8634908645954628,7576.8],['S3',5,530,11,11,0.7978839092857439,5083.1],['S4',0,292,2,2,0.9389014552189333,2210.9],['S4',1,292,2,2,0.7594940539044189,2292.5],['S4',2,277,1,1,null,2245.8],['S4',3,284,3,3,0.7237326918571526,2238.1],['S4',4,324,2,2,0.4979142497468118,2321.0],['S4',5,344,1,1,null,2447.9],['S5',0,342,1,1,null,2547.9],['S5',1,287,1,1,null,2419.5],['S5',2,268,15,14,0.32924331155993347,2248.9],['S5',3,309,3,3,0.7294424013931373,2240.3],['S5',4,309,2,2,9.576077688024329e-05,2298.5],['S5',5,260,7,7,0.9585592750101061,2179.7],['S6',0,302,10,8,0.4614118615184584,1614.4],['S6',1,278,8,7,0.7269736862152649,1546.6],['S6',2,276,7,7,0.47451504575444864,1536.4],['S6',3,306,2,2,0.9949789262928084,1718.5],['S6',4,295,9,9,0.7676358361517801,1585.6],['S6',5,335,9,6,0.04419998845006077,1839.5]];
+(function(){const t=document.getElementById('seedtab');let h='<tr><th>Scenario</th>'+[0,1,2,3,4,5].map(k=>'<th class="r">window '+k+'</th>').join('')+'</tr>';
+SC.forEach((s,si)=>{h+='<tr><td>'+s+'</td>'+[0,1,2,3,4,5].map(k=>'<td class="r" data-s="'+si+'" data-k="'+k+'" style="cursor:pointer">'+(1000+100*si+k)+'</td>').join('')+'</tr>'});t.innerHTML=h;
+function show(si,k){t.querySelectorAll('td[data-s]').forEach(c=>c.style.background=(+c.dataset.s===si&&+c.dataset.k===k)?'#dbe8fa':'');
+ const w=WIN[si*6+k];document.getElementById('seedinfo').innerHTML='<b>Seed '+(1000+100*si+k)+'</b> = 1000 + 100 · ('+(si+1)+' − 1) + '+k+' → scenario <b>'+SC[si]+'</b> ('+SD[SC[si]]+'), window '+k+'. This seed fixes the cars, their routes, every arrival, run-time draw and delay. Its window held <b>'+w[2]+' tasks</b> (genes). The front had <b>'+w[3]+'</b> points, '+w[4]+' distinct; knee weight <b>'+(w[5]==null?'none (1 distinct point)':w[5].toFixed(4))+'</b>. Computing time '+Math.round(w[6])+' s ('+(w[6]/60).toFixed(1)+' min).'}
+t.addEventListener('click',e=>{const c=e.target.closest('td[data-s]');if(c)show(+c.dataset.s,+c.dataset.k)});show(1,0)})();
+
+/* 3 timeline */
+const TL=[];for(let i=0;i<260;i++)TL.push(rnd()*9);
+let tlT=9,tlTimer=null;
+function drawTL(){const cv=document.getElementById('tl'),[x,W,H]=fit(cv),L=20,R=20,X=t=>L+t/9*(W-L-R);
+ x.clearRect(0,0,W,H);const bands=[[0,5,'#f1f0ec','warm-up: greedy'],[5,7,'#dbe8fa','window: genes'],[7,9,'#f1f0ec','settle: greedy']];
+ bands.forEach(b=>{x.fillStyle=b[2];x.fillRect(X(b[0]),18,X(b[1])-X(b[0]),62);x.fillStyle='#333';x.font='13px "IBM Plex Sans",sans-serif';x.textAlign='center';x.fillText(b[3],(X(b[0])+X(b[1]))/2,14)});
+ TL.forEach((t,i)=>{if(t>tlT)return;const inW=t>=5&&t<7;x.fillStyle=inW?'#1f5fbf':'#9a978f';x.fillRect(X(t),24+(i%9)*6,2,5)});
+ x.strokeStyle='#333';x.beginPath();x.moveTo(L,84);x.lineTo(W-R,84);x.stroke();x.fillStyle='#111';x.font='12px "IBM Plex Mono",monospace';
+ for(let s=0;s<=9;s++){x.fillText(s+' s',X(s),100);x.beginPath();x.moveTo(X(s),84);x.lineTo(X(s),88);x.stroke()}
+ if(tlT<9){x.strokeStyle='#d2521d';x.lineWidth=2;x.beginPath();x.moveTo(X(tlT),18);x.lineTo(X(tlT),84);x.stroke();x.lineWidth=1}
+ const n=TL.filter(t=>t>=5&&t<7&&t<=tlT).length;document.getElementById('tltxt').textContent='t = '+tlT.toFixed(1)+' s · window tasks so far: '+n+' (illustration; S2 window 0 had 294)'}
+document.getElementById('tlplay').onclick=()=>{clearInterval(tlTimer);tlT=0;tlTimer=setInterval(()=>{tlT=Math.min(9,tlT+0.1);drawTL();if(tlT>=9)clearInterval(tlTimer)},40)};
+
+/* 4 gene */
+const OPTI=['Run on z2\'s own fog node. No backhaul hop. Ŵ + T̄run on z2\'s best slot.','Send over the backhaul to z2\'s nearest online neighbour zone. Adds W_bh + S/B_bh + δ_bh.','Second-nearest neighbour zone, same path cost type as Nb1.','Third-nearest neighbour zone.','Fourth-nearest neighbour zone (empty here if a zone is offline → not an option).','Backhaul + WAN to the cloud: W_bh + δ_bh + W_WAN + S/B_WAN + δ_WAN, cloud runs it fast but uses more energy.'];
+(function(){const b=document.getElementById('optbtns');b.innerHTML=ON.map((n,i)=>'<button data-i="'+i+'" style="border-left:5px solid '+OC[i]+'">'+n+'<small>gene = '+i+'</small></button>').join('');
+function sel(i){b.querySelectorAll('button').forEach(x=>x.classList.toggle('on',+x.dataset.i===i));document.getElementById('optinfo').innerHTML='<b>gene<sub>57</sub> = '+i+'</b> → '+OPTI[i]}
+b.onclick=e=>{const x=e.target.closest('button');if(x)sel(+x.dataset.i)};sel(0)})();
+
+/* 5 plans */
+const NG=60,G0=[],GE=[],GR=[];
+for(let i=0;i<NG;i++){const r=rnd();G0.push(r<0.72?0:r<0.86?1:r<0.93?2:r<0.97?5:3);const q=rnd();GE.push(q<0.85?0:q<0.93?1:2);GR.push(ri(6))}
+strip(document.getElementById('pg'),G0);strip(document.getElementById('pe'),GE);strip(document.getElementById('pr'),GR);
+
+/* 6 mini */
+(function(){const rows=[['1','T1',100,'here','delivered',62,1.30,1.3711],['2','T1',100,'Nb2','delivered',118,1.55,1.3711],['3','T4',1000,'cloud','delivered',410,9.80,4.5736],['4','T3',100,'here','delivered',74,1.60,1.69],['5','T1',100,'here','dropped',null,null,1.3711]];
+let h='<tr><th>task</th><th>type</th><th class="r">D (ms)</th><th>gene</th><th>outcome</th><th class="r">L (ms)</th><th class="r">E (J)</th><th class="r">E_ref (J)</th><th class="r">C^time</th><th class="r">C^en</th></tr>',st=0,se=0;
+rows.forEach(r=>{let ct,ce;if(r[4]==='dropped'){ct=5;ce=9.197}else{ct=r[5]/r[2]+Math.max(0,r[5]-r[2])/r[2];ce=Math.min(r[6]/r[7],9.197)}st+=ct;se+=ce;
+h+='<tr><td>'+r[0]+'</td><td>'+r[1]+'</td><td class="r">'+r[2]+'</td><td><i class="sw" style="background:'+OC[ON.indexOf(r[3])]+';vertical-align:-1px"></i> '+r[3]+'</td><td>'+r[4]+'</td><td class="r">'+(r[5]??'–')+'</td><td class="r">'+(r[6]==null?'–':r[6].toFixed(2))+'</td><td class="r">'+r[7]+'</td><td class="r">'+ct.toFixed(3)+'</td><td class="r">'+ce.toFixed(3)+'</td></tr>'});
+h+='<tr class="hl"><td colspan="8"><b>mean over 5 tasks</b> (invented latencies and energies, real E_ref values)</td><td class="r"><b>f₁ = '+(st/5).toFixed(3)+'</b></td><td class="r"><b>f₂ = '+(se/5).toFixed(3)+'</b></td></tr>';
+document.getElementById('mini').innerHTML=h})();
+
+/* 7 population */
+function mutate(g){const c=g.slice(),m=new Set();c.forEach((v,i)=>{if(rnd()<1/30){let n=(v+1+ri(5))%6;c[i]=n;m.add(i)}});if(!m.size){const i=ri(c.length);c[i]=(c[i]+1+ri(5))%6;m.add(i)}return [c,m]}
+(function(){const el=document.getElementById('pop0');let h='';const rows=[];
+rows.push(['1 greedy',G0,null]);rows.push(['2 energy-gr.',GE,null]);
+for(let k=3;k<=20;k++){const[c,m]=mutate(k%2?G0:GE);rows.push([k+(k%2?' mut. greedy':' mut. energy'),c,m])}
+for(let k=21;k<=40;k++)rows.push([k+' random',Array.from({length:NG},()=>ri(6)),null]);
+rows.forEach((r,i)=>{h+='<div class="prow"><span class="rowlab">'+r[0]+'</span><div class="strip" id="p0r'+i+'"></div></div>'});el.innerHTML=h;
+rows.forEach((r,i)=>strip(document.getElementById('p0r'+i),r[1],r[2]))})();
+
+/* 8 operators */
+let opS=0,A,B,M,C,X,XM,TA,TB;
+function opNew(){A=Array.from({length:NG},()=>rnd()<0.7?0:ri(6));B=Array.from({length:NG},()=>rnd()<0.6?0:ri(6));M=A.map(()=>rnd()<0.5?0:1);C=A.map((v,i)=>M[i]?B[i]:v);[X,XM]=mutate(C);
+ TA=[[7,1,0.31],[23,3,0.12]];TB=[[15,2,0.40],[31,2,0.08]];opS=0;opDraw()}
+function opDraw(){const e=id=>document.getElementById(id),blank=Array(NG).fill(-1);
+ e('opstage').textContent='step '+opS+' / 4';
+ e('tour').innerHTML=opS>=1?'Tournament for A: plan '+TA[0][0]+' (rank '+TA[0][1]+') vs plan '+TA[1][0]+' (rank '+TA[1][1]+') → <b>plan '+TA[0][0]+' wins</b>, lower rank. &nbsp; Tournament for B: plan '+TB[0][0]+' vs plan '+TB[1][0]+', both rank 2 → crowding '+TB[0][2]+' vs '+TB[1][2]+' → <b>plan '+TB[0][0]+' wins</b>, more spread out.':'Step 1 picks the two parents.';
+ strip(e('sa'),opS>=1?A:blank);strip(e('sb'),opS>=1?B:blank);
+ e('sm').innerHTML=opS>=2?M.map(v=>'<i style="background:'+(v?'#555':'#ddd')+'" title="'+(v?'from B':'from A')+'"></i>').join(''):blank.map(()=>'<i style="background:#f3f3f3"></i>').join('');
+ strip(e('sc'),opS>=3?C:blank);strip(e('sx'),opS>=4?X:blank,opS>=4?XM:null);
+ e('opinfo').innerHTML=['Press Next step.','<b>Tournament:</b> two binary tournaments choose parents A and B.','<b>Coin per gene</b> (light = take A, dark = take B). Crossover happens with probability 0.9.','<b>Child</b> = A\'s genes where the coin is light, B\'s where it is dark.','<b>Mutation:</b> each gene moves with probability 1/N to another valid option; outlined cells moved ('+XM.size+' here; on 294 genes about 1 per child). Then the child is simulated → its own (f₁, f₂).'][opS]}
+document.getElementById('opnext').onclick=()=>{opS=Math.min(4,opS+1);opDraw()};document.getElementById('opreset').onclick=opNew;opNew();
+
+/* 9 ranks */
+let RP=[],rkS=0;
+function rkNew(){RP=[];for(let i=0;i<80;i++){const t=rnd(),d=rnd()*0.55;RP.push({x:0.05+0.9*t+d*0.3*rnd(),y:0.1+0.6*Math.pow(1-t,2)+d,old:i<40})}
+ let rest=RP.map((_,i)=>i),r=0;while(rest.length){r++;const f=rest.filter(i=>!rest.some(j=>j!==i&&RP[j].x<=RP[i].x&&RP[j].y<=RP[i].y&&(RP[j].x<RP[i].x||RP[j].y<RP[i].y)));f.forEach(i=>RP[i].rank=r);rest=rest.filter(i=>!f.includes(i))}
+ let kept=0;RP.forEach(p=>p.keep=false);for(let k=1;k<=r;k++){const f=RP.filter(p=>p.rank===k);if(kept+f.length<=40){f.forEach(p=>p.keep=true);kept+=f.length}else{
+  f.forEach(p=>p.cd=0);['x','y'].forEach(a=>{const s=f.slice().sort((p,q)=>p[a]-q[a]),rg=s[s.length-1][a]-s[0][a]||1;s[0].cd=s[s.length-1].cd=Infinity;for(let i=1;i<s.length-1;i++)s[i].cd+=(s[i+1][a]-s[i-1][a])/rg});
+  f.sort((p,q)=>q.cd-p.cd).slice(0,40-kept).forEach(p=>{p.keep=true;p.cut=true});f.forEach(p=>p.cutrank=true);RP.cutRank=k;RP.cutTake=40-kept;RP.cutSize=f.length;break}}
+ RP.maxR=r;rkS=0;rkDraw()}
+const RKC=['#12875c','#2a6fd6','#7c5cc9','#b09be8','#c9a227','#9a978f'];
+function rkDraw(){const cv=document.getElementById('rk'),[x,W,H]=fit(cv),L=36,B=30,T=10,R=10,X=v=>L+v*(W-L-R),YM=Math.max(...RP.map(p=>p.y))*1.04,Y=v=>H-B-v/YM*(H-B-T);
+ x.clearRect(0,0,W,H);x.strokeStyle='#333';x.beginPath();x.moveTo(L,T);x.lineTo(L,H-B);x.lineTo(W-R,H-B);x.stroke();
+ x.fillStyle='#111';x.font='italic 14px "STIX Two Text",serif';x.textAlign='center';x.fillText('f₁',(L+W)/2,H-8);x.fillText('f₂',14,(T+H)/2);
+ RP.forEach(p=>{let col='#9a978f',r=4.5,a=1;
+  if(rkS===0){col=p.old?'#555':'#d2521d'}
+  else if(rkS===1){col=RKC[Math.min(p.rank-1,5)]}
+  else{col=RKC[Math.min(p.rank-1,5)];if(!p.keep){a=0.18}}
+  x.globalAlpha=a;x.beginPath();x.arc(X(p.x),Y(p.y),r,0,7);x.fillStyle=col;x.fill();
+  if(rkS===2&&p.cut){x.strokeStyle='#111';x.lineWidth=1.5;x.stroke();x.lineWidth=1}x.globalAlpha=1});
+ const info=[
+ '<b>Pool of 80:</b> dark = the 40 parents, orange = the 40 new children. All 80 have been simulated.',
+ '<b>Non-dominated sorting:</b> colour = rank. Green = rank 1 (nobody beats them on both costs), blue = rank 2, purple = rank 3, and so on. This pool has '+RP.maxR+' ranks.',
+ '<b>Keep 40:</b> ranks 1 to '+(RP.cutRank-1)+' fit completely. Rank '+RP.cutRank+' has '+RP.cutSize+' plans but only '+RP.cutTake+' place'+(RP.cutTake===1?'':'s')+' left: the ones with the largest crowding distance stay (outlined). Faded = dropped. The 40 kept plans are the next generation.'];
+ document.getElementById('rkinfo').innerHTML=info[rkS]+'<p class="cap">Step '+(rkS+1)+' of 3 · illustration</p>'}
+document.getElementById('rkstep').onclick=()=>{rkS=(rkS+1)%3;rkDraw()};document.getElementById('rknew').onclick=rkNew;
+
+/* 10 population motion */
+const cvP=document.getElementById('c');let s2=7;const r2=()=>{s2=(s2*16807)%2147483647;return s2/2147483647};
+const front=x=>0.12+0.55*Math.pow(1-x,2.2),N=40,G=20,MM=G-1,P=[];
+for(let i=0;i<N;i++){let t,dx,dy;
+ if(i<10){t=0.07+r2()*0.08;dx=0.01+r2()*0.06;dy=0.08+r2()*0.12}else if(i<20){t=0.78+r2()*0.14;dx=0.01+r2()*0.05;dy=0.06+r2()*0.12}else{t=0.1+r2()*0.6;dx=0.1+r2()*0.22;dy=0.18+r2()*0.22}
+ P.push({t0:t,t1:0.03+0.94*(i/(N-1)),dx,dy,nx:[],ny:[]});for(let g=0;g<=MM;g++){P[i].nx.push((r2()-0.5)*0.03);P[i].ny.push((r2()-0.5)*0.03)}}
+function pos(i,gg){const g=gg-1,p=P[i],k=Math.pow(0.78,g),m=g/MM,t=p.t0*(1-m)+p.t1*m;return {x:Math.min(0.98,t+p.dx*k+Math.abs(p.nx[g])*k),y:Math.min(0.98,front(t)+p.dy*k+Math.abs(p.ny[g])*k+0.004)}}
+function rank1(pts){return pts.map((a,i)=>!pts.some((b,j)=>j!==i&&b.x<=a.x&&b.y<=a.y&&(b.x<a.x||b.y<a.y)))}
+const greedy={x:0.10,y:front(0.10)+0.10};let g=1,timer=null;
+function drawP(){const [ctx,W,H]=fit(cvP),L=50,B=44,T=14,R=14,X=v=>L+v*(W-L-R),Y=v=>H-B-v*(H-B-T);
+ ctx.clearRect(0,0,W,H);ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(L,T);ctx.lineTo(L,H-B);ctx.lineTo(W-R,H-B);ctx.stroke();
+ ctx.fillStyle='#111';ctx.font='italic 15px "STIX Two Text",serif';ctx.textAlign='center';ctx.fillText('f₁ = mean time cost   (→ worse)',(L+W)/2,H-14);
+ ctx.save();ctx.translate(18,(T+H-B)/2);ctx.rotate(-Math.PI/2);ctx.fillText('f₂ = mean energy cost   (→ worse)',0,0);ctx.restore();
+ ctx.setLineDash([5,5]);ctx.strokeStyle='#bbb';ctx.beginPath();for(let x=0;x<=1.001;x+=0.01){const y=front(x);x?ctx.lineTo(X(x),Y(y)):ctx.moveTo(X(x),Y(y))}ctx.stroke();ctx.setLineDash([]);
+ ctx.fillStyle='#777';ctx.font='12px "IBM Plex Sans",sans-serif';ctx.textAlign='left';ctx.fillText('best possible edge (unknown to NSGA-II)',X(0.55),Y(front(0.55))+46);
+ const pts=P.map((_,i)=>pos(i,g)),r1=rank1(pts),nr=r1.filter(Boolean).length;
+ pts.forEach((p,i)=>{ctx.beginPath();ctx.arc(X(p.x),Y(p.y),r1[i]?6:5,0,7);ctx.fillStyle=r1[i]?'#12875c':'#a8a6a0';ctx.fill()});
+ ctx.strokeStyle='#1f5fbf';ctx.lineWidth=2;ctx.strokeRect(X(greedy.x)-7,Y(greedy.y)-7,14,14);ctx.fillStyle='#1f5fbf';ctx.font='13px "IBM Plex Sans",sans-serif';ctx.fillText('greedy plan',X(greedy.x)+12,Y(greedy.y)+4);
+ let msg;
+ if(g===G){const f=pts.filter((_,i)=>r1[i]),xs=f.map(p=>p.x),ys=f.map(p=>p.y),x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+  let best=null,bv=9;f.forEach(p=>{const v=(p.x-x0)/(x1-x0)+(p.y-y0)/(y1-y0);if(v<bv){bv=v;best=p}});
+  ctx.save();ctx.translate(X(best.x),Y(best.y));ctx.rotate(Math.PI/4);ctx.fillStyle='#d2521d';ctx.fillRect(-8,-8,16,16);ctx.restore();
+  ctx.fillStyle='#d2521d';ctx.font='italic 15px "STIX Two Text",serif';ctx.fillText('knee: min f̃₁ + f̃₂ = '+bv.toFixed(2),X(best.x)+14,Y(best.y)-12);
+  msg='Done: 800 evaluations. The green plans are the Pareto front. Only now is the knee picked (section 11).'}
+ else if(g===1)msg='Generation 1 (start): 40 plans as in section 7. 10 near greedy (top-left), 10 near energy-greedy (bottom-right), 20 random. All 40 simulated.';
+ else msg='40 children made (section 8), simulated, pooled 40 + 40 = 80, best 40 kept (section 9). Green = rank 1 at this moment.';
+ const e=id=>document.getElementById(id);e('gmsg').textContent=msg;e('glab').textContent='Generation '+g;e('ph').textContent='Generation '+g+' of '+G;e('gen').value=g;
+ e('gsc').textContent=g>1?40:0;e('gsp').textContent=g>1?80:40;e('gsr').textContent=nr;e('gse').textContent=40*g}
+function setG(v){g=Math.max(1,Math.min(G,v));drawP()}
+function stopG(){if(timer){clearInterval(timer);timer=null;document.getElementById('play').textContent='▶ Play'}}
+document.getElementById('gen').oninput=e=>{stopG();setG(+e.target.value)};document.getElementById('step').onclick=()=>{stopG();setG(g+1)};document.getElementById('reset').onclick=()=>{stopG();setG(1)};
+document.getElementById('play').onclick=()=>{if(timer){stopG();return}if(g===G)setG(1);document.getElementById('play').textContent='❚❚ Pause';timer=setInterval(()=>{if(g>=G){stopG();return}setG(g+1)},700)};
+
+/* 11 knee */
+const KP=[[0.3981,1.0401],[0.3990,1.0120],[0.4002,0.9991],[0.4030,0.9950],[0.4070,0.9921],[0.4110,0.9905]];
+const kx=KP.map(p=>p[0]),ky=KP.map(p=>p[1]),k1=Math.min(...kx),k2=Math.min(...ky),R1=Math.max(...kx)-k1,R2=Math.max(...ky)-k2;
+const KN=KP.map(p=>[(p[0]-k1)/R1,(p[1]-k2)/R2]);
+function wAt(i){const lo=Math.max(i-1,0),hi=Math.min(i+1,KN.length-1),s=(KN[lo][1]-KN[hi][1])/(KN[hi][0]-KN[lo][0]),wt=s/(1+s);return [s,wt,(wt/R1)/(wt/R1+(1-wt)/R2)]}
+let KI=0;KN.forEach((p,i)=>{if(p[0]+p[1]<KN[KI][0]+KN[KI][1])KI=i});
+(function(){let h='<tr><th>point</th><th class="r">f₁</th><th class="r">f₂</th><th class="r">f̃₁</th><th class="r">f̃₂</th><th class="r">f̃₁ + f̃₂</th><th class="r">σ</th><th class="r">w̃</th><th class="r">w<sub>p</sub></th></tr>';
+KP.forEach((p,i)=>{const[s,wt,w]=wAt(i);h+='<tr'+(i===KI?' class="hl"':'')+'><td>p'+(i+1)+(i===KI?' <b>knee</b>':'')+'</td><td class="r">'+p[0].toFixed(4)+'</td><td class="r">'+p[1].toFixed(4)+'</td><td class="r">'+KN[i][0].toFixed(3)+'</td><td class="r">'+KN[i][1].toFixed(3)+'</td><td class="r">'+(KN[i][0]+KN[i][1]).toFixed(3)+'</td><td class="r">'+s.toFixed(3)+'</td><td class="r">'+wt.toFixed(3)+'</td><td class="r">'+w.toFixed(3)+'</td></tr>'});
+document.getElementById('kntab').innerHTML=h;
+const[s,wt,w]=wAt(KI),lo=KI-1,hi=KI+1;
+document.getElementById('knsteps').innerHTML=
+'<div class="stat"><span>ranges</span><b>Δf₁ = '+R1.toFixed(4)+', Δf₂ = '+R2.toFixed(4)+'</b></div>'+
+'<div class="stat"><span>knee (smallest f̃₁ + f̃₂)</span><b>p'+(KI+1)+': '+(KN[KI][0]+KN[KI][1]).toFixed(3)+'</b></div>'+
+'<div class="stat"><span>neighbours</span><b>p'+(lo+1)+' and p'+(hi+1)+'</b></div>'+
+'<div class="stat"><span>σ = ('+KN[lo][1].toFixed(3)+' − '+KN[hi][1].toFixed(3)+') / ('+KN[hi][0].toFixed(3)+' − '+KN[lo][0].toFixed(3)+')</span><b>'+s.toFixed(3)+'</b></div>'+
+'<div class="stat"><span>w̃ = σ / (1 + σ)</span><b>'+wt.toFixed(3)+'</b></div>'+
+'<div class="stat"><span>w = (w̃/Δf₁) / (w̃/Δf₁ + (1 − w̃)/Δf₂)</span><b>'+w.toFixed(3)+'</b></div>'+
+'<p style="font-size:14px;margin:8px 0 0">Δf₁ is about 4 times smaller than Δf₂, so one unit of raw time cost is worth more: w rises from '+wt.toFixed(3)+' to '+w.toFixed(3)+'. This example\'s w differs from S2 window 0\'s real 0.414 because the front is invented.</p>'})();
+function drawKN(){const cv=document.getElementById('kn'),[x,W,H]=fit(cv),L=58,B=40,T=26,R=20,X=v=>L+v*(W-L-R),Y=v=>H-B-v*(H-B-T);
+ x.clearRect(0,0,W,H);x.strokeStyle='#e4e4e4';for(let v=0;v<=1.001;v+=0.25){x.beginPath();x.moveTo(X(v),Y(0));x.lineTo(X(v),Y(1));x.moveTo(X(0),Y(v));x.lineTo(X(1),Y(v));x.stroke()}
+ x.fillStyle='#111';x.font='12px "IBM Plex Mono",monospace';x.textAlign='center';[0,0.5,1].forEach(v=>{x.fillText(v,X(v),H-B+16);x.textAlign='right';x.fillText(v,L-6,Y(v)+4);x.textAlign='center'});
+ x.font='italic 14px "STIX Two Text",serif';x.fillText('f̃₁',(L+W)/2,H-4);x.fillText('f̃₂',16,(T+H-B)/2-24);
+ x.setLineDash([5,5]);x.strokeStyle='#888';x.beginPath();x.moveTo(X(0),Y(1));x.lineTo(X(1),Y(0));x.stroke();x.setLineDash([]);
+ x.fillStyle='#777';x.font='12px "IBM Plex Sans",sans-serif';x.textAlign='left';x.fillText('f̃₁ + f̃₂ = 1 (line through the extremes)',X(0.42),Y(0.62));
+ x.strokeStyle='#12875c';x.lineWidth=2;x.beginPath();KN.forEach((p,i)=>i?x.lineTo(X(p[0]),Y(p[1])):x.moveTo(X(p[0]),Y(p[1])));x.stroke();x.lineWidth=1;
+ const k=KN[KI],m=(1-k[0]-k[1])/2;x.strokeStyle='#d2521d';x.beginPath();x.moveTo(X(k[0]),Y(k[1]));x.lineTo(X(k[0]+m),Y(k[1]+m));x.stroke();
+ KN.forEach((p,i)=>{x.beginPath();x.arc(X(p[0]),Y(p[1]),i===KI?7:5,0,7);x.fillStyle=i===KI?'#d2521d':'#12875c';x.fill();x.fillStyle='#111';x.font='12px "IBM Plex Mono",monospace';x.fillText('p'+(i+1),X(p[0])+8,Y(p[1])-8)});
+ x.fillStyle='#d2521d';x.font='12px "IBM Plex Sans",sans-serif';x.fillText('farthest from the line',X(k[0]+m)+6,Y(k[1]+m)+4)}
+
+/* 12 windows */
+function drawW(){const cv=document.getElementById('wbar'),[x,W,H]=fit(cv),L=40,B=40,T=12,R=10,n=36,bw=(W-L-R)/n,Y=v=>H-B-v*(H-B-T);
+ x.clearRect(0,0,W,H);x.strokeStyle='#e4e4e4';x.fillStyle='#111';x.font='12px "IBM Plex Mono",monospace';x.textAlign='right';
+ [0,0.25,0.5,0.75,1].forEach(v=>{x.beginPath();x.moveTo(L,Y(v));x.lineTo(W-R,Y(v));x.stroke();x.fillText(v,L-6,Y(v)+4)});
+ WIN.forEach((w,i)=>{const cx=L+i*bw;if(w[5]==null){x.fillStyle='#bbb';x.font='11px "IBM Plex Mono",monospace';x.textAlign='center';x.fillText('–',cx+bw/2,Y(0)-4)}else{x.fillStyle=w[0]==='S2'&&w[1]===0?'#d2521d':'#2a6fd6';const h=Math.max(1.5,(Y(0)-Y(w[5])));x.fillRect(cx+bw*0.18,Y(0)-h,bw*0.64,h)}});
+ x.fillStyle='#111';x.font='12px "IBM Plex Sans",sans-serif';x.textAlign='center';SC.forEach((s,k)=>{x.fillText(s,L+(k*6+3)*bw,H-B+18);if(k){x.strokeStyle='#999';x.beginPath();x.moveTo(L+k*6*bw,T);x.lineTo(L+k*6*bw,H-B+6);x.stroke()}});
+ x.setLineDash([6,4]);x.strokeStyle='#111';x.beginPath();x.moveTo(L,Y(0.41389));x.lineTo(W-R,Y(0.41389));x.stroke();x.setLineDash([]);x.textAlign='left';x.fillText('w* = 0.414',L+6,Y(0.41389)-6)}
+(function(){let h='<tr><th>scenario</th><th class="r">window</th><th class="r">seed</th><th class="r">genes</th><th class="r">front points</th><th class="r">distinct</th><th class="r">knee w</th><th class="r">time (min)</th></tr>';
+WIN.forEach((w,i)=>{h+='<tr'+(w[0]==='S2'&&w[1]===0?' class="hl"':'')+'><td>'+w[0]+'</td><td class="r">'+w[1]+'</td><td class="r">'+(1000+100*Math.floor(i/6)+w[1])+'</td><td class="r">'+w[2]+'</td><td class="r">'+w[3]+'</td><td class="r">'+w[4]+'</td><td class="r">'+(w[5]==null?'none':w[5]<0.001?w[5].toExponential(1):w[5].toFixed(4))+'</td><td class="r">'+(w[6]/60).toFixed(1)+'</td></tr>'});
+document.getElementById('wintab').innerHTML=h})();
+
+function all(){drawTL();rkDraw();drawP();drawKN();drawW()}
+rkNew();addEventListener('resize',all);document.fonts&&document.fonts.ready.then(all);all();
+</script>
+</body></html>
