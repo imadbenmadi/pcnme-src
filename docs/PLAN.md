@@ -277,6 +277,13 @@ testbed correct"). Claude owns these; an item is done only when its check passes
   real-SUMO test tests/mobility/test_lust.py; `train.py --maps lust --smoke` end to end.
 - [x] **L5** (done 6 Nov, 36 min; RUN_LOG 6 Nov) Full traces (train.py makes them on first use) and a look at the
   vehicles per crop and coverage. The viewer shows them as LuST's traffic preview until LuST is trained.
+- [ ] **L6 LuST on the Docker testbed** (later; noted 24 Nov). Estimate: 1-2 coding sessions + one batch of about
+  13-15 h that Imed starts. (1) The car containers replay the LuST traces (mobility/traces.py, the fast mode's
+  seed-chosen slices) instead of RoadGrid (testbed/car.py). (2) run_testbed.py accepts `--maps lust`: the map, its
+  measured coverage (data/lust/calibrated.yaml) and its trained models reach the containers; results in
+  data/lust/testbed/ with their own gap table. (3) Tests, a smoke run and the pre-flight check. (4) The batch:
+  6 scenarios x 8 methods x 5 seeds = 240 runs x about 3.2 min, at 40 cars as on VFC. Then a LuST live run
+  (run_live.py) is about an hour more. Closes Q7's open part (Q1 and Q6 on LuST).
 
 ## C — Calibration (any time after M0, on the home desktop)
 
