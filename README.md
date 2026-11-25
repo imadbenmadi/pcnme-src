@@ -1,5 +1,7 @@
 # PCNME
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24500522.svg)](https://doi.org/10.5281/zenodo.24500522) Dataset (results, trained agents, logs): doi:10.5281/zenodo.24500522 (docs/DATASHEET.md). Code: MIT; data: CC BY 4.0.
+
 Predictive task offloading for connected cars across fog zones and the cloud. MSc thesis implementation (Imed-eddin Benmadi, ELTE).
 
 | What | Where |
