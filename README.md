@@ -1,72 +1,72 @@
 # PCNME
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24500522.svg)](https://doi.org/10.5281/zenodo.24500522) Dataset (results, trained agents, logs): doi:10.5281/zenodo.24500522 (docs/DATASHEET.md). Code: MIT; data: CC BY 4.0.
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24500522.svg)](https://doi.org/10.5281/zenodo.24500522)
 
-Predictive task offloading for connected cars across fog zones and the cloud. MSc thesis implementation (Imed-eddin Benmadi, ELTE).
+**Predictive Cloud-Native Mobile Edge**: predictive task offloading for connected cars across fog zones and the
+cloud. This repository is the implementation behind the MSc thesis of Imed-eddin Benmadi (Eötvös Loránd
+University, Budapest).
 
-| What | Where |
+A fixed rule, the TOF-Broker, sends tasks that no fog node can finish in time to the cloud. A D3QN agent in every
+fog zone places the remaining tasks: on its own node, on one of up to four neighbour zones, or in the cloud. The
+agent is pretrained with DQfD on the knee-point plans of an NSGA-II latency–energy front and then keeps learning
+online. It is evaluated against five learning baselines and two rules, in a deterministic discrete-event
+simulator on two city maps (the VFC grid and LuST, Luxembourg) and on a Docker testbed with real MQTT and HTTP.
+
+## Results and data
+
+- **Results:** [`docs/RESULTS.md`](docs/RESULTS.md): tables with 95 % confidence intervals, paired tests,
+  training curves, the testbed comparison and the limitations, for both maps.
+- **Dataset:** every result, trained agent and log is archived on Zenodo,
+  [doi:10.5281/zenodo.24500522](https://doi.org/10.5281/zenodo.24500522). Its contents are described in
+  [`docs/DATASHEET.md`](docs/DATASHEET.md).
+
+## Quick start
+
+Install [uv](https://docs.astral.sh/uv/), then from the repository root:
+
+```bash
+uv sync --locked --all-extras
+uv run python start.py          # the results viewer at http://127.0.0.1:8765 (Windows: double-click start.bat)
+uv run python stop_all.py       # stop everything again (Windows: stop.bat)
+```
+
+Training, evaluation and the testbed are described step by step in [`RUN_TRAINING.md`](RUN_TRAINING.md).
+
+## Documentation
+
+| Topic | File |
 | --- | --- |
-| Reading guide (start here) | [`READ.md`](READ.md) |
-| Design (the specification) | [`docs/final-design.md`](docs/final-design.md), printable [`docs/PCNME-Final-Design.pdf`](docs/PCNME-Final-Design.pdf) |
-| Build plan, one milestone at a time | [`docs/PLAN.md`](docs/PLAN.md) |
-| Every number | [`config/default.yaml`](config/default.yaml), checked by `python tools/calc_defaults.py` |
-| Log and metrics schema | [`docs/METRICS.md`](docs/METRICS.md) |
-| Design issues found while coding | [`docs/CHANGES.md`](docs/CHANGES.md), [`docs/QUESTIONS.md`](docs/QUESTIONS.md) |
-| Calibration (time table) | `tools/calibrate_yolo.py`, [`data/calibration/`](data/calibration/) |
-| Training, evaluation, testbed: every command | [`RUN_TRAINING.md`](RUN_TRAINING.md) |
-| Results on the VFC grid (one page) | [`docs/RESULTS_VFC.md`](docs/RESULTS_VFC.md) |
-| What was run, when, and what came out | [`docs/RUN_LOG.md`](docs/RUN_LOG.md) |
-| Replay viewer (`uv run python view.py`) | [`src/pcnme/viewer/README.md`](src/pcnme/viewer/README.md) |
-| Data folders: what each file is, how to rebuild it | [`data/DATA.md`](data/DATA.md) |
-| Rules for Claude Code | [`CLAUDE.md`](CLAUDE.md), skills in `.claude/skills/` |
+| Reading guide: how the code is organised | [`READ.md`](READ.md) |
+| Design (the specification the code follows) | [`docs/final-design.md`](docs/final-design.md) |
+| Notation and symbols | [`docs/NOTATION.md`](docs/NOTATION.md) |
+| Every parameter, with its source | [`config/default.yaml`](config/default.yaml), checked by `tools/calc_defaults.py` |
+| Log and metric schema | [`docs/METRICS.md`](docs/METRICS.md) |
+| Data folders | [`data/DATA.md`](data/DATA.md) |
+| Results viewer | [`src/pcnme/viewer/README.md`](src/pcnme/viewer/README.md) |
+| Build plan, open questions, run history | [`docs/PLAN.md`](docs/PLAN.md), [`docs/QUESTIONS.md`](docs/QUESTIONS.md), [`docs/RUN_LOG.md`](docs/RUN_LOG.md) |
 
-## Setup
+## Development
 
-Every environment installs exactly the versions in `uv.lock` (the desktop venv, CI, cloud sessions and every Docker container). Install [uv](https://docs.astral.sh/uv/) first.
+Every environment (desktop, CI, Docker) installs exactly the versions pinned in `uv.lock`.
 
-**Home desktop (Windows, repo on F:)**
-
-```powershell
-winget install astral-sh.uv                # once; then open a new terminal
-cd F:\projects\pcnme-src
-powershell -ExecutionPolicy Bypass -File scripts\setup-windows.ps1
-.\.venv\Scripts\Activate.ps1
-pytest -q
+```bash
+uv run pytest -q -n auto          # test suite
+uv run pytest -m slow -n auto     # statistical tests (M/M/1, Erlang C)
+uv run ruff check src tests tools
+uv run mypy
 ```
 
-The setup installs the `dev`, `analysis` and `ml` extras. PyTorch comes from the lock: the CUDA 12.6 build on Windows (newer CUDA builds may drop Pascal, compute 6.1), the CPU build on Linux, version 2.14.1 on both. Check that it sees the GTX 1070:
+On Windows, `scripts/setup-windows.ps1` sets up the virtual environment; PyTorch is the CUDA 12.6 build, which
+still supports Pascal GPUs such as the GTX 1070. On Linux, `scripts/setup.sh` installs the CPU build. To change a
+dependency, edit `pyproject.toml`, run `uv lock` and commit `uv.lock` in the same change.
 
-```powershell
-python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_capability())"   # True (6, 1)
-```
+The Docker testbed and the monitoring stack (InfluxDB, Grafana) need Docker Desktop: copy `docker/.env.example`
+to `docker/.env`, set the passwords, and see `RUN_TRAINING.md`.
 
-**Claude Code cloud session (Linux):** set the environment's setup script to `bash scripts/setup.sh`.
+`visual/` and `excalidraw/` hold early illustrations with example numbers; `reference/vfc/` is the VFC paper's
+code, kept for reading only. None of them is a specification.
 
-**Changing a dependency.** Edit `pyproject.toml`, run `uv lock` (or `uv lock --upgrade-package <name>`), commit `uv.lock` with it, in its own PR. `uv sync --locked` (setup scripts, CI, Docker) refuses an out-of-date lock.
+## Licence and citation
 
-## Everyday commands
-
-```
-pytest -q                 # fast tests
-pytest -m slow -n auto    # statistical tests (M/M/1, Erlang C)
-ruff check src tests tools   # lint
-mypy                      # types
-python tools/calc_defaults.py
-pcnme run --help          # train and evaluate a method (fast mode); pcnme report for tables
-uv run python view.py     # the replay viewer, http://127.0.0.1:8765
-```
-
-## Monitoring and testbed (Docker Desktop, WSL2 backend)
-
-```
-copy docker\.env.example docker\.env      # then change the passwords
-docker compose -f docker/compose.yaml --profile monitoring up -d   # Grafana http://localhost:3000, InfluxDB :8086
-docker compose -f docker/compose.yaml --profile testbed up -d      # the testbed (milestone M9)
-```
-
-Testbed runs are driven by the runner (`RUN_TRAINING.md`, section Testbed). Docker Desktop keeps its data in
-`F:\DockerDesktopWSL` (internal SSD).
-
-## Folders that are not specifications
-
-`visual/` and `excalidraw/` are illustrations with example numbers. `reference/vfc/` is the VFC paper's code (no license: read only, never copied).
+Code: MIT ([`LICENSE`](LICENSE)). Data: CC BY 4.0 ([`LICENSE-DATA.txt`](LICENSE-DATA.txt)). To cite the
+software or the data, see [`CITATION.cff`](CITATION.cff).

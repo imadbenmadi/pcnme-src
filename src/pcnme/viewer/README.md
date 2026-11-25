@@ -20,12 +20,13 @@ No build step and no new dependency: a standard-library HTTP server and plain ES
 ## Another machine (a laptop): export
 
 ```bash
-uv run python -m pcnme.viewer.export                  # seed 3000 of every run -> ../pcnme-history-viewer (~25 MB)
-uv run python -m pcnme.viewer.export --seeds all      # every seed (~0.5 GB)
+uv run python -m pcnme.viewer.export                  # seed 3000 of every run and the testbed -> ../pcnme-history-viewer (~190 MB)
+uv run python -m pcnme.viewer.export --seeds all      # every seed (several GB)
 ```
 
 The folder holds the page, the replays pre-built and gzipped, and `serve.py` (`standalone.py`: standard library
-only). Copy it anywhere and run `python serve.py` (Windows: `start.bat`); no repo, uv or packages needed.
+only). Copy it anywhere and run `python serve.py`; on Windows, double-click `start.bat` to open it and `stop.bat` to stop it
+(`start.sh` and `stop.sh` elsewhere). No repository, uv or packages are needed.
 Export again after new runs; replays already in the folder are kept.
 
 ## Layout
