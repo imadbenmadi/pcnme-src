@@ -22,7 +22,7 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 ## 3 Nov: first-results attempt (discarded)
 
 - Reduced budget (6 windows, 40 × 20, 1 M decisions) with the old tools; stopped after about 4 h by your decision
-  ("restart cleanly"). Outputs moved to F:\projects\pcnme-data-old-2026-11-03 (yours to delete). Not used for results.
+  ("restart cleanly"). Outputs moved to a local folder outside the repository. Not used for results.
 
 ## 3 Nov: testbed (M9.1, M9.2; paused)
 
@@ -60,7 +60,7 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   --models-from vfc (option to build first). Full LuST training later, only if time allows.
 - Finished 5 Nov 11:52: all 36 jobs trained, 35 h 59 min in total (NSGA-II 2 h 40 min, learning about 33 h). The
   LSTM baselines (Tang & Wong, QECO) were the last to finish. Small result files committed to git; the big ignored
-  Parquet runs (20 GB, ignored) backed up to F:\projects\pcnme-results-backup\vfc-2026-11-05\results\.
+  Parquet runs (20 GB, ignored) backed up to the local backup vfc-2026-11-05.
 
 ## 5 Nov: evaluate.py additions (PLAN T3c)
 
@@ -75,7 +75,7 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 - Command: `uv run python evaluate.py --maps vfc` (commit 6bc5126), 13:02 -> about 19:00 (runs ended 18:36, then the
   report over 20 GB of logs). 6 scenarios x 8 methods x 20 seeds = 960 of 960 runs.
 - Outputs: data/vfc/results/ (report.md, paired.md, across-*.png, S*.png, training-*.png, summary.csv) in git; the
-  Parquet runs (20 GB, ignored) backed up to F:\projects\pcnme-results-backup\vfc-2026-11-05\results\.
+  Parquet runs (20 GB, ignored) backed up to the local backup vfc-2026-11-05.
 - Headline (on time %, PCNME vs best baseline; paired t test, 20 seeds): S1-S2 all methods 99-100 % (ties); S3
   PCNME 98.5 vs 97.2 (D3QN + greedy demos) and 92.3 (greedy), p < 0.01; S4 94.2 vs 93.8; S5 93.3 vs 93.1.
   S6 (the CPU-fog scenario, overloaded: about 43 % of tasks dropped for every method): PCNME 56.8 % on time but
@@ -142,8 +142,7 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   tools/calc_defaults.py from before the applied calibration (82.5 tasks/s per zone; now 43.2). The 3 Nov entry
   above keeps both numbers, and the tool prints the current ones.
 - Checked, no change: CHANGES, QUESTIONS, METRICS, data/calibration/cpu-power, .claude/skills, final-design.
-- Docker Desktop's data: F:\DockerDesktopWSL, on the internal SSD (F: "ssd2"); the external Seagate USB disk is
-  not used.
+- Docker Desktop keeps its data on the internal SSD; no external disk is used.
 
 ## 6 Nov: Q60 applied (S6 with loose deadlines)
 
@@ -179,9 +178,8 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   rows and runs, keeps the 800 S1-S5 rows, and queues all 160 new S6 runs.
 - PLAN: roadmap R (S6, the VFC testbed to the end with live metrics, Grafana and V3, LuST v1, one platform for both
   maps, LuST v2 as an idea) and backups B (B1: a dated copy after tonight's run).
-- Two folders next to the repo that are not data in use: F:\projects\pcnme-data\calib-venv (the CUDA venv used
-  for calibration on 3 Nov; only needed to calibrate again) and F:\projects\pcnme-data-old-2026-11-03 (the
-  discarded first attempt; RUN_LOG 3 Nov). Both can be deleted by Imed.
+- Two local folders outside the repository are not in use: the CUDA environment used for the 3 Nov calibration
+  (needed only to calibrate again) and the discarded first attempt of 3 Nov.
 
 ## 6 Nov: LuST traces (PLAN L5), no training
 
@@ -215,7 +213,7 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   Random 81.0, QECO 80.9, Tang & Wong 79.2. Greedy beats PCNME on on-time, p99 and energy (p < 0.001); PCNME is
   level with the D3QN variants and ahead of the rest. The learners were still improving at the end of the budget.
   Analysis: PLAN T6.
-- Backup B1: F:\projects\pcnme-results-backup\vfc-2026-11-07\ (7.9 GB; the new S6 and the archived tight S6).
+- Backup B1: the local backup vfc-2026-11-07 (7.9 GB; the new S6 and the archived tight S6).
 
 ## 7 Nov: the PCNME testbed bug (PLAN Q1)
 
@@ -259,7 +257,7 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 - `uv run python run_testbed.py --maps vfc`, commit 249a59851c8d: 6 scenarios x 8 methods x 5 seeds, 60 s each,
   testbed run plus its fast-mode twin; 240/240 done (paused once for about an hour, resumed). Results:
   data/vfc/testbed/summary.csv, gap.md, gap.csv; run folders (4.9 GB, git-ignored) backed up to
-  F:/projects/pcnme-results-backup/vfc-testbed-2026-11-11.
+  the local backup vfc-testbed-2026-11-11.
 - On time, fast -> testbed: S1 99.5-99.9 % -> 95.7-98.6 % (gap -1 to -4 pp); S2 -> 76.6-91.3 % (-9 to -22 pp);
   S3 -> 20-50 % (-47 to -62 pp); S4/S5 -> 31-65 % (-27 to -62 pp); S6 -> 40-71 % (-27 to -42 pp). Greedy has the
   smallest gap in S1, S2, S4-S6; PCNME and the D3QN variants next; QECO and Tang & Wong the largest.
@@ -343,22 +341,20 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 - `train.py --maps lust --windows 6 --population 40 --generations 20 --budget 1000000`: traces, NSGA-II (36
   windows; S3 at the 08:00 peak about 900 tasks per window, the slowest), w* = 0.344 (VFC 0.414), demonstrations,
   then the 36 trainings (D3QN family 3-5 h each, PPO 1.5-2 h, the LSTM baselines 11-19 h). Finished 13 Nov 17:53.
-- Backup: F:/projects/pcnme-results-backup/lust-train-2026-11-13. Next: `evaluate.py --maps lust`.
+- Backup: the local backup lust-train-2026-11-13. Next: `evaluate.py --maps lust`.
 
 ## 14 Nov: LuST evaluated (every method, S1-S6, 20 seeds, 960 runs)
 
 - `evaluate.py --maps lust`. Results: data/lust/results/ (report.md, paired.md, figures), docs/RESULTS_LUST.md
-  (tables and findings). Backup: F:/projects/pcnme-results-backup/lust-eval-2026-11-14.
+  (tables and findings). Backup: the local backup lust-eval-2026-11-14.
 - On time: S1/S2 every method 98-100 %; S3 (08:00 peak) 43-54 %, Greedy 52.6 and D3QN + greedy 53.7 beat PCNME
   49.4 (-3.3 pp vs Greedy, p = 0.005), unlike the grid; S4/S5 PCNME beats Greedy by 0.9 / 1.2 pp (p < 0.001);
   S6 PCNME 96.4 vs Greedy 97.0 (n.s.).
 
 ## 14 Nov: F: full, backups moved to D:
 
-- The LuST evaluation backup (to F:) filled F: (0 GB free) and Docker Desktop could not start. Every backup moved to
-  D:\pcnme-results-backup (a separate SSD; 92.6 GB moved, then the LuST evaluation copied fresh: 9 626 files,
-  66.54 GB, identical to data/lust/results); the incomplete copy on F: deleted. F: 93.6 GB free, D: about 45 GB.
-  Earlier entries name the old place F:/projects/pcnme-results-backup.
+- The LuST evaluation backup filled the data disk and Docker Desktop could not start. All backups moved to a
+  separate disk (92.6 GB; the LuST evaluation copied again: 9 626 files, 66.54 GB, identical to data/lust/results).
 
 ## 15 Nov: the testbed table complete (every method, S1-S6, 5 seeds, after every fix)
 
@@ -406,7 +402,7 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   hash included. The manual section-by-section re-read is not done.
 - Viewer: LuST runs on the real streets (V2); responsive layout (V5); the export rewrites replays whose run was
   rerun (the testbed and S6 replays in the exported folder were stale); exported again to
-  F:/projects/pcnme-history-viewer (339 runs, 186 MB; not pushed).
+  the exported viewer folder (339 runs, 186 MB; not pushed).
 - Not done: FedAvg on the testbed (QUESTIONS Q64, a design point since Q62).
 
 ## 16 Nov: results write-up and close-out
@@ -465,5 +461,4 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   code is unchanged (every rewritten commit has the same tree as its original).
 - Commit ids changed. The ids stored in the results (`commit` in summary.csv, the manifests, the Zenodo dataset)
   and in this log are the old ones: docs/commit-map.csv maps each old id to its new one (for example 35205fd →
-  605bc28, eb0becd → 04de1c0, the tag `results-v1`). A full backup of the old history:
-  D:\pcnme-src-before-rewrite-2026-11-25.bundle.
+  605bc28, eb0becd → 04de1c0, the tag `results-v1`). A full backup of the old history is kept locally as a git bundle.

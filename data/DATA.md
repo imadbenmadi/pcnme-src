@@ -87,6 +87,6 @@ Only NSGA-II and w*: `uv run python train.py --maps vfc --until nsga`.
 | `smoke/` | outputs of `--smoke` runs (2–3 min checks) | no |
 | `_archive/` | outputs moved aside by `--fresh` | no |
 
-Outside the repository: `F:\projects\pcnme-results-backup\` (a copy of the big ignored files: trained models,
-Parquet runs, testbed runs; one folder per date) and `F:\projects\pcnme-history-viewer\` (the viewer export,
-`uv run python -m pcnme.viewer.export`).
+The large files that are not committed (trained models, per-run logs, testbed runs) are archived on Zenodo:
+[doi:10.5281/zenodo.24500522](https://doi.org/10.5281/zenodo.24500522) (`docs/DATASHEET.md`). The NSGA-II plans
+and the demonstrations are committed.

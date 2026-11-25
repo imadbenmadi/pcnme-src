@@ -39,12 +39,11 @@ checkpoints/
 /data/maps/lust/LuST*/
 /data/maps/lust/*.zip
 /data/*/traces/*.npz
-/data/*/nsga/*-w*.json
-/data/*/demos/*.parquet
 /data/*/train/**/*.pt
 /data/*/results/runs/
 /data/*/results/archive/*/runs/
 /data/**/*.parquet
+!/data/*/demos/*.parquet
 /data/**/*.prof
 *.zip.part
 
