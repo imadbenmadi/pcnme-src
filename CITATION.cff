@@ -9,7 +9,11 @@ license: MIT
 repository-code: "https://github.com/imadbenmadi/pcnme-src"
 version: results-v1
 date-released: 2026-11-24
+doi: 10.5281/zenodo.24526626
 identifiers:
+  - type: doi
+    value: 10.5281/zenodo.24526626
+    description: "The code, release results-v1 (Zenodo)"
   - type: doi
     value: 10.5281/zenodo.24500522
     description: "The dataset: results, trained agents and logs (Zenodo)"
