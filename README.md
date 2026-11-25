@@ -2,6 +2,7 @@
 
 [![Dataset DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24500522.svg)](https://doi.org/10.5281/zenodo.24500522)
 [![Code DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24526626.svg)](https://doi.org/10.5281/zenodo.24526626)
+[![Kaggle](https://img.shields.io/badge/Kaggle-dataset-20BEFF?logo=kaggle&logoColor=white)](https://www.kaggle.com/datasets/imedbenmadi/pcnme-dataset)
 
 **Predictive Cloud-Native Mobile Edge** — predictive task offloading for connected vehicles across fog zones and
 the cloud. MSc thesis implementation, Imed-eddin Benmadi, Eötvös Loránd University (ELTE).
@@ -50,4 +51,5 @@ All environments install the exact versions pinned in `uv.lock`.
 
 Code: MIT ([`LICENSE`](LICENSE)), [doi:10.5281/zenodo.24526626](https://doi.org/10.5281/zenodo.24526626).
 Data: CC BY 4.0 ([`LICENSE-DATA.txt`](LICENSE-DATA.txt)),
-[doi:10.5281/zenodo.24500522](https://doi.org/10.5281/zenodo.24500522). See [`CITATION.cff`](CITATION.cff).
+[doi:10.5281/zenodo.24500522](https://doi.org/10.5281/zenodo.24500522), mirrored on [Kaggle](https://www.kaggle.com/datasets/imedbenmadi/pcnme-dataset).
+See [`CITATION.cff`](CITATION.cff).

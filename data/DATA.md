@@ -89,4 +89,4 @@ Only NSGA-II and w*: `uv run python train.py --maps vfc --until nsga`.
 
 The large files that are not committed (trained models, per-run logs, testbed runs) are archived on Zenodo:
 [doi:10.5281/zenodo.24500522](https://doi.org/10.5281/zenodo.24500522) (`docs/DATASHEET.md`). The NSGA-II plans
-and the demonstrations are committed.
+and the demonstrations are committed. A mirror is on [Kaggle](https://www.kaggle.com/datasets/imedbenmadi/pcnme-dataset).
