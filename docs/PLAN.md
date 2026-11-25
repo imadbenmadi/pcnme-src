@@ -256,7 +256,7 @@ testbed correct"). Claude owns these; an item is done only when its check passes
   viewer, in Grafana and in the run's Parquet files.
 - [x] **Q7 LuST passes Q1-Q6 too** (15 Nov: Q3, Q4 and Q5 pass on LuST; Q1 and Q6 need a LuST testbed: future work) before its results are reported.
 
-## B — Backups (on another disk than the data: D:\pcnme-results-backup\<map>-<date>\; moved from F: on 14 Nov when F: was full)
+## B — Backups (on a separate disk from the data, one folder per map and date)
 
 - [x] **B0** vfc-2026-11-05: data/vfc after the full training and evaluation (trained models, Parquet runs,
   testbed runs). It holds the tight-deadline S6 too (models, NSGA-II windows, runs).
@@ -284,6 +284,8 @@ testbed correct"). Claude owns these; an item is done only when its check passes
   data/lust/testbed/ with their own gap table. (3) Tests, a smoke run and the pre-flight check. (4) The batch:
   6 scenarios x 8 methods x 5 seeds = 240 runs x about 3.2 min, at 40 cars as on VFC. Then a LuST live run
   (run_live.py) is about an hour more. Closes Q7's open part (Q1 and Q6 on LuST).
+  Then add the LuST testbed results to the Zenodo dataset draft (doi:10.5281/zenodo.24500522: tools/export_dataset.py,
+  a new lust-testbed.zip) and publish it. The draft stays unpublished until then (Imed, 25 Nov).
 
 ## C — Calibration (any time after M0, on the home desktop)
 
