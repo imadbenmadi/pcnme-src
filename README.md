@@ -1,6 +1,7 @@
 # PCNME
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24500522.svg)](https://doi.org/10.5281/zenodo.24500522)
+[![Dataset DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24500522.svg)](https://doi.org/10.5281/zenodo.24500522)
+[![Code DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24526626.svg)](https://doi.org/10.5281/zenodo.24526626)
 
 **Predictive Cloud-Native Mobile Edge**: predictive task offloading for connected cars across fog zones and the
 cloud. This repository is the implementation behind the MSc thesis of Imed-eddin Benmadi (Eötvös Loránd
@@ -68,5 +69,5 @@ code, kept for reading only. None of them is a specification.
 
 ## Licence and citation
 
-Code: MIT ([`LICENSE`](LICENSE)). Data: CC BY 4.0 ([`LICENSE-DATA.txt`](LICENSE-DATA.txt)). To cite the
+Code: MIT ([`LICENSE`](LICENSE)), archived as [doi:10.5281/zenodo.24526626](https://doi.org/10.5281/zenodo.24526626) (release `results-v1`). Data: CC BY 4.0 ([`LICENSE-DATA.txt`](LICENSE-DATA.txt)). To cite the
 software or the data, see [`CITATION.cff`](CITATION.cff).

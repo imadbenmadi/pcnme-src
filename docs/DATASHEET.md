@@ -5,7 +5,7 @@ Imed-eddin Benmadi (ELTE, 2026). PCNME places the computing tasks of moving cars
 cloud: a fixed rule (the TOF-Broker) sends tasks too heavy for any fog node to the cloud, and a D3QN agent in
 every zone places the rest, pretrained (DQfD) on NSGA-II knee-point plans and then learning online.
 
-- **Code:** https://github.com/imadbenmadi/pcnme-src (tag `results-v1`), MIT licence. Every file here can be
+- **Code:** https://github.com/imadbenmadi/pcnme-src (release `results-v1`, doi:10.5281/zenodo.24526626), MIT licence. Every file here can be
   regenerated from the code, the config (`config/default.yaml`) and the seeds below.
 - **Data licence:** CC BY 4.0 (LICENSE-DATA.txt). Cite the dataset as doi:10.5281/zenodo.24500522 (https://doi.org/10.5281/zenodo.24500522).
 - **Design:** `docs/final-design.md` in the repository (the specification); symbols in `docs/NOTATION.md`.
