@@ -457,3 +457,13 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
   tools/export_dataset.py, docs/DATASHEET.md). It becomes public when the record is published.
 - README.md, READ.md, RUN_TRAINING.md and the viewer README rewritten for readers outside the project: current
   commands only, the one-off November steps removed (they remain in this log).
+
+## 25 Nov: history rewritten (authorship)
+
+- Every commit rewritten so that Imed eddine benmadi is the only author: the 55 commits made from cloud sessions
+  got him as author and committer, and the co-author trailer lines were removed from all commit messages. The
+  code is unchanged (every rewritten commit has the same tree as its original).
+- Commit ids changed. The ids stored in the results (`commit` in summary.csv, the manifests, the Zenodo dataset)
+  and in this log are the old ones: docs/commit-map.csv maps each old id to its new one (for example 35205fd →
+  605bc28, eb0becd → 04de1c0, the tag `results-v1`). A full backup of the old history:
+  D:\pcnme-src-before-rewrite-2026-11-25.bundle.
