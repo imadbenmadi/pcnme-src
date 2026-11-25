@@ -447,3 +447,13 @@ Newest at the bottom. Commands: `RUN_TRAINING.md`; data files: `data/DATA.md`.
 - docs/final-design.md replaced by version 3: an overview, a purpose box on every section, worked examples and
   appendices (notation, results, references, history). Section numbers 1–19 and every rule unchanged. The last
   leftover symbols renamed (NOTATION.md section 2). No run was made.
+
+## 25 Nov: the tag, the dataset and the documentation
+
+- Tag `results-v1` points at the current code (commit eb0becd), not at 35205fd as planned on 17 Nov: the stored
+  result files were rewritten to the new names on 16 Nov, and only the current code reads them. The `config_hash`
+  values in summary.csv still belong to 35205fd, the code that produced the runs.
+- The dataset is on Zenodo as a draft with the reserved DOI 10.5281/zenodo.24500522 (31 files, 13 GB;
+  tools/export_dataset.py, docs/DATASHEET.md). It becomes public when the record is published.
+- README.md, READ.md, RUN_TRAINING.md and the viewer README rewritten for readers outside the project: current
+  commands only, the one-off November steps removed (they remain in this log).
